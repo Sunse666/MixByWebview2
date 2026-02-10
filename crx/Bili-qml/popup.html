@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <link rel="stylesheet" href="popup.css">
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <div class="header-top">
+
+                <div class="header-left">
+                    <div class="settings-btn" id="full-leaderboard-btn" title="打开web页面">📊</div>
+                </div>
+                <h1>B站问号榜 ❓</h1>
+                <div class="header-actions">
+                    <div class="settings-btn" id="settings-btn" title="设置">⚙️</div>
+                </div>
+            </div>
+            <div class="tabs">
+                <button class="tab-btn active" data-range="realtime">实时</button>
+                <button class="tab-btn" data-range="daily">日榜</button>
+                <button class="tab-btn" data-range="weekly">周榜</button>
+                <button class="tab-btn" data-range="monthly">月榜</button>
+            </div>
+        </header>
+        <main id="leaderboard" class="content-panel">
+            <div class="loading">加载中...</div>
+        </main>
+        <div id="settings-wrapper" class="settings-wrapper" style="display: none;">
+            <main id="settings" class="settings-content">
+                <div class="settings-section">
+                    <h3>弹幕发送设置</h3>
+                    <p class="settings-desc">点亮问号后，是否自动发送"?"弹幕</p>
+                    <div class="radio-group">
+                        <label class="radio-item">
+                            <input type="radio" name="danmaku-pref" value="ask">
+                            <span>每次询问</span>
+                        </label>
+                        <label class="radio-item">
+                            <input type="radio" name="danmaku-pref" value="always">
+                            <span>总是发送</span>
+                        </label>
+                        <label class="radio-item">
+                            <input type="radio" name="danmaku-pref" value="never">
+                            <span>总是不发送</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="settings-section" style="margin-top: 15px;">
+                    <h3>第一名显示设置</h3>
+                    <p class="settings-desc">自定义排行榜第一名的显示文本</p>
+                    <div class="radio-group">
+                        <label class="radio-item">
+                            <input type="radio" name="rank1-pref" value="default">
+                            <span>正常 (1)</span>
+                        </label>
+                        <label class="radio-item">
+                            <input type="radio" name="rank1-pref" value="custom">
+                            <span>抽象 (何一位)</span>
+                        </label>
+                    </div>
+                </div>
+                <div class="settings-section" style="margin-top: 15px;">
+                    <h3>主题色设置</h3>
+                    <div class="radio-group">
+                        <label class="radio-item">
+                            <input type="radio" name="theme-pref" value="system" checked>
+                            <span>跟随系统</span>
+                        </label>
+                        <label class="radio-item">
+                            <input type="radio" name="theme-pref" value="light">
+                            <span>浅色模式</span>
+                        </label>
+                        <label class="radio-item">
+                            <input type="radio" name="theme-pref" value="dark">
+                            <span>深色模式</span>
+                        </label>
+                    </div>
+                </div>
+                <div class="settings-section" style="margin-top: 15px;">
+                    <h3>投票 Token</h3>
+                    <p class="settings-desc">显示当前 Token，并可获取或续期</p>
+                    <div class="token-display">
+                        <input id="vote-token-value" class="token-input" type="text" readonly placeholder="未设置">
+                    </div>
+                    <div class="token-actions">
+                        <button id="token-refresh" class="token-btn">获取 / 续期</button>
+                    </div>
+                    <div id="token-status" class="token-status"></div>
+                </div>
+                <details class="advanced-section" style="margin-top: 15px;">
+                    <summary class="advanced-toggle">高级选项</summary>
+                    <div class="settings-section">
+                        <h3>API 服务器设置</h3>
+                        <p class="settings-desc">自定义问号榜服务器地址</p>
+                        <div class="endpoint-input-group">
+                            <input type="text" id="endpoint-input" class="endpoint-input"
+                                placeholder="https://bili-qml.bydfk.com/api">
+                        <button id="reset-endpoint" class="reset-btn" title="恢复默认">↺</button>
+                        </div>
+                    </div>
+
+                    <div class="settings-section" style="margin-top: 15px;">
+                        <h3>Web 端网址设置</h3>
+                        <p class="settings-desc">自定义 Web 端跳转地址</p>
+                        <div class="endpoint-input-group">
+                            <input type="text" id="web-endpoint-input" class="endpoint-input"
+                                placeholder="https://web.bili-qml.com/">
+                            <button id="reset-web-endpoint" class="reset-btn" title="恢复默认">↺</button>
+                        </div>
+                    </div>
+                </details>
+            </main>
+            <div id="settings-footer" class="settings-footer">
+                <button id="save-settings" class="save-btn">保存设置</button>
+                <div id="save-status" class="save-status"></div>
+            </div>
+        </div>
+    </div>
+    <script src="platform.js"></script>
+    <script src="popup.js"></script>
+</body>
+
+</html>

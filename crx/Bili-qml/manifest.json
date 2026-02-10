@@ -1,0 +1,34 @@
+{
+   "action": {
+      "default_popup": "popup.html"
+   },
+   "content_scripts": [ {
+      "css": [ "content.css" ],
+      "js": [ "platform.js", "content.js", "utils.js" ],
+      "matches": [ "https://www.bilibili.com/video/*", "https://www.bilibili.com/list/watchlater*" ],
+      "run_at": "document_idle"
+   }, {
+      "js": [ "dmstat.js" ],
+      "matches": [ "https://www.bilibili.com/video/*", "https://www.bilibili.com/list/watchlater*" ],
+      "run_at": "document_start",
+      "world": "MAIN"
+   } ],
+   "description": "在B站视频下方增加问号键，统计并展示抽象视频排行榜。",
+   "differential_fingerprint": "1.2521dd11b4fe1cb8a8124df0b231f4fb910a06ed91310a22de24337debdef72c",
+   "host_permissions": [ "https://*.bilibili.com/*", "https://www.bili-qml.top/*", "http://localhost:3000/*", "https://bili-qml.bydfk.com/*" ],
+   "icons": {
+      "128": "icons/icon128.png",
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png"
+   },
+   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAw0Bi190oxA+MxCtaPiYe/4xw2Db+XXFw/3cjmYNYfyA8nRhg4BXxBN9WRp+1DLi7BHYNqDh4CSi4Ql4ktvur7/ypHW4cLJZxSY05r+zBV9GZA6gvgFB2e9IJQrWvfGNrm2LZ/07JmnXehaC5fQ/5Ur8urnUSWk4DhD2LbrRpOSH36/GVmJAInu6gfaDW8YaYIuwWd/JjM5RhWKdsqk0Gob1kSpHazhbrhzvuX371h+8OmGhJOUl35tswOHJkaFmfDfbiiBUFZfTqA2H4i15cJ99+ugCD7rGzTZNEkfzeJPyFZxChskKtmOD95mdfLoldTUVO5nMuUFfDq2rfEGe4/QIDAQAB",
+   "manifest_version": 3,
+   "name": "B站问号榜",
+   "permissions": [ "storage", "activeTab" ],
+   "update_url": "https://clients2.google.com/service/update2/crx",
+   "version": "1.3",
+   "web_accessible_resources": [ {
+      "matches": [ "https://www.bilibili.com/*" ],
+      "resources": [ "icons/button-icon.png" ]
+   } ]
+}
