@@ -98,5 +98,8 @@
 - [ ] 隐私浏览模式
 - [ ] 多语言支持
 
+
+ps:内置扩展BewlyCat,BilibiliSponsorBlock,Bili-qml，脚本Nya.user.js
+
 ---
 <p align="center"> Made with 💚 by Mix Team </p>
