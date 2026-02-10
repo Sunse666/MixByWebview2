@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>起始页</title>
+  <link rel="stylesheet" href="home.css">
+</head>
+<body>
+  <div class="container">
+    <h1 class="logo">Mix</h1>
+    <form class="search-box" action="https://www.bing.com/search" method="get">
+      <div class="search-wrapper">
+        <svg class="search-icon" viewBox="0 0 24 24" width="20" height="20">
+          <path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+        </svg>
+        <input type="text" name="q" class="search-input" autocomplete="off" autofocus placeholder="搜索 Bing">
+      </div>
+      <div class="btn-group">
+        <button type="submit" class="search-btn">Bing 搜索</button>
+      </div>
+    </form>
+    <div class="shortcuts">
+      <a href="https://www.bilibili.com" class="shortcut-item">
+        <div class="shortcut-icon">B</div>
+        <span>Bilibili</span>
+      </a>
+      <a href="https://github.com" class="shortcut-item">
+        <div class="shortcut-icon">⌘</div>
+        <span>GitHub</span>
+      </a>
+      <a href="https://mail.google.com" class="shortcut-item">
+        <div class="shortcut-icon">✉</div>
+        <span>Gmail</span>
+      </a>
+      <a href="https://www.youtube.com" class="shortcut-item">
+        <div class="shortcut-icon">▶</div>
+        <span>YouTube</span>
+      </a>
+    </div>
+  </div>
+  <footer class="footer">
+    <span>本地起始页</span>
+  </footer>
+</body>
+</html>
