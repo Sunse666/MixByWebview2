@@ -1,5 +1,5 @@
 # Mix By Webview2
-<p align="center"> <img src="assets/logo.png" alt="Mix Logo" width="128"> </p><p align="center"> <strong>一款极致轻量的浏览器</strong> </p><p align="center"> <img src="https://img.shields.io/badge/Platform-Windows-blue?style=flat-square" alt="Platform"> <img src="https://img.shields.io/badge/Engine-Chromium%20(WebView2)-brightgreen?style=flat-square" alt="Engine"> <img src="https://img.shields.io/badge/License-MIT-orange?style=flat-square" alt="License"> </p>
+<p align="center"> <img src="assets/logo.png" alt="Mix Logo" width="128"> </p><p align="center"> <strong>一款极致轻量的浏览器</strong> </p><p align="center"> <img src="https://img.shields.io/badge/Platform-Windows-blue?style=flat-square" alt="Platform"> <img src="https://img.shields.io/badge/Engine-Chromium%20(WebView2)-brightgreen?style=flat-square" alt="Engine">
 
 
 ## ✨ 简介
