@@ -9,7 +9,7 @@
 | 技术选型 | Tauri 2（`unstable` 多 webview）；某平台失败时只对该平台局部下沉 wry，不全局重写 |
 | 周期 | **三平台 8–9 周（单人）**；不为平台一致性拖周期，小问题按 §1.1 放行 |
 | 相关文档 | `DEV-PLAN.v1.0.md`（最初的立项草案，仅存档）· `M0-REPORT.md`（M0 结论） |
-| 进度 | **M0 完成**（E1/E2/E4 通过，Windows）· **M1 完成** · **M2 完成 4/5**（多标签、URL 同步、会话恢复、挂起；剩原生命中 resize） |
+| 进度 | **M0 完成**（E1/E2/E4 通过，Windows）· **M1 完成** · **M2 完成**（多标签、URL 同步、会话恢复、挂起、原生 resize） |
 
 ## 变更要点
 
@@ -289,7 +289,7 @@ mix/
 | URL 同步 | 400 ms 轮询 `Webview::url()`，只轮询已挂载的标签 | 延迟可感知但不打断输入（地址栏聚焦时不覆盖） |
 | 会话恢复 | 退出（`CloseRequested`）与结构变更时写 `session.json`，启动按序重建 | **历史栈不恢复**，back 置灰（未实现 UI，仅数据层） |
 | 挂起 | `max_live_tabs`（默认 12）超出时挂起最久未用；选中挂起标签时按 URL 重建 | 挂起标签在标签栏置灰斜体，失去页面状态 |
-| resize 热区 | **仍只有顶部与上半侧** | 全窗口 8 向需原生命中测试（Win `WM_NCHITTEST`），M2 剩余项 |
+| resize | Windows 全窗口 8 向（`WM_NCHITTEST` 子类化）；mac/Linux 仍只有 chrome 条热区 | mac 需 `NSView` 命中覆写、Linux 需 GTK 边界，列在 v1.1 |
 | 前端构建 | 静态 ESM，无打包 | 组件变多再上 Vite |
 | overlay | 每次打开重建（保证压在所有 tab 之上） | 常驻方案待评估 |
 
