@@ -1,5 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod extensions;
 mod ipc;
 mod logging;
 mod overlay;
@@ -21,7 +22,8 @@ fn main() {
         .setup(move |app| {
             let settings = state::Settings::load(&dirs.settings_file);
             let theme = theme::Theme::load(&dirs.theme_file);
-            app.manage(ipc::AppState::new(dirs.clone(), settings, theme));
+            let ext_infos = extensions::scan(&dirs);
+            app.manage(ipc::AppState::new(dirs.clone(), settings, theme, ext_infos));
             window::bootstrap(app)?;
             Ok(())
         })
@@ -41,6 +43,7 @@ fn main() {
             ipc::theme_revert,
             ipc::overlay_open,
             ipc::overlay_close,
+            ipc::ext_list,
             ipc::paths_get,
             ipc::open_dir,
         ])

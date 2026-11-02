@@ -7,6 +7,7 @@ pub struct AppDirs {
     pub root: PathBuf,
     pub user_data: PathBuf,
     pub profile: PathBuf,
+    pub profile_ui: PathBuf,
     pub logs: PathBuf,
     pub downloads: PathBuf,
     pub extensions: PathBuf,
@@ -37,6 +38,7 @@ impl AppDirs {
         Self {
             root: root.to_path_buf(),
             profile: user_data.join("profile"),
+            profile_ui: user_data.join("profile-ui"),
             logs: user_data.join("logs"),
             downloads: user_data.join("downloads"),
             extensions: user_data.join("extensions"),
@@ -57,6 +59,7 @@ impl AppDirs {
         for dir in [
             &self.user_data,
             &self.profile,
+            &self.profile_ui,
             &self.logs,
             &self.downloads,
             &self.extensions,

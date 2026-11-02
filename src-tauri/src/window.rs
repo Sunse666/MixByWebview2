@@ -55,8 +55,18 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
 
     let (width, height) = logical_size(&win)?;
 
-    win.add_child(
+    let opts = {
+        let state = app.state::<AppState>();
+        state.opts.clone()
+    };
+
+    let chrome_builder = tabs::apply_profile(
         WebviewBuilder::new("chrome", WebviewUrl::App("index.html".into())),
+        &opts.ui_data_dir,
+    );
+
+    win.add_child(
+        chrome_builder,
         LogicalPosition::new(0.0, 0.0),
         LogicalSize::new(width, CHROME_H),
     )?;
@@ -71,7 +81,7 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
 
     for (index, url) in urls.iter().enumerate() {
         let id = format!("tab-{}", index + 1);
-        tabs::create(&win, &id, url, width, height - CHROME_H)?;
+        tabs::create(&win, &id, url, width, height - CHROME_H, &opts)?;
     }
 
     {

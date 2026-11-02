@@ -1,3 +1,4 @@
+use crate::extensions::ExtInfo;
 use crate::paths::AppDirs;
 use crate::state::Settings;
 use crate::tabs::Tab;
@@ -21,11 +22,16 @@ pub struct Core {
 pub struct AppState {
     pub dirs: AppDirs,
     pub core: RwLock<Core>,
+    pub opts: crate::tabs::WebviewOpts,
+    pub extensions: Vec<ExtInfo>,
 }
 
 impl AppState {
-    pub fn new(dirs: AppDirs, settings: Settings, theme: Theme) -> Self {
+    pub fn new(dirs: AppDirs, settings: Settings, theme: Theme, extensions: Vec<ExtInfo>) -> Self {
+        let opts = crate::tabs::WebviewOpts::for_dirs(&dirs, &extensions);
         Self {
+            opts,
+            extensions,
             dirs,
             core: RwLock::new(Core {
                 settings,
@@ -209,8 +215,16 @@ pub(crate) fn save_session(app: &AppHandle) {
 
 fn spawn_tab(app: &AppHandle, id: &str, url: &str) -> Result<(), AppError> {
     let win = main_window(app)?;
+    let opts = app.state::<AppState>().opts.clone();
     let (width, height) = crate::window::logical_size(&win)?;
-    crate::tabs::create(&win, id, url, width, (height - crate::window::CHROME_H).max(1.0))?;
+    crate::tabs::create(
+        &win,
+        id,
+        url,
+        width,
+        (height - crate::window::CHROME_H).max(1.0),
+        &opts,
+    )?;
     Ok(())
 }
 
@@ -466,6 +480,11 @@ fn broadcast_theme(app: &AppHandle, theme: &Theme) {
             let _ = webview.eval(&script);
         }
     }
+}
+
+#[tauri::command]
+pub async fn ext_list(state: State<'_, AppState>) -> Result<Vec<ExtInfo>, AppError> {
+    Ok(state.extensions.clone())
 }
 
 #[tauri::command]

@@ -23,12 +23,20 @@ pub fn open(app: &AppHandle, kind: &str) -> Result<(), String> {
     let x = ((win_w - ow) / 2.0).max(0.0);
     let y = CHROME_H + 6.0;
 
+    let opts = {
+        let state = app.state::<crate::ipc::AppState>();
+        state.opts.clone()
+    };
+
     let url = WebviewUrl::App(format!("overlay.html#{kind}").into());
+    let builder = crate::tabs::apply_profile(
+        WebviewBuilder::new("overlay", url).transparent(true).focused(true),
+        &opts.ui_data_dir,
+    );
+
     let webview = win
         .add_child(
-            WebviewBuilder::new("overlay", url)
-                .transparent(true)
-                .focused(true),
+            builder,
             LogicalPosition::new(x, y),
             LogicalSize::new(ow, oh),
         )
