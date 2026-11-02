@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Mix theme</title>
+  <link rel="stylesheet" href="overlay.css" />
+</head>
+<body>
+  <section class="panel">
+    <header>
+      <strong>Theme</strong>
+      <span class="hint">live preview</span>
+    </header>
+
+    <div class="presets">
+      <button data-preset="green">Green</button>
+      <button data-preset="dark">Dark</button>
+      <button data-preset="light">Light</button>
+    </div>
+
+    <label>Background <input type="color" id="bg" /></label>
+    <label>Chrome <input type="color" id="chrome" /></label>
+    <label>Accent <input type="color" id="accent" /></label>
+    <label>Text <input type="color" id="text" /></label>
+
+    <label>Radius <input type="range" id="radius" min="0" max="32" step="1" /><output id="radius-out"></output></label>
+    <label>Font size <input type="range" id="font-size" min="10" max="20" step="1" /><output id="font-out"></output></label>
+
+    <footer>
+      <button id="cancel">Cancel</button>
+      <button id="save" class="primary">Save</button>
+    </footer>
+  </section>
+  <script type="module" src="overlay.js"></script>
+</body>
+</html>

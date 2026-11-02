@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Mix</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="titlebar">
+    <div id="drag">
+      <div class="brand"></div>
+      <div class="tab">
+        <span id="tab-title">New tab</span>
+        <button class="tab-close" id="tab-close" title="Close tab">x</button>
+      </div>
+      <button class="icon" id="tab-new" title="New tab">+</button>
+    </div>
+    <div class="win-buttons">
+      <button class="win" data-window="min" title="Minimize">-</button>
+      <button class="win" data-window="max" title="Maximize">O</button>
+      <button class="win danger" data-window="close" title="Close">x</button>
+    </div>
+  </div>
+
+  <div id="addressbar">
+    <div class="nav">
+      <button class="icon" data-nav="back" title="Back">&lt;</button>
+      <button class="icon" data-nav="forward" title="Forward">&gt;</button>
+      <button class="icon" data-nav="reload" title="Reload">R</button>
+    </div>
+    <input id="url" spellcheck="false" placeholder="Search or enter address" />
+    <button class="icon" id="theme-btn" title="Theme">=</button>
+  </div>
+
+  <div class="resize top" data-resize="n"></div>
+  <div class="resize left-top" data-resize="nw"></div>
+  <div class="resize right-top" data-resize="ne"></div>
+  <div class="resize left" data-resize="w"></div>
+  <div class="resize right" data-resize="e"></div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
