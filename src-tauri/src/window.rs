@@ -25,10 +25,20 @@ pub fn set_bounds(webview: &Webview, x: f64, y: f64, w: f64, h: f64) -> tauri::R
 }
 
 pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
-    let start_url = {
+    let (start_url, restore, session_file) = {
         let state = app.state::<AppState>();
         let core = state.core.read().unwrap_or_else(|e| e.into_inner());
-        core.settings.start_url.clone()
+        (
+            core.settings.start_url.clone(),
+            core.settings.restore_session,
+            state.dirs.session_file.clone(),
+        )
+    };
+
+    let restored = if restore {
+        crate::session::Session::load(&session_file).filter(|session| !session.tabs.is_empty())
+    } else {
+        None
     };
 
     let win = Window::builder(app, "main")
@@ -49,18 +59,33 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
         LogicalSize::new(width, CHROME_H),
     )?;
 
-    let _tab = tabs::create(&win, "tab-1", &start_url, width, height - CHROME_H)?;
+    let (urls, selected_index) = match restored {
+        Some(session) => {
+            let index = session.selected.min(session.tabs.len() - 1);
+            (session.tabs, index)
+        }
+        None => (vec![start_url], 0),
+    };
+
+    for (index, url) in urls.iter().enumerate() {
+        let id = format!("tab-{}", index + 1);
+        tabs::create(&win, &id, url, width, height - CHROME_H)?;
+    }
 
     {
         let state = app.state::<AppState>();
         let mut core = state.core.write().unwrap_or_else(|e| e.into_inner());
-        core.next_tab_id = 1;
-        core.tabs.push(tabs::Tab {
-            id: "tab-1".into(),
-            url: start_url,
-            title: "New tab".into(),
-        });
-        core.selected = Some("tab-1".into());
+        core.next_tab_id = urls.len();
+        core.tabs = urls
+            .iter()
+            .enumerate()
+            .map(|(index, url)| tabs::Tab {
+                id: format!("tab-{}", index + 1),
+                url: url.clone(),
+                title: "New tab".into(),
+            })
+            .collect();
+        core.selected = Some(format!("tab-{}", selected_index + 1));
     }
 
     let handle = app.handle().clone();
@@ -70,9 +95,15 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
                 crate::logging::warn(&format!("relayout failed: {err}"));
             }
         }
+        WindowEvent::CloseRequested { .. } => {
+            crate::ipc::save_session(&handle);
+        }
         _ => {}
     });
 
+    crate::logging::info(&format!("tabs ready: {}", urls.len()));
+    crate::ipc::sync_visibility(app.handle());
+    crate::ipc::emit_tabs(app.handle());
     start_url_watch(app.handle().clone());
 
     win.show()?;

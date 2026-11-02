@@ -4,6 +4,7 @@ mod ipc;
 mod logging;
 mod overlay;
 mod paths;
+mod session;
 mod state;
 mod tabs;
 mod theme;

@@ -111,7 +111,7 @@ fn snapshot(core: &Core) -> TabList {
 }
 
 /// Tell the chrome UI to rebuild the tab strip.
-fn emit_tabs(app: &AppHandle) {
+pub(crate) fn emit_tabs(app: &AppHandle) {
     let state = app.state::<AppState>();
     let list = {
         let core = state.core.read().unwrap_or_else(|e| e.into_inner());
@@ -121,7 +121,7 @@ fn emit_tabs(app: &AppHandle) {
 }
 
 /// Only the selected tab is visible; the rest keep running underneath.
-fn sync_visibility(app: &AppHandle) {
+pub(crate) fn sync_visibility(app: &AppHandle) {
     let pairs: Vec<(String, Option<String>)> = {
         let state = app.state::<AppState>();
         let core = state.core.read().unwrap_or_else(|e| e.into_inner());
@@ -138,6 +138,28 @@ fn sync_visibility(app: &AppHandle) {
                 let _ = webview.hide();
             }
         }
+    }
+}
+
+pub(crate) fn save_session(app: &AppHandle) {
+    let Some(state) = app.try_state::<AppState>() else {
+        return;
+    };
+    let session = {
+        let core = state.core.read().unwrap_or_else(|e| e.into_inner());
+        let selected = core
+            .selected
+            .as_ref()
+            .and_then(|id| core.tabs.iter().position(|tab| &tab.id == id))
+            .unwrap_or(0);
+        crate::session::Session {
+            schema_version: crate::session::SCHEMA,
+            tabs: core.tabs.iter().map(|tab| tab.url.clone()).collect(),
+            selected,
+        }
+    };
+    if let Err(err) = session.save(&state.dirs.session_file) {
+        crate::logging::warn(&format!("session save failed: {err}"));
     }
 }
 
@@ -267,6 +289,7 @@ pub async fn tab_new(
     spawn_tab(&app, &id, &target)?;
     sync_visibility(&app);
     emit_tabs(&app);
+    save_session(&app);
     Ok(id)
 }
 
@@ -293,6 +316,7 @@ pub async fn tab_close(app: AppHandle, state: State<'_, AppState>, id: String) -
 
     sync_visibility(&app);
     emit_tabs(&app);
+    save_session(&app);
     Ok(())
 }
 

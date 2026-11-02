@@ -16,6 +16,7 @@ pub struct AppDirs {
     pub scripts: PathBuf,
     pub settings_file: PathBuf,
     pub theme_file: PathBuf,
+    pub session_file: PathBuf,
     pub fell_back: bool,
 }
 
@@ -43,6 +44,7 @@ impl AppDirs {
             theme_assets: user_data.join("theme"),
             settings_file: user_data.join("settings.json"),
             theme_file: user_data.join("theme.json"),
+            session_file: user_data.join("session.json"),
             crx: root.join("crx"),
             scripts: root.join("javascript"),
             fell_back: false,
