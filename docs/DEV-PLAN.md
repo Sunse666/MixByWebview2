@@ -9,7 +9,7 @@
 | 技术选型 | Tauri 2（`unstable` 多 webview）；某平台失败时只对该平台局部下沉 wry，不全局重写 |
 | 周期 | **三平台 8–9 周（单人）**；不为平台一致性拖周期，小问题按 §1.1 放行 |
 | 相关文档 | `DEV-PLAN.v1.0.md`（最初的立项草案，仅存档）· `M0-REPORT.md`（M0 结论） |
-| 进度 | **M0–M3 完成**（M3 剩"上传确认"需人工点一次）· **M4 进行中**：托盘、单实例、关闭到托盘、停靠+全局热键已通；剩自启/位置记忆 |
+| 进度 | **M0–M4 完成**（两处待人工确认：上传文件选择框、开机自启开关）· 下一步 M5 三平台打包 |
 
 ## 变更要点
 
@@ -210,6 +210,8 @@ mix/
 | 页面崩溃提示 | P1 | 检测 → "重新加载 / 关闭标签" | — |
 | 诊断包 | P1 | 日志 + 版本 + 脱敏设置 → zip，一键导出 | 见 §7.3 |
 | 主题自定义 | P1 | CSS 变量 + `theme.json`，预设 / 导入 / 导出 | 见 §3.7 |
+| 位置记忆 | P0 | 窗口 x/y/宽/高/最大化写进 `session.json.window`，关闭到托盘时保存 | **不用 `tauri-plugin-window-state`**：它固定写 `%APPDATA%/<identifier>`，破坏便携承诺；核对尺寸时注意非 DPI-aware 进程（如 PowerShell）读到的 `GetWindowRect` 会被系统缩放 |
+| 开机自启 | P1 | `tauri-plugin-autostart`，设置里勾选；默认关 | 勾选后写 HKCU Run 键，是本项目唯一的系统全局写入 |
 | 停靠 | P0 | 9 格状态机（半分→四角循环，下行回原状），`Alt+Shift+方向键` 全局热键；注册失败降级到窗口内快捷键 | 恢复位置存 `outer_position` + **`inner_size`**：`set_size` 改的是客户区，存外框尺寸会让窗口每次还原都变大（实测 +15×+8） |
 | 托盘 | P0 | 菜单 Show / New tab / Quit；左键单击或双击还原窗口 | "New tab" 走事件让 chrome 调 `tab_new`，托盘线程里直接建 webview 会死锁 |
 | 单实例 | P0 | `tauri-plugin-single-instance` 最先注册，第二次启动唤起已有窗口 | 验证：第二个进程 exit 0，日志追加 forwarded |
