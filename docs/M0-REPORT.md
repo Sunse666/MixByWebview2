@@ -7,12 +7,13 @@ Environment used for every row:
 
 | Field | Value |
 | --- | --- |
-| Windows | |
-| macOS | |
-| Linux (X11) | |
-| Linux (Wayland) | |
-| WebView2 / WebKitGTK version | |
-| Probe commit | |
+| Windows | Windows 11 build 26100, WebView2 156.0.4314.58, DPI 125% |
+| macOS | not tested yet |
+| Linux (X11) | not tested yet |
+| Linux (Wayland) | not tested yet |
+| WebView2 / WebKitGTK version | 156.0.4314.58 |
+| Toolchain | rustc 1.99.0, tauri 2.12.5 |
+| Probe commit | 75df54b |
 
 ## E1 — MV3 extension + DNR
 
@@ -25,8 +26,14 @@ Environment used for every row:
 
 - Steps: `--exp e2`, type and scroll in both panes, resize the window.
 - Pass: no interference, focus follows clicks, both follow resize.
-- Result:
-- Fallback:
+- Result: **PASS** (Windows 11 + WebView2 156.0.4314.58, 125% DPI, 2026-11-02).
+  - Two child webviews render side by side with independent scrollbars; no interference while typing.
+  - Layout offset `y = 68` renders correctly; chrome strip stays above.
+  - Focus follows clicks between panes; IME input works in both `input` and `contenteditable`.
+  - Child webviews do **not** follow a window resize — expected, and the reason the real app recomputes bounds in `on_resized` instead of relying on `auto_resize` (it only scales proportionally and cannot keep a fixed top offset).
+  - Ctrl+wheel zoom does **not** work by default. Fixed by `WebviewBuilder::zoom_hotkeys_enabled(true)`.
+  - Gotcha: `WebviewUrl::App("page.html?q=1")` drops the query string. Pass state via the fragment or an init script.
+- Fallback: none needed.
 
 ## E3 — init script in all frames
 

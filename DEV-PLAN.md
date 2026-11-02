@@ -210,10 +210,12 @@ mix/
 | 诊断包 | P1 | 日志 + 版本 + 脱敏设置 → zip，一键导出 | 见 §7.3 |
 | 主题自定义 | P1 | CSS 变量 + `theme.json`，预设 / 导入 / 导出 | 见 §3.7 |
 
+> E2 实测踩到的两个坑，写在这里省一次调试：① `WebviewUrl::App("x.html?q=1")` 会丢掉 query，传参用 fragment 或初始化脚本；② 子 webview 不会跟随窗口 resize（`auto_resize` 只按比例缩放、保持不了固定顶部偏移），必须自己在 `on_resized` 重算。
+
 ### 3.6 其它小项
 
 - 错误页：本地 HTML，含 URL 与"重试"。
-- 缩放：`Webview::set_zoom` + 按 tab 持久化。
+- 缩放：`Webview::set_zoom` + 按 tab 持久化。**页面内 Ctrl+滚轮默认是关的**，建 webview 时必须 `zoom_hotkeys_enabled(true)`（E2 实测）；chrome 侧快捷键走 `set_zoom`，两条路径读写同一个 zoom 值，避免来回跳变。
 - 查找：注入 `window.find()` + 高亮（各平台表现不一，失败就给提示）。
 - 全屏视频：进入时 hide chrome、tab 铺满；退出恢复。与停靠逻辑互斥。
 - 最后标签关闭 → 打开新标签页，不退出。
