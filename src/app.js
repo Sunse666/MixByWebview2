@@ -25,7 +25,10 @@ window.__mixApplyTheme = applyTheme;
 function renderTabs() {
   const nodes = tabs.map((tab) => {
     const el = document.createElement("div");
-    el.className = tab.id === selected ? "tab active" : "tab";
+    const classes = ["tab"];
+    if (tab.id === selected) classes.push("active");
+    if (!tab.alive) classes.push("suspended");
+    el.className = classes.join(" ");
     el.title = tab.url;
 
     const label = document.createElement("span");

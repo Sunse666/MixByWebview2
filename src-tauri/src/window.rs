@@ -76,6 +76,7 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
         let state = app.state::<AppState>();
         let mut core = state.core.write().unwrap_or_else(|e| e.into_inner());
         core.next_tab_id = urls.len();
+        core.tick = urls.len() as u64;
         core.tabs = urls
             .iter()
             .enumerate()
@@ -83,6 +84,8 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
                 id: format!("tab-{}", index + 1),
                 url: url.clone(),
                 title: "New tab".into(),
+                alive: true,
+                last_active: index as u64,
             })
             .collect();
         core.selected = Some(format!("tab-{}", selected_index + 1));
@@ -102,6 +105,7 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
     });
 
     crate::logging::info(&format!("tabs ready: {}", urls.len()));
+    crate::ipc::enforce_live_limit(app.handle());
     crate::ipc::sync_visibility(app.handle());
     crate::ipc::emit_tabs(app.handle());
     start_url_watch(app.handle().clone());

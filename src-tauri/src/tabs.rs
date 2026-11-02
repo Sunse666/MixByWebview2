@@ -11,6 +11,10 @@ pub struct Tab {
     pub id: String,
     pub url: String,
     pub title: String,
+    /// False means the webview was dropped to save memory; selecting the tab
+    /// recreates it from url.
+    pub alive: bool,
+    pub last_active: u64,
 }
 
 #[derive(Clone, Serialize)]

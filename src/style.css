@@ -87,6 +87,8 @@ button {
 
 .tab:hover { opacity: 1; background: color-mix(in srgb, var(--panel) 70%, var(--text) 10%); }
 
+.tab.suspended .tab-title { opacity: 0.45; font-style: italic; }
+
 .tab.active {
   opacity: 1;
   border-color: var(--border);

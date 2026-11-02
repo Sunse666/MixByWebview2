@@ -15,6 +15,7 @@ pub struct Core {
     pub tabs: Vec<Tab>,
     pub selected: Option<String>,
     pub next_tab_id: usize,
+    pub tick: u64,
 }
 
 pub struct AppState {
@@ -33,6 +34,7 @@ impl AppState {
                 tabs: Vec::new(),
                 selected: None,
                 next_tab_id: 0,
+                tick: 0,
             }),
         }
     }
@@ -81,6 +83,7 @@ pub struct TabMeta {
     id: String,
     url: String,
     title: String,
+    alive: bool,
 }
 
 #[derive(Clone, Serialize)]
@@ -104,6 +107,7 @@ fn snapshot(core: &Core) -> TabList {
                 id: tab.id.clone(),
                 url: tab.url.clone(),
                 title: tab.title.clone(),
+                alive: tab.alive,
             })
             .collect(),
         selected: core.selected.clone(),
@@ -137,6 +141,46 @@ pub(crate) fn sync_visibility(app: &AppHandle) {
             } else {
                 let _ = webview.hide();
             }
+        }
+    }
+}
+
+/// Drop the least recently used background tab once too many are alive.
+pub(crate) fn enforce_live_limit(app: &AppHandle) {
+    loop {
+        let victim = {
+            let state = app.state::<AppState>();
+            let mut core = state.core.write().unwrap_or_else(|e| e.into_inner());
+            let alive = core.tabs.iter().filter(|tab| tab.alive).count();
+            let limit = core.settings.max_live_tabs.max(1);
+            if alive <= limit {
+                None
+            } else {
+                let selected = core.selected.clone();
+                let candidate = core
+                    .tabs
+                    .iter()
+                    .filter(|tab| tab.alive && Some(&tab.id) != selected.as_ref())
+                    .min_by_key(|tab| tab.last_active)
+                    .map(|tab| tab.id.clone());
+                if let Some(id) = &candidate {
+                    if let Some(tab) = core.tabs.iter_mut().find(|tab| &tab.id == id) {
+                        tab.alive = false;
+                    }
+                }
+                candidate
+            }
+        };
+
+        match victim {
+            Some(id) => {
+                if let Some(webview) = app.get_webview(&id) {
+                    let _ = webview.close();
+                }
+                crate::logging::info(&format!("suspended {id}"));
+                let _ = app.emit("tab:suspended", &id);
+            }
+            None => return,
         }
     }
 }
@@ -277,10 +321,14 @@ pub async fn tab_new(
         core.next_tab_id += 1;
         let id = format!("tab-{}", core.next_tab_id);
         let target = url.unwrap_or_else(|| core.settings.start_url.clone());
+        core.tick += 1;
+        let tick = core.tick;
         core.tabs.push(Tab {
             id: id.clone(),
             url: target.clone(),
             title: "New tab".into(),
+            alive: true,
+            last_active: tick,
         });
         core.selected = Some(id.clone());
         (id, target)
@@ -288,6 +336,7 @@ pub async fn tab_new(
 
     spawn_tab(&app, &id, &target)?;
     sync_visibility(&app);
+    enforce_live_limit(&app);
     emit_tabs(&app);
     save_session(&app);
     Ok(id)
