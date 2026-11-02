@@ -9,7 +9,7 @@
 | 技术选型 | Tauri 2（`unstable` 多 webview）；某平台失败时只对该平台局部下沉 wry，不全局重写 |
 | 周期 | **三平台 8–9 周（单人）**；不为平台一致性拖周期，小问题按 §1.1 放行 |
 | 相关文档 | `DEV-PLAN.v1.0.md`（最初的立项草案，仅存档）· `M0-REPORT.md`（M0 结论） |
-| 进度 | **M0/M1/M2 完成**（Windows）· **M3 进行中**：crx 扩展、下载、便携 profile 已通；剩右键菜单/快捷键/权限/上传确认 |
+| 进度 | **M0/M1/M2 完成**（Windows）· **M3 进行中**：crx 扩展、下载、快捷键、便携 profile 已通；剩右键菜单/权限/上传确认 |
 
 ## 变更要点
 
@@ -200,7 +200,7 @@ mix/
 | 会话恢复 | P0 | 存 `{url,index,title}`；**历史栈不恢复**，back 置灰并明示 | — |
 | 挂起策略 | P0 | `max_live_tabs=12` 超过挂起最久未用；RSS > 1.2 GB 主动挂起 | — |
 | 右键菜单 / 地址栏补全 / 设置面板 | P0 | 全部走 overlay 层 | — |
-| 键盘快捷键 | P0 | Ctrl+T/W/L/R、F5、Ctrl+Tab、Ctrl+F、Ctrl+±、F12；**焦点在 tab 内时 chrome 收不到按键**，需转发或窗口级钩子 | 重点验证 |
+| 键盘快捷键 | P0 | Ctrl+T/W/L/R、F5、Ctrl+Tab、Ctrl+±、F12；页面内由 `initialization_script` 转发到 `shortcut` 命令，chrome 侧同一张映射表本地处理 | 见 §3.9 的 capability 拆分 |
 | 下载 | P0 | `on_download`(`DownloadEvent`) → 任务表 + 进度 + 打开目录 | mac/Linux 需自实现 |
 | 文件上传 | P0 | `<input type=file>` | WKWebView 需 `runOpenPanel` |
 | 权限提示 | P0 | `on_permission_request` → overlay 询问 → 会话内记忆 | 三平台统一 |
@@ -288,6 +288,7 @@ mix/
 | 扩展 | 扫描 `crx/` → 解包到 `UserData/extensions/` → MV3 校验 → WebView2 加载 | 仅 Windows；V2 标记 `skipped` 并提示转用户脚本；状态由 `ext_list` 暴露，UI 列表放 M4 |
 | 便携 profile | 所有 webview 的 `data_directory` 指向 `UserData/profile`（chrome/overlay 用 `profile-ui`） | 扩展选项必须整环境一致，故 UI 层单独一个 profile |
 | 下载 | `on_download` → 落 `UserData/downloads`，优先用服务端建议文件名，重名自动加序号，chrome 显示药丸并可打开所在目录 | 无进度百分比（wry 只给 Requested/Finished） |
+| 快捷键 | 页面内脚本转发到 `shortcut`；命令被拆成两张 capability，远程页面只允许这一条命令 | 远程页面可触发标签/缩放类操作（不涉及文件）；URLPattern **必须写端口通配** `https://*:*/*`，否则非默认端口全部拒绝 |
 | 错误页 | 不自绘：WebView2 自带错误页 | mac/Linux 需自绘，列 v1.1 |
 | 多标签 | 支持新建/切换/关闭，标题实时同步 | 只隐藏不卸载，选中才可见 |
 | URL 同步 | 400 ms 轮询 `Webview::url()`，只轮询已挂载的标签 | 延迟可感知但不打断输入（地址栏聚焦时不覆盖） |
@@ -526,6 +527,8 @@ CRX = zip + 头部封装（`Cr24` + 版本 + 可选 pubkey/签名 + 头长度）
 | identifier | `com.mix.browser`。改它不会丢用户数据——数据在 `UserData/`，不按 identifier 分目录；只影响 macOS bundle id、单实例锁、回落时的日志路径 |
 | 启动提示 | 不做"建议把 Mix 放到用户目录"这类位置提示（已确认不需要） |
 | 事实来源 | 功能范围以 §1.1 / §2.1 / §2.2 为准，实现清单以 §3.5 为准，两者冲突时改代码不改范围 |
+| 新增命令 | 三处必须同时改：`#[tauri::command]` 实现、`main.rs` 的 `generate_handler!`、`build.rs` 的 `AppManifest::commands` + `capabilities/default.json` 的 `allow-*`。漏掉后两处会在运行时报 "command not allowed" |
+| Capability | 本地页面用 `default.json`（全命令）；远程页面用 `remote.json`（`local:false`，只给 `allow-shortcut`）。不要为了省事把命令加到远程那一张 |
 
 ---
 
