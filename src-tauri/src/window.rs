@@ -102,11 +102,3 @@ pub fn relayout(app: &AppHandle) -> tauri::Result<()> {
     let _ = app.emit("layout:changed", (width, height));
     Ok(())
 }
-
-pub fn focus_main(app: &AppHandle) {
-    if let Some(win) = app.get_window("main") {
-        let _ = win.unminimize();
-        let _ = win.show();
-        let _ = win.set_focus();
-    }
-}

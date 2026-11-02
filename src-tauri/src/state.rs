@@ -49,9 +49,4 @@ impl Settings {
             }
         }
     }
-
-    pub fn save(&self, path: &Path) -> std::io::Result<()> {
-        let json = serde_json::to_string_pretty(self)?;
-        std::fs::write(path, json)
-    }
 }
