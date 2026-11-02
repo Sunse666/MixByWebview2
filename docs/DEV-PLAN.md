@@ -9,7 +9,7 @@
 | 技术选型 | Tauri 2（`unstable` 多 webview）；某平台失败时只对该平台局部下沉 wry，不全局重写 |
 | 周期 | **三平台 8–9 周（单人）**；不为平台一致性拖周期，小问题按 §1.1 放行 |
 | 相关文档 | `DEV-PLAN.v1.0.md`（最初的立项草案，仅存档）· `M0-REPORT.md`（M0 结论） |
-| 进度 | **M0/M1/M2 完成**（Windows）· **M3 进行中**：crx 扩展、下载、快捷键、右键菜单、便携 profile 已通；剩权限弹窗/上传确认 |
+| 进度 | **M0/M1/M2 完成**（Windows）· **M3 完成 5/6**：扩展、下载、快捷键、右键菜单、权限弹窗已通；剩"上传确认"需人工点一次 |
 
 ## 变更要点
 
@@ -289,6 +289,7 @@ mix/
 | 便携 profile | 所有 webview 的 `data_directory` 指向 `UserData/profile`（chrome/overlay 用 `profile-ui`） | 扩展选项必须整环境一致，故 UI 层单独一个 profile |
 | 下载 | `on_download` → 落 `UserData/downloads`，优先用服务端建议文件名，重名自动加序号，chrome 显示药丸并可打开所在目录 | 无进度百分比（wry 只给 Requested/Finished） |
 | 快捷键 | 页面内脚本转发到 `shortcut`；命令被拆成两张 capability，远程页面只允许这一条命令 | 远程页面可触发标签/缩放类操作（不涉及文件）；URLPattern **必须写端口通配** `https://*:*/*`，否则非默认端口全部拒绝 |
+| 权限 | 页面脚本包装 `getUserMedia` / `geolocation` / `Notification`，先问 overlay 再调原生 API；决定按 `origin\|kind` 记在内存 | 不阻塞 WebView2 事件线程（在 JS 层拦截，而不是 Rust 回调里同步等）；120 秒无人应答按拒绝处理；只覆盖这三类 API，其他权限仍走平台默认 |
 | 右键菜单 | 页面 `contextmenu` 上报（链接/图片/选中文本/可编辑）→ overlay 渲染自绘菜单；页面 `mousedown` 在菜单显示后 8 秒内上报 `dismiss` 关闭 | 原生菜单被 `preventDefault` 屏蔽；overlay 用**唯一 label**（`overlay-N`），否则"关旧开新"会因 label 冲突失败 |
 | 错误页 | 不自绘：WebView2 自带错误页 | mac/Linux 需自绘，列 v1.1 |
 | 多标签 | 支持新建/切换/关闭，标题实时同步 | 只隐藏不卸载，选中才可见 |
