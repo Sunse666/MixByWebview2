@@ -78,7 +78,7 @@ fn e1_extensions(win: &Window, _chrome: &Webview) -> tauri::Result<()> {
         println!("[e1] MISSING: create it and drop an unpacked MV3 extension inside");
     }
 
-    let builder = WebviewBuilder::new("tab0", WebviewUrl::App("tab.html?e1".into()));
+    let builder = WebviewBuilder::new("tab0", WebviewUrl::App("tab.html#e1".into()));
     #[cfg(windows)]
     let builder = builder
         .browser_extensions_enabled(true)
@@ -97,10 +97,10 @@ fn e1_extensions(win: &Window, _chrome: &Webview) -> tauri::Result<()> {
 
 /// E2: two independent webviews, side by side. Type, scroll and resize in both.
 fn e2_tabs(win: &Window) -> tauri::Result<()> {
-    tab_at(win, "tab0", "tab.html?left", 0.0, W / 2.0)?
+    tab_at(win, "tab0", "tab.html#left", 0.0, W / 2.0)?
         .eval("console.log('[e2] left ready')")
         .ok();
-    tab_at(win, "tab1", "tab.html?right", W / 2.0, W / 2.0)?
+    tab_at(win, "tab1", "tab.html#right", W / 2.0, W / 2.0)?
         .eval("console.log('[e2] right ready')")
         .ok();
     Ok(())
@@ -132,7 +132,7 @@ fn e3_inject(win: &Window) -> tauri::Result<()> {
 
 /// E4: third webview floating above a tab webview. Check paint order and focus.
 fn e4_overlay(win: &Window) -> tauri::Result<()> {
-    tab_at(win, "tab0", "tab.html?e4", 0.0, W)?;
+    tab_at(win, "tab0", "tab.html#e4", 0.0, W)?;
     win.add_child(
         WebviewBuilder::new("overlay", WebviewUrl::App("overlay.html".into()))
             .transparent(true)
@@ -149,7 +149,7 @@ fn e4_overlay(win: &Window) -> tauri::Result<()> {
 /// E5: download handler plus a file input. Click the link and pick a file.
 fn e5_download(win: &Window) -> tauri::Result<()> {
     win.add_child(
-        WebviewBuilder::new("tab0", WebviewUrl::App("tab.html?e5".into())).on_download(
+        WebviewBuilder::new("tab0", WebviewUrl::App("tab.html#e5".into())).on_download(
             |_wv, event| {
                 let requested = matches!(event, tauri::webview::DownloadEvent::Requested { .. });
                 println!("[e5] download event, requested = {requested}");
@@ -164,8 +164,8 @@ fn e5_download(win: &Window) -> tauri::Result<()> {
 
 /// E6: IME. Two editable panes: switch focus, type Chinese, check the candidate window.
 fn e6_ime(win: &Window) -> tauri::Result<()> {
-    tab_at(win, "tab0", "tab.html?ime-a", 0.0, W / 2.0)?;
-    tab_at(win, "tab1", "tab.html?ime-b", W / 2.0, W / 2.0)?;
+    tab_at(win, "tab0", "tab.html#ime-a", 0.0, W / 2.0)?;
+    tab_at(win, "tab1", "tab.html#ime-b", W / 2.0, W / 2.0)?;
     Ok(())
 }
 
@@ -181,7 +181,7 @@ fn e7_dpi(win: &Window) -> tauri::Result<()> {
             m.scale_factor()
         );
     }
-    tab_at(win, "tab0", "tab.html?e7", 0.0, W)?;
+    tab_at(win, "tab0", "tab.html#e7", 0.0, W)?;
     Ok(())
 }
 
@@ -193,6 +193,6 @@ fn e9_platform(win: &Window) -> tauri::Result<()> {
     win.set_position(tauri::PhysicalPosition::new(before.x + 120, before.y + 80))?;
     let after = win.outer_position()?;
     println!("[e9] move round-trip {before:?} -> {after:?}");
-    tab_at(win, "tab0", "tab.html?e9", 0.0, W)?;
+    tab_at(win, "tab0", "tab.html#e9", 0.0, W)?;
     Ok(())
 }

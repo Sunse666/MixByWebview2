@@ -32,7 +32,8 @@
     <button id="tt">change document.title</button></div>
   <div class="tall"></div>
   <script>
-    const q = new URLSearchParams(location.search).get("q") || "?";
+    // App URLs drop the query string, so the probe tag rides in the fragment.
+    const q = location.hash.replace("#", "") || new URLSearchParams(location.search).get("q") || "?";
     document.getElementById("h").textContent = "tab webview " + q;
     document.getElementById("tt").onclick = () => {
       document.title = "tab " + q + " " + Date.now();
