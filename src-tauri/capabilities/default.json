@@ -34,6 +34,7 @@
     "allow-context-menu",
     "allow-menu-context-get",
     "allow-permission-request",
-    "allow-permission-reply"
+    "allow-permission-reply",
+    "allow-snap"
   ]
 }

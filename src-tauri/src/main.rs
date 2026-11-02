@@ -9,6 +9,7 @@ mod paths;
 mod permissions;
 mod platform;
 mod session;
+mod snap;
 mod tray;
 mod state;
 mod tabs;
@@ -27,6 +28,7 @@ fn main() {
             crate::logging::info("second instance forwarded to the running window");
             crate::window::show_or_focus(app);
         }))
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .setup(move |app| {
             let settings = state::Settings::load(&dirs.settings_file);
             let theme = theme::Theme::load(&dirs.theme_file);
@@ -54,6 +56,7 @@ fn main() {
             ipc::ext_list,
             ipc::shortcut,
             ipc::context_menu,
+            ipc::snap,
             ipc::permission_request,
             ipc::permission_reply,
             ipc::menu_context_get,

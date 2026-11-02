@@ -132,6 +132,7 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
     win.show()?;
     win.set_focus()?;
 
+    crate::snap::install_hotkeys(app.handle());
     crate::tray::install(&app.handle().clone())?;
     crate::logging::info("main window ready");
     Ok(())

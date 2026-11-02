@@ -25,6 +25,7 @@ pub struct AppState {
     pub menu_context: RwLock<MenuContext>,
     pub overlay: RwLock<Option<String>>,
     pub permissions: crate::permissions::PermissionStore,
+    pub snap: std::sync::Mutex<crate::snap::SnapState>,
     pub core: RwLock<Core>,
     pub opts: crate::tabs::WebviewOpts,
     pub extensions: Vec<ExtInfo>,
@@ -41,6 +42,7 @@ impl AppState {
             menu_context: RwLock::new(MenuContext::default()),
             overlay: RwLock::new(None),
             permissions: crate::permissions::PermissionStore::default(),
+            snap: std::sync::Mutex::new(crate::snap::SnapState::default()),
             core: RwLock::new(Core {
                 settings,
                 baseline: theme.clone(),
@@ -744,6 +746,18 @@ pub async fn permission_reply(app: AppHandle, id: u64, allow: bool) -> Result<()
     }
     crate::overlay::close(&app);
     Ok(())
+}
+
+#[tauri::command]
+pub async fn snap(app: AppHandle, direction: String) -> Result<(), AppError> {
+    let dir = match direction.as_str() {
+        "left" => crate::snap::Direction::Left,
+        "right" => crate::snap::Direction::Right,
+        "up" => crate::snap::Direction::Up,
+        "down" => crate::snap::Direction::Down,
+        other => return Err(AppError::new("bad_direction", other)),
+    };
+    crate::snap::cycle(&app, dir).map_err(|err| AppError::new("snap", err))
 }
 
 #[tauri::command]

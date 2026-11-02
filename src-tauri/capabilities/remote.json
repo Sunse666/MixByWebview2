@@ -21,6 +21,7 @@
   "permissions": [
     "allow-shortcut",
     "allow-context-menu",
-    "allow-permission-request"
+    "allow-permission-request",
+    "allow-snap"
   ]
 }

@@ -114,6 +114,13 @@ const SHORTCUT_FORWARDER: &str = r#"
   }
 
   window.addEventListener("keydown", function (event) {
+    if (event.altKey && event.shiftKey && event.key.indexOf("Arrow") === 0 && window.__TAURI_INTERNALS__) {
+      event.preventDefault();
+      window.__TAURI_INTERNALS__.invoke("snap", {
+        direction: event.key.replace("Arrow", "").toLowerCase()
+      }).catch(function () {});
+      return;
+    }
     var action = actionFor(event);
     if (!action) return;
     event.preventDefault();

@@ -27,6 +27,7 @@ fn main() {
         "menu_context_get",
         "permission_request",
         "permission_reply",
+        "snap",
     ];
 
     tauri_build::try_build(

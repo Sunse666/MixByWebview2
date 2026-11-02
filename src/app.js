@@ -149,6 +149,11 @@ async function boot() {
 
   // Same map as the page side, so shortcuts work wherever the focus sits.
   window.addEventListener("keydown", (event) => {
+    if (event.altKey && event.shiftKey && event.key.startsWith("Arrow")) {
+      event.preventDefault();
+      invoke("snap", { direction: event.key.replace("Arrow", "").toLowerCase() });
+      return;
+    }
     let action = null;
     if (event.key === "F5") action = "reload";
     else if (event.key === "F12") action = "devtools";
