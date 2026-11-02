@@ -343,6 +343,7 @@ pub async fn tab_new(
             id: id.clone(),
             url: target.clone(),
             title: "New tab".into(),
+            zoom: 1.0,
             alive: true,
             last_active: tick,
         });
@@ -502,6 +503,97 @@ pub async fn download_open_dir(state: State<'_, AppState>, id: u64) -> Result<()
         Some(path) if !path.is_empty() => reveal(std::path::Path::new(&path)),
         _ => reveal(&state.dirs.downloads),
     }?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn shortcut(app: AppHandle, state: State<'_, AppState>, action: String) -> Result<(), AppError> {
+    match action.as_str() {
+        "new_tab" => {
+            tab_new(app, state, None).await?;
+        }
+        "close_tab" => {
+            let id = selected_label(&app);
+            if !id.is_empty() {
+                tab_close(app, state, id).await?;
+            }
+        }
+        "next_tab" => cycle_tab(&app, 1).await,
+        "prev_tab" => cycle_tab(&app, -1).await,
+        "focus_url" => {
+            let _ = app.emit("ui:focus-url", ());
+        }
+        "reload" => {
+            if let Some(webview) = app.get_webview(&selected_label(&app)) {
+                let _ = webview.reload();
+            }
+        }
+        "zoom_in" => zoom_by(&app, 0.1)?,
+        "zoom_out" => zoom_by(&app, -0.1)?,
+        "zoom_reset" => set_zoom(&app, 1.0)?,
+        "devtools" => {
+            #[cfg(debug_assertions)]
+            if let Some(webview) = app.get_webview(&selected_label(&app)) {
+                webview.open_devtools();
+            }
+        }
+        other => return Err(AppError::new("bad_shortcut", other)),
+    }
+    Ok(())
+}
+
+async fn cycle_tab(app: &AppHandle, delta: isize) {
+    let next = {
+        let state = app.state::<AppState>();
+        let core = state.core.read().unwrap_or_else(|e| e.into_inner());
+        if core.tabs.len() < 2 {
+            return;
+        }
+        let current = core
+            .selected
+            .as_ref()
+            .and_then(|id| core.tabs.iter().position(|tab| &tab.id == id))
+            .unwrap_or(0);
+        let len = core.tabs.len() as isize;
+        let index = (current as isize + delta).rem_euclid(len);
+        Some(core.tabs[index as usize].id.clone())
+    };
+
+    if let Some(id) = next {
+        let state = app.state::<AppState>();
+        let _ = tab_select(app.clone(), state, id).await;
+    }
+}
+
+fn zoom_by(app: &AppHandle, delta: f64) -> Result<(), AppError> {
+    let current = {
+        let state = app.state::<AppState>();
+        let core = state.core.read().unwrap_or_else(|e| e.into_inner());
+        let label = core.selected.clone();
+        label
+            .and_then(|id| core.tabs.iter().find(|tab| tab.id == id).map(|tab| tab.zoom))
+            .unwrap_or(1.0)
+    };
+    set_zoom(app, current + delta)
+}
+
+fn set_zoom(app: &AppHandle, level: f64) -> Result<(), AppError> {
+    let level = (level * 10.0).round() / 10.0;
+    let level = level.clamp(0.5, 2.0);
+    let id = selected_label(app);
+    if id.is_empty() {
+        return Ok(());
+    }
+    {
+        let state = app.state::<AppState>();
+        let mut core = state.core.write().unwrap_or_else(|e| e.into_inner());
+        if let Some(tab) = core.tabs.iter_mut().find(|tab| tab.id == id) {
+            tab.zoom = level;
+        }
+    }
+    if let Some(webview) = app.get_webview(&id) {
+        webview.set_zoom(level)?;
+    }
     Ok(())
 }
 

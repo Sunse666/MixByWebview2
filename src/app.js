@@ -117,6 +117,10 @@ async function boot() {
   });
   await listen("theme:changed", (event) => applyTheme(event.payload));
   await listen("download:changed", (event) => renderDownloads(event.payload));
+  await listen("ui:focus-url", () => {
+    urlInput.focus();
+    urlInput.select();
+  });
   renderDownloads(await invoke("download_list"));
 
   for (const button of document.querySelectorAll("[data-window]")) {
@@ -141,6 +145,35 @@ async function boot() {
     if (event.target.closest("button") || event.target.closest(".tab")) return;
     invoke("window_control", { action: "max" });
   });
+
+  // Same map as the page side, so shortcuts work wherever the focus sits.
+  window.addEventListener("keydown", (event) => {
+    let action = null;
+    if (event.key === "F5") action = "reload";
+    else if (event.key === "F12") action = "devtools";
+    else if (event.ctrlKey || event.metaKey) {
+      switch (event.key) {
+        case "t": action = "new_tab"; break;
+        case "w": action = "close_tab"; break;
+        case "l": action = "focus_url"; break;
+        case "r": action = "reload"; break;
+        case "Tab": action = event.shiftKey ? "prev_tab" : "next_tab"; break;
+        case "=":
+        case "+": action = "zoom_in"; break;
+        case "-": action = "zoom_out"; break;
+        case "0": action = "zoom_reset"; break;
+        default: action = null;
+      }
+    }
+    if (!action) return;
+    event.preventDefault();
+    if (action === "focus_url") {
+      urlInput.focus();
+      urlInput.select();
+      return;
+    }
+    invoke("shortcut", { action });
+  }, true);
 
   urlInput.addEventListener("keydown", (event) => {
     if (event.key === "Enter") {

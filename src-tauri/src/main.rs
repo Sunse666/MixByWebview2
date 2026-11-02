@@ -45,6 +45,7 @@ fn main() {
             ipc::overlay_open,
             ipc::overlay_close,
             ipc::ext_list,
+            ipc::shortcut,
             ipc::download_list,
             ipc::download_open_dir,
             ipc::paths_get,

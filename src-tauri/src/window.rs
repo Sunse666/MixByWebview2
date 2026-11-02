@@ -96,6 +96,7 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
                 id: format!("tab-{}", index + 1),
                 url: url.clone(),
                 title: "New tab".into(),
+                zoom: 1.0,
                 alive: true,
                 last_active: index as u64,
             })

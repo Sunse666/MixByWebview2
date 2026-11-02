@@ -5,6 +5,47 @@ use tauri::{
 };
 
 use crate::paths::AppDirs;
+
+/// Runs in every page. Frames cannot see chrome keydown, so shortcuts are
+/// forwarded from the page to Rust and dispatched there.
+const SHORTCUT_FORWARDER: &str = r#"
+(function () {
+  if (window.__mixKeys) return;
+  window.__mixKeys = true;
+
+  var send = function (action) {
+    if (!window.__TAURI_INTERNALS__ || !window.__TAURI_INTERNALS__.invoke) return;
+    window.__TAURI_INTERNALS__.invoke("shortcut", { action: action }).catch(function () {});
+  };
+
+  var actionFor = function (event) {
+    if (event.key === "F5") return "reload";
+    if (event.key === "F12") return "devtools";
+    var ctrl = event.ctrlKey || event.metaKey;
+    if (!ctrl) return null;
+    switch (event.key) {
+      case "t": return event.shiftKey ? null : "new_tab";
+      case "w": return "close_tab";
+      case "l": return "focus_url";
+      case "r": return "reload";
+      case "Tab": return event.shiftKey ? "prev_tab" : "next_tab";
+      case "=":
+      case "+": return "zoom_in";
+      case "-": return "zoom_out";
+      case "0": return "zoom_reset";
+      default: return null;
+    }
+  };
+
+  window.addEventListener("keydown", function (event) {
+    var action = actionFor(event);
+    if (!action) return;
+    event.preventDefault();
+    event.stopPropagation();
+    send(action);
+  }, true);
+})();
+"#;
 use crate::window::CHROME_H;
 
 /// Where the webview keeps its profile and, on Windows, which folders hold extensions.
@@ -58,6 +99,7 @@ pub struct Tab {
     pub id: String,
     pub url: String,
     pub title: String,
+    pub zoom: f64,
     /// False means the webview was dropped to save memory; selecting the tab
     /// recreates it from url.
     pub alive: bool,
@@ -96,6 +138,7 @@ pub fn create(
         // WebView2 keeps ctrl+wheel zoom off unless asked (M0 E2).
         .zoom_hotkeys_enabled(true)
         .on_download(crate::downloads::handle)
+        .initialization_script(SHORTCUT_FORWARDER)
         .on_document_title_changed(|webview, title| {
             let app = webview.app_handle().clone();
             let payload = TitlePayload {

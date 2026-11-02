@@ -1,8 +1,35 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Mix main window and its child webviews",
-  "windows": ["main"],
-  "webviews": ["*"],
-  "permissions": ["core:default"]
+  "description": "Mix app pages: chrome UI and overlay",
+  "windows": [
+    "main"
+  ],
+  "webviews": [
+    "*"
+  ],
+  "permissions": [
+    "core:default",
+    "allow-layout-get",
+    "allow-window-control",
+    "allow-window-drag",
+    "allow-window-resize",
+    "allow-tab-list",
+    "allow-tab-select",
+    "allow-tab-new",
+    "allow-tab-close",
+    "allow-tab-navigate",
+    "allow-tab-nav",
+    "allow-theme-get",
+    "allow-theme-apply",
+    "allow-theme-revert",
+    "allow-overlay-open",
+    "allow-overlay-close",
+    "allow-paths-get",
+    "allow-open-dir",
+    "allow-ext-list",
+    "allow-download-list",
+    "allow-download-open-dir",
+    "allow-shortcut"
+  ]
 }
