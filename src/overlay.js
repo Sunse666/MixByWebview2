@@ -18,7 +18,15 @@ const PRESETS = {
   light: { bg: "#F5F6F7", chrome: "#FFFFFF", accent: "#1A73E8", text: "#202124", border: "#D6D9DC", radius: 10 },
 };
 
-const kind = location.hash.replace("#", "") || "settings";
+const rawHash = location.hash.replace("#", "") || "settings";
+const kind = rawHash.split("&")[0];
+const params = new Map(
+  rawHash
+    .split("&")
+    .slice(1)
+    .map((pair) => pair.split("="))
+    .map(([key, value]) => [key, decodeURIComponent(value || "")]),
+);
 let current = null;
 
 function applyTheme(theme) {
@@ -155,9 +163,37 @@ async function bootMenu() {
   });
 }
 
+const permissionPanel = document.getElementById("permission-panel");
+
+async function bootPermission() {
+  permissionPanel.hidden = false;
+  themePanel.hidden = true;
+  applyTheme(await invoke("theme_get"));
+
+  const origin = params.get("origin") || "this site";
+  const action = params.get("kind") || "permission";
+  const id = Number(params.get("id") || "0");
+
+  document.getElementById("permission-text").textContent = `${origin} wants to use ${action}`;
+
+  const send = async (allow) => {
+    await invoke("permission_reply", { id, allow });
+  };
+
+  document.getElementById("permission-allow").addEventListener("click", () => send(true));
+  document.getElementById("permission-block").addEventListener("click", () => send(false));
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") send(false);
+  });
+}
+
 async function boot() {
   if (kind === "context_menu") {
     await bootMenu();
+    return;
+  }
+  if (kind === "permission") {
+    await bootPermission();
     return;
   }
 

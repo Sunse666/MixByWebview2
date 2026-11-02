@@ -69,6 +69,50 @@ const SHORTCUT_FORWARDER: &str = r#"
     report({ dismiss: true });
   }, true);
 
+  // Sensitive APIs ask the shell first; the prompt is ours, not a browser dialog.
+  var askPermission = function (kind) {
+    if (!window.__TAURI_INTERNALS__ || !window.__TAURI_INTERNALS__.invoke) return Promise.resolve(false);
+    return window.__TAURI_INTERNALS__.invoke("permission_request", {
+      origin: location.origin,
+      kind: kind
+    }).then(function (allow) { return !!allow; }).catch(function () { return false; });
+  };
+
+  if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+    var originalMedia = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+    navigator.mediaDevices.getUserMedia = function (constraints) {
+      var kind = constraints && constraints.video ? "camera" : "microphone";
+      return askPermission(kind).then(function (allow) {
+        if (!allow) throw new DOMException("Permission denied", "NotAllowedError");
+        return originalMedia(constraints);
+      });
+    };
+  }
+
+  if (navigator.geolocation) {
+    ["getCurrentPosition", "watchPosition"].forEach(function (name) {
+      var original = navigator.geolocation[name].bind(navigator.geolocation);
+      navigator.geolocation[name] = function (success, failure, options) {
+        askPermission("geolocation").then(function (allow) {
+          if (allow) return original(success, failure, options);
+          if (failure) failure({ code: 1, message: "Permission denied" });
+        });
+      };
+    });
+  }
+
+  if (window.Notification && Notification.requestPermission) {
+    var originalNotify = Notification.requestPermission.bind(Notification);
+    Notification.requestPermission = function (callback) {
+      return askPermission("notifications").then(function (allow) {
+        if (allow) return originalNotify(callback);
+        var denied = "denied";
+        if (callback) callback(denied);
+        return denied;
+      });
+    };
+  }
+
   window.addEventListener("keydown", function (event) {
     var action = actionFor(event);
     if (!action) return;

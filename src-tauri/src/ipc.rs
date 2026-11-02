@@ -24,6 +24,7 @@ pub struct AppState {
     pub downloads: RwLock<Vec<crate::downloads::DownloadTask>>,
     pub menu_context: RwLock<MenuContext>,
     pub overlay: RwLock<Option<String>>,
+    pub permissions: crate::permissions::PermissionStore,
     pub core: RwLock<Core>,
     pub opts: crate::tabs::WebviewOpts,
     pub extensions: Vec<ExtInfo>,
@@ -39,6 +40,7 @@ impl AppState {
             downloads: RwLock::new(Vec::new()),
             menu_context: RwLock::new(MenuContext::default()),
             overlay: RwLock::new(None),
+            permissions: crate::permissions::PermissionStore::default(),
             core: RwLock::new(Core {
                 settings,
                 baseline: theme.clone(),
@@ -683,6 +685,65 @@ pub async fn context_menu(
 #[tauri::command]
 pub async fn menu_context_get(state: State<'_, AppState>) -> Result<MenuContext, AppError> {
     Ok(state.menu_context.read().unwrap_or_else(|e| e.into_inner()).clone())
+}
+
+/// Asked from the page before a sensitive API is used. Waits for the user.
+#[tauri::command]
+pub async fn permission_request(
+    app: AppHandle,
+    origin: String,
+    kind: String,
+) -> Result<bool, AppError> {
+    let key = crate::permissions::key(&origin, &kind);
+    if let Some(known) = crate::permissions::remembered(&app, &key) {
+        return Ok(known);
+    }
+
+    let (id, receiver) = crate::permissions::open_prompt(&app);
+    let win = main_window(&app)?;
+    let (width, _) = crate::window::logical_size(&win)?;
+    let prompt_w = 380.0;
+    let prompt_h = 150.0;
+    let x = ((width - prompt_w) / 2.0).max(0.0);
+    let hash = format!(
+        "permission&id={id}&origin={}&kind={}",
+        crate::permissions::encode(&origin),
+        crate::permissions::encode(&kind)
+    );
+    let url = format!("overlay.html#{hash}");
+
+    crate::overlay::open_url(
+        &app,
+        &url,
+        x,
+        crate::window::CHROME_H + 48.0,
+        prompt_w,
+        prompt_h,
+    )
+    .map_err(|err| AppError::new("overlay", err))?;
+
+    crate::logging::info(&format!("permission prompt {key}"));
+    let allow = tauri::async_runtime::spawn_blocking(move || {
+        receiver
+            .recv_timeout(std::time::Duration::from_secs(120))
+            .unwrap_or(false)
+    })
+    .await
+    .unwrap_or(false);
+
+    crate::permissions::remember(&app, &key, allow);
+    crate::overlay::close(&app);
+    crate::logging::info(&format!("permission {key} -> {allow}"));
+    Ok(allow)
+}
+
+#[tauri::command]
+pub async fn permission_reply(app: AppHandle, id: u64, allow: bool) -> Result<(), AppError> {
+    if !crate::permissions::answer(&app, id, allow) {
+        crate::logging::warn(&format!("permission reply for unknown prompt {id}"));
+    }
+    crate::overlay::close(&app);
+    Ok(())
 }
 
 #[tauri::command]

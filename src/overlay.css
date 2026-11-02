@@ -101,3 +101,8 @@ footer { margin-top: auto; display: flex; justify-content: flex-end; gap: 8px; }
   border: 0;
   border-top: 1px solid var(--border);
 }
+.question {
+  margin: 4px 0 0;
+  line-height: 1.5;
+  word-break: break-all;
+}

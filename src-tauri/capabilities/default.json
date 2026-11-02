@@ -32,6 +32,8 @@
     "allow-download-open-dir",
     "allow-shortcut",
     "allow-context-menu",
-    "allow-menu-context-get"
+    "allow-menu-context-get",
+    "allow-permission-request",
+    "allow-permission-reply"
   ]
 }

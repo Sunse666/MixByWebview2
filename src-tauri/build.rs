@@ -25,6 +25,8 @@ fn main() {
         "shortcut",
         "context_menu",
         "menu_context_get",
+        "permission_request",
+        "permission_reply",
     ];
 
     tauri_build::try_build(

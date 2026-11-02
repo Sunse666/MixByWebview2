@@ -6,6 +6,7 @@ mod ipc;
 mod logging;
 mod overlay;
 mod paths;
+mod permissions;
 mod platform;
 mod session;
 mod state;
@@ -47,6 +48,8 @@ fn main() {
             ipc::ext_list,
             ipc::shortcut,
             ipc::context_menu,
+            ipc::permission_request,
+            ipc::permission_reply,
             ipc::menu_context_get,
             ipc::download_list,
             ipc::download_open_dir,

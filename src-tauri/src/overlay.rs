@@ -25,6 +25,51 @@ pub fn open(app: &AppHandle, kind: &str) -> Result<(), String> {
     open_at(app, kind, x, CHROME_H + 6.0, ow, oh)
 }
 
+/// Open a page with the caller-built hash, e.g. "permission&id=1&origin=...".
+pub fn open_url(
+    app: &AppHandle,
+    page: &str,
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+) -> Result<(), String> {
+    let win = app
+        .get_window("main")
+        .ok_or_else(|| "main window missing".to_string())?;
+    close(app);
+
+    let opts = {
+        let state = app.state::<crate::ipc::AppState>();
+        state.opts.clone()
+    };
+
+    let label = format!("overlay-{}", NEXT_ID.fetch_add(1, Ordering::Relaxed));
+    let builder = crate::tabs::apply_profile(
+        WebviewBuilder::new(&label, WebviewUrl::App(page.into()))
+            .transparent(true)
+            .focused(true),
+        &opts.ui_data_dir,
+    );
+
+    let webview = win
+        .add_child(
+            builder,
+            LogicalPosition::new(x, y),
+            LogicalSize::new(width, height),
+        )
+        .map_err(|e| e.to_string())?;
+
+    let _ = webview.set_focus();
+    {
+        let state = app.state::<crate::ipc::AppState>();
+        let mut slot = state.overlay.write().unwrap_or_else(|e| e.into_inner());
+        *slot = Some(label.clone());
+    }
+    crate::logging::info(&format!("overlay open {page}"));
+    Ok(())
+}
+
 /// Place the overlay at an exact spot; used by the context menu.
 pub fn open_at(
     app: &AppHandle,
