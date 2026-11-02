@@ -64,7 +64,8 @@ fn main() {
 
 fn tab_at(win: &Window, label: &str, page: &str, x: f64, w: f64) -> tauri::Result<Webview> {
     win.add_child(
-        WebviewBuilder::new(label, WebviewUrl::App(page.into())),
+        // WebView2 disables ctrl+wheel zoom unless zoom hotkeys are enabled.
+        WebviewBuilder::new(label, WebviewUrl::App(page.into())).zoom_hotkeys_enabled(true),
         LogicalPosition::new(x, CHROME_H),
         LogicalSize::new(w, H - CHROME_H),
     )
@@ -78,7 +79,8 @@ fn e1_extensions(win: &Window, _chrome: &Webview) -> tauri::Result<()> {
         println!("[e1] MISSING: create it and drop an unpacked MV3 extension inside");
     }
 
-    let builder = WebviewBuilder::new("tab0", WebviewUrl::App("tab.html#e1".into()));
+    let builder =
+        WebviewBuilder::new("tab0", WebviewUrl::App("tab.html#e1".into())).zoom_hotkeys_enabled(true);
     #[cfg(windows)]
     let builder = builder
         .browser_extensions_enabled(true)
@@ -119,6 +121,7 @@ fn e3_inject(win: &Window) -> tauri::Result<()> {
 
     let wv = win.add_child(
         WebviewBuilder::new("tab0", WebviewUrl::App("frames.html".into()))
+            .zoom_hotkeys_enabled(true)
             .initialization_script_for_all_frames(init)
             .on_page_load(|wv, _p| {
                 let _ = wv.eval("console.log('[e3]', JSON.stringify(window.__PROBE))");
@@ -149,7 +152,9 @@ fn e4_overlay(win: &Window) -> tauri::Result<()> {
 /// E5: download handler plus a file input. Click the link and pick a file.
 fn e5_download(win: &Window) -> tauri::Result<()> {
     win.add_child(
-        WebviewBuilder::new("tab0", WebviewUrl::App("tab.html#e5".into())).on_download(
+        WebviewBuilder::new("tab0", WebviewUrl::App("tab.html#e5".into()))
+            .zoom_hotkeys_enabled(true)
+            .on_download(
             |_wv, event| {
                 let requested = matches!(event, tauri::webview::DownloadEvent::Requested { .. });
                 println!("[e5] download event, requested = {requested}");
