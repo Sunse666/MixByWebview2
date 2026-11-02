@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "remote",
-  "description": "Remote pages may only forward keyboard shortcuts",
+  "description": "Remote pages may only forward shortcuts and report context menus",
   "local": false,
   "windows": [
     "main"
@@ -19,6 +19,7 @@
     ]
   },
   "permissions": [
-    "allow-shortcut"
+    "allow-shortcut",
+    "allow-context-menu"
   ]
 }

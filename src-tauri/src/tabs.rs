@@ -37,6 +37,38 @@ const SHORTCUT_FORWARDER: &str = r#"
     }
   };
 
+  var report = function (payload) {
+    if (!window.__TAURI_INTERNALS__ || !window.__TAURI_INTERNALS__.invoke) return;
+    window.__TAURI_INTERNALS__.invoke("context_menu", { request: payload }).catch(function () {});
+  };
+
+  // Suppress the native menu and let the shell draw its own.
+  window.addEventListener("contextmenu", function (event) {
+    event.preventDefault();
+    var link = event.target.closest ? event.target.closest("a") : null;
+    var image = event.target.closest ? event.target.closest("img") : null;
+    var selection = window.getSelection ? String(window.getSelection()) : "";
+    menuShownAt = Date.now();
+    report({
+      dismiss: false,
+      x: Math.round(event.clientX),
+      y: Math.round(event.clientY),
+      link: link ? link.href : null,
+      image: image ? (image.currentSrc || image.src) : null,
+      selection: selection ? selection.slice(0, 200) : null,
+      editable: !!(event.target.isContentEditable || /^(input|textarea)$/i.test(event.target.tagName || ""))
+    });
+  }, true);
+
+  // Any click in the page closes an open menu, but only for a short window
+  // after one was requested, so ordinary clicks stay IPC free.
+  var menuShownAt = 0;
+  window.addEventListener("mousedown", function () {
+    if (Date.now() - menuShownAt > 8000) return;
+    menuShownAt = 0;
+    report({ dismiss: true });
+  }, true);
+
   window.addEventListener("keydown", function (event) {
     var action = actionFor(event);
     if (!action) return;

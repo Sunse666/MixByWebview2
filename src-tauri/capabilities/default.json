@@ -30,6 +30,8 @@
     "allow-ext-list",
     "allow-download-list",
     "allow-download-open-dir",
-    "allow-shortcut"
+    "allow-shortcut",
+    "allow-context-menu",
+    "allow-menu-context-get"
   ]
 }

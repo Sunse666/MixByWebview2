@@ -3,7 +3,7 @@ use crate::paths::AppDirs;
 use crate::state::Settings;
 use crate::tabs::Tab;
 use crate::theme::Theme;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::sync::RwLock;
 use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_runtime::ResizeDirection;
@@ -22,6 +22,8 @@ pub struct Core {
 pub struct AppState {
     pub dirs: AppDirs,
     pub downloads: RwLock<Vec<crate::downloads::DownloadTask>>,
+    pub menu_context: RwLock<MenuContext>,
+    pub overlay: RwLock<Option<String>>,
     pub core: RwLock<Core>,
     pub opts: crate::tabs::WebviewOpts,
     pub extensions: Vec<ExtInfo>,
@@ -35,6 +37,8 @@ impl AppState {
             extensions,
             dirs,
             downloads: RwLock::new(Vec::new()),
+            menu_context: RwLock::new(MenuContext::default()),
+            overlay: RwLock::new(None),
             core: RwLock::new(Core {
                 settings,
                 baseline: theme.clone(),
@@ -46,6 +50,25 @@ impl AppState {
             }),
         }
     }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct MenuContext {
+    pub link: Option<String>,
+    pub image: Option<String>,
+    pub selection: Option<String>,
+    pub editable: bool,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct MenuRequest {
+    pub dismiss: Option<bool>,
+    pub x: Option<f64>,
+    pub y: Option<f64>,
+    pub link: Option<String>,
+    pub image: Option<String>,
+    pub selection: Option<String>,
+    pub editable: Option<bool>,
 }
 
 #[derive(Debug, Serialize)]
@@ -478,8 +501,20 @@ pub async fn theme_revert(app: AppHandle, state: State<'_, AppState>) -> Result<
 fn broadcast_theme(app: &AppHandle, theme: &Theme) {
     let json = serde_json::to_string(theme).unwrap_or_else(|_| "{}".into());
     let script = format!("window.__mixApplyTheme && window.__mixApplyTheme({json})");
-    for label in ["chrome", "overlay"] {
-        if let Some(webview) = app.get_webview(label) {
+
+    let mut labels = vec!["chrome".to_string()];
+    if let Some(overlay) = app
+        .state::<AppState>()
+        .overlay
+        .read()
+        .unwrap_or_else(|e| e.into_inner())
+        .clone()
+    {
+        labels.push(overlay);
+    }
+
+    for label in labels {
+        if let Some(webview) = app.get_webview(&label) {
             let _ = webview.eval(&script);
         }
     }
@@ -595,6 +630,59 @@ fn set_zoom(app: &AppHandle, level: f64) -> Result<(), AppError> {
         webview.set_zoom(level)?;
     }
     Ok(())
+}
+
+/// Pages report their context menu here; dismiss=true closes an open menu.
+#[tauri::command]
+pub async fn context_menu(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    request: MenuRequest,
+) -> Result<(), AppError> {
+    if request.dismiss.unwrap_or(false) {
+        crate::overlay::close(&app);
+        return Ok(());
+    }
+
+    let context = MenuContext {
+        link: request.link.filter(|value| !value.is_empty()),
+        image: request.image.filter(|value| !value.is_empty()),
+        selection: request
+            .selection
+            .filter(|value| !value.trim().is_empty())
+            .map(|value| value.chars().take(200).collect()),
+        editable: request.editable.unwrap_or(false),
+    };
+    {
+        let mut slot = state.menu_context.write().unwrap_or_else(|e| e.into_inner());
+        *slot = context.clone();
+    }
+
+    // Page coordinates are relative to the tab webview, which starts below chrome.
+    let win = main_window(&app)?;
+    let (width, height) = crate::window::logical_size(&win)?;
+    let menu_w = 232.0;
+    let menu_h = 260.0;
+    let x = (request.x.unwrap_or(0.0) + 80.0).clamp(4.0, (width - menu_w - 4.0).max(4.0));
+    let y = (crate::window::CHROME_H + request.y.unwrap_or(0.0))
+        .clamp(4.0, (height - menu_h - 4.0).max(4.0));
+
+    crate::logging::info(&format!(
+        "context menu at {x:.0},{y:.0} link={} image={} sel={}",
+        context.link.is_some(),
+        context.image.is_some(),
+        context.selection.is_some()
+    ));
+    if let Err(err) = crate::overlay::open_at(&app, "context_menu", x, y, menu_w, menu_h) {
+        crate::logging::warn(&format!("context menu overlay failed: {err}"));
+        return Err(AppError::new("overlay", err));
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn menu_context_get(state: State<'_, AppState>) -> Result<MenuContext, AppError> {
+    Ok(state.menu_context.read().unwrap_or_else(|e| e.into_inner()).clone())
 }
 
 #[tauri::command]

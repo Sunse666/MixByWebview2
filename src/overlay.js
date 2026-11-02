@@ -18,6 +18,7 @@ const PRESETS = {
   light: { bg: "#F5F6F7", chrome: "#FFFFFF", accent: "#1A73E8", text: "#202124", border: "#D6D9DC", radius: 10 },
 };
 
+const kind = location.hash.replace("#", "") || "settings";
 let current = null;
 
 function applyTheme(theme) {
@@ -65,7 +66,101 @@ async function close() {
   await invoke("overlay_close");
 }
 
+const menu = document.getElementById("menu");
+const themePanel = document.getElementById("theme-panel");
+
+async function closeSelf() {
+  await invoke("overlay_close");
+}
+
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch (_) {
+    const area = document.createElement("textarea");
+    area.value = text;
+    document.body.appendChild(area);
+    area.select();
+    document.execCommand("copy");
+    area.remove();
+  }
+}
+
+function addItem(label, run) {
+  const button = document.createElement("button");
+  button.textContent = label;
+  button.addEventListener("click", run);
+  menu.append(button);
+  return button;
+}
+
+function addSeparator() {
+  menu.append(document.createElement("hr"));
+}
+
+async function bootMenu() {
+  menu.hidden = false;
+  themePanel.hidden = true;
+
+  applyTheme(await invoke("theme_get"));
+  const context = await invoke("menu_context_get");
+  const openInTab = async (url) => {
+    await invoke("tab_new", { url });
+    await closeSelf();
+  };
+
+  if (context.link) {
+    addItem("Open link in new tab", () => openInTab(context.link));
+    addItem("Copy link address", async () => {
+      await copyText(context.link);
+      await closeSelf();
+    });
+  }
+  if (context.image) {
+    addItem("Open image in new tab", () => openInTab(context.image));
+    addItem("Copy image address", async () => {
+      await copyText(context.image);
+      await closeSelf();
+    });
+  }
+  if (context.selection) {
+    addItem("Copy", async () => {
+      await copyText(context.selection);
+      await closeSelf();
+    });
+    addItem("Search for the selection", () =>
+      openInTab("https://www.bing.com/search?q=" + encodeURIComponent(context.selection)),
+    );
+  }
+
+  if (context.link || context.image || context.selection) addSeparator();
+
+  addItem("Back", async () => {
+    await invoke("tab_nav", { action: "back" });
+    await closeSelf();
+  });
+  addItem("Forward", async () => {
+    await invoke("tab_nav", { action: "forward" });
+    await closeSelf();
+  });
+  addItem("Reload", async () => {
+    await invoke("tab_nav", { action: "reload" });
+    await closeSelf();
+  });
+  addSeparator();
+  addItem("Close menu", closeSelf);
+
+  document.addEventListener("keydown", async (event) => {
+    if (event.key === "Escape") await closeSelf();
+  });
+}
+
 async function boot() {
+  if (kind === "context_menu") {
+    await bootMenu();
+    return;
+  }
+
   current = await invoke("theme_get");
   render(current);
 

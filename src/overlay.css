@@ -70,3 +70,34 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 footer { margin-top: auto; display: flex; justify-content: flex-end; gap: 8px; }
 
 .primary { border-color: var(--accent); color: var(--accent); }
+.menu {
+  display: flex;
+  flex-direction: column;
+  padding: 6px;
+  height: 100%;
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--panel) 92%, #000 8%);
+  border: 1px solid var(--border);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+}
+
+.menu button {
+  text-align: left;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.menu button:hover { background: color-mix(in srgb, var(--accent) 22%, transparent); }
+
+.menu hr {
+  width: 100%;
+  margin: 4px 0;
+  border: 0;
+  border-top: 1px solid var(--border);
+}

@@ -23,6 +23,8 @@ fn main() {
         "download_list",
         "download_open_dir",
         "shortcut",
+        "context_menu",
+        "menu_context_get",
     ];
 
     tauri_build::try_build(
