@@ -9,7 +9,7 @@
 | 技术选型 | Tauri 2（`unstable` 多 webview）；某平台失败时只对该平台局部下沉 wry，不全局重写 |
 | 周期 | **三平台 8–9 周（单人）**；不为平台一致性拖周期，小问题按 §1.1 放行 |
 | 相关文档 | `DEV-PLAN.v1.0.md`（最初的立项草案，仅存档）· `M0-REPORT.md`（M0 结论） |
-| 进度 | **M0 完成**（E1/E2/E4 通过，Windows）· **M1 完成** · **M2 完成**（多标签、URL 同步、会话恢复、挂起、原生 resize） |
+| 进度 | **M0/M1/M2 完成**（Windows）· **M3 进行中**：crx 扩展、便携 profile、原生 resize 已通；剩下载/上传/右键菜单/快捷键/权限/错误页 |
 
 ## 变更要点
 
@@ -285,6 +285,8 @@ mix/
 
 | 项 | 现状 | 备注 |
 | --- | --- | --- |
+| 扩展 | 扫描 `crx/` → 解包到 `UserData/extensions/` → MV3 校验 → WebView2 加载 | 仅 Windows；V2 标记 `skipped` 并提示转用户脚本；状态由 `ext_list` 暴露，UI 列表放 M4 |
+| 便携 profile | 所有 webview 的 `data_directory` 指向 `UserData/profile`（chrome/overlay 用 `profile-ui`） | 扩展选项必须整环境一致，故 UI 层单独一个 profile |
 | 多标签 | 支持新建/切换/关闭，标题实时同步 | 只隐藏不卸载，选中才可见 |
 | URL 同步 | 400 ms 轮询 `Webview::url()`，只轮询已挂载的标签 | 延迟可感知但不打断输入（地址栏聚焦时不覆盖） |
 | 会话恢复 | 退出（`CloseRequested`）与结构变更时写 `session.json`，启动按序重建 | **历史栈不恢复**，back 置灰（未实现 UI，仅数据层） |
