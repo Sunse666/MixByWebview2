@@ -1,0 +1,23 @@
+# Rust / Tauri
+/target/
+**/target/
+/gen/
+**/gen/
+
+# Frontend
+node_modules/
+dist/
+*.log
+
+# Portable user data (created at runtime, never committed)
+/UserData/
+/crx/
+/javascript/
+*.crx
+*.user.js
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
