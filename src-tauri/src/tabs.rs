@@ -95,6 +95,7 @@ pub fn create(
     let builder = WebviewBuilder::new(id, WebviewUrl::External(parse_url(url)))
         // WebView2 keeps ctrl+wheel zoom off unless asked (M0 E2).
         .zoom_hotkeys_enabled(true)
+        .on_download(crate::downloads::handle)
         .on_document_title_changed(|webview, title| {
             let app = webview.app_handle().clone();
             let payload = TitlePayload {

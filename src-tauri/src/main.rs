@@ -1,5 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod downloads;
 mod extensions;
 mod ipc;
 mod logging;
@@ -44,6 +45,8 @@ fn main() {
             ipc::overlay_open,
             ipc::overlay_close,
             ipc::ext_list,
+            ipc::download_list,
+            ipc::download_open_dir,
             ipc::paths_get,
             ipc::open_dir,
         ])

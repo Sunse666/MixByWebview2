@@ -21,6 +21,7 @@ pub struct Core {
 
 pub struct AppState {
     pub dirs: AppDirs,
+    pub downloads: RwLock<Vec<crate::downloads::DownloadTask>>,
     pub core: RwLock<Core>,
     pub opts: crate::tabs::WebviewOpts,
     pub extensions: Vec<ExtInfo>,
@@ -33,6 +34,7 @@ impl AppState {
             opts,
             extensions,
             dirs,
+            downloads: RwLock::new(Vec::new()),
             core: RwLock::new(Core {
                 settings,
                 baseline: theme.clone(),
@@ -480,6 +482,27 @@ fn broadcast_theme(app: &AppHandle, theme: &Theme) {
             let _ = webview.eval(&script);
         }
     }
+}
+
+#[tauri::command]
+pub async fn download_list(state: State<'_, AppState>) -> Result<Vec<crate::downloads::DownloadTask>, AppError> {
+    Ok(state.downloads.read().unwrap_or_else(|e| e.into_inner()).clone())
+}
+
+#[tauri::command]
+pub async fn download_open_dir(state: State<'_, AppState>, id: u64) -> Result<(), AppError> {
+    let path = {
+        let tasks = state.downloads.read().unwrap_or_else(|e| e.into_inner());
+        tasks
+            .iter()
+            .find(|task| task.id == id)
+            .map(|task| task.path.clone())
+    };
+    match path {
+        Some(path) if !path.is_empty() => reveal(std::path::Path::new(&path)),
+        _ => reveal(&state.dirs.downloads),
+    }?;
+    Ok(())
 }
 
 #[tauri::command]

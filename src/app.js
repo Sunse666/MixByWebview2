@@ -7,6 +7,32 @@ const tabStrip = document.getElementById("tabs");
 
 let tabs = [];
 let selected = null;
+let hidePill = null;
+const downloadPill = document.getElementById("download");
+
+function renderDownloads(tasks) {
+  const latest = tasks && tasks.length ? tasks[tasks.length - 1] : null;
+  if (!latest) {
+    downloadPill.hidden = true;
+    return;
+  }
+  downloadPill.hidden = false;
+  downloadPill.dataset.id = String(latest.id);
+  downloadPill.title = latest.path || latest.url;
+  if (latest.state === "started") {
+    downloadPill.textContent = "v " + latest.file_name;
+  } else if (latest.state === "finished") {
+    downloadPill.textContent = "OK " + latest.file_name;
+  } else {
+    downloadPill.textContent = "X " + latest.file_name;
+  }
+  if (hidePill) clearTimeout(hidePill);
+  if (latest.state !== "started") {
+    hidePill = setTimeout(() => {
+      downloadPill.hidden = true;
+    }, 8000);
+  }
+}
 
 function applyTheme(theme) {
   const s = root.style;
@@ -90,6 +116,8 @@ async function boot() {
     if (tab.id === selected) syncUrl();
   });
   await listen("theme:changed", (event) => applyTheme(event.payload));
+  await listen("download:changed", (event) => renderDownloads(event.payload));
+  renderDownloads(await invoke("download_list"));
 
   for (const button of document.querySelectorAll("[data-window]")) {
     button.addEventListener("click", () => invoke("window_control", { action: button.dataset.window }));
@@ -123,6 +151,11 @@ async function boot() {
       syncUrl();
       urlInput.blur();
     }
+  });
+
+  downloadPill.addEventListener("click", () => {
+    const id = Number(downloadPill.dataset.id);
+    if (!Number.isNaN(id)) invoke("download_open_dir", { id });
   });
 
   document.getElementById("theme-btn").addEventListener("click", () => invoke("overlay_open", { kind: "settings" }));
