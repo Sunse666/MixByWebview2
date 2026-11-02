@@ -9,6 +9,7 @@ mod paths;
 mod permissions;
 mod platform;
 mod session;
+mod tray;
 mod state;
 mod tabs;
 mod theme;
@@ -21,6 +22,11 @@ fn main() {
     logging::init(&dirs.logs);
 
     tauri::Builder::default()
+        // Registered first so a second launch is caught before anything else starts.
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            crate::logging::info("second instance forwarded to the running window");
+            crate::window::show_or_focus(app);
+        }))
         .setup(move |app| {
             let settings = state::Settings::load(&dirs.settings_file);
             let theme = theme::Theme::load(&dirs.theme_file);

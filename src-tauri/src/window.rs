@@ -111,8 +111,14 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
                 crate::logging::warn(&format!("relayout failed: {err}"));
             }
         }
-        WindowEvent::CloseRequested { .. } => {
+        // Closing hides to the tray; quitting goes through the tray menu.
+        WindowEvent::CloseRequested { api, .. } => {
+            api.prevent_close();
             crate::ipc::save_session(&handle);
+            if let Some(win) = handle.get_window("main") {
+                let _ = win.hide();
+            }
+            crate::logging::info("window hidden to tray");
         }
         _ => {}
     });
@@ -126,6 +132,7 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
     win.show()?;
     win.set_focus()?;
 
+    crate::tray::install(&app.handle().clone())?;
     crate::logging::info("main window ready");
     Ok(())
 }
@@ -181,6 +188,15 @@ fn publish_url(app: &AppHandle, id: &str, url: &str) {
             url: url.to_string(),
         },
     );
+}
+
+/// Bring the window back from the tray or from a second instance.
+pub fn show_or_focus(app: &AppHandle) {
+    if let Some(win) = app.get_window("main") {
+        let _ = win.unminimize();
+        let _ = win.show();
+        let _ = win.set_focus();
+    }
 }
 
 pub fn relayout(app: &AppHandle) -> tauri::Result<()> {
