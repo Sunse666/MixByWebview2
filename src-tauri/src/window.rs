@@ -51,6 +51,8 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
         .visible(false)
         .build()?;
 
+    crate::platform::install_resize_borders(&win);
+
     let (width, height) = logical_size(&win)?;
 
     win.add_child(
