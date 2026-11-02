@@ -24,7 +24,7 @@ New-Item -ItemType Directory -Path (Join-Path $stage "crx") | Out-Null
 New-Item -ItemType Directory -Path (Join-Path $stage "javascript") | Out-Null
 
 Copy-Item $exe (Join-Path $stage "Mix.exe")
-$readme = Join-Path $root "README-朋友版.md"
+$readme = Join-Path $root "docs\README-friend.md"
 if (Test-Path $readme) { Copy-Item $readme (Join-Path $stage "README.txt") }
 
 $zip = "$stage.zip"
