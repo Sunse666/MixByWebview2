@@ -28,6 +28,8 @@ fn main() {
             ipc::window_control,
             ipc::window_drag,
             ipc::window_resize,
+            ipc::tab_list,
+            ipc::tab_select,
             ipc::tab_new,
             ipc::tab_close,
             ipc::tab_navigate,

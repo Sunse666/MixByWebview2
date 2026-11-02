@@ -76,6 +76,71 @@ fn main_window(app: &AppHandle) -> Result<tauri::Window, AppError> {
         .ok_or_else(|| AppError::new("no_window", "main window is missing"))
 }
 
+#[derive(Clone, Serialize)]
+pub struct TabMeta {
+    id: String,
+    url: String,
+    title: String,
+}
+
+#[derive(Clone, Serialize)]
+pub struct UrlPayload {
+    pub id: String,
+    pub url: String,
+}
+
+#[derive(Clone, Serialize)]
+pub struct TabList {
+    tabs: Vec<TabMeta>,
+    selected: Option<String>,
+}
+
+fn snapshot(core: &Core) -> TabList {
+    TabList {
+        tabs: core
+            .tabs
+            .iter()
+            .map(|tab| TabMeta {
+                id: tab.id.clone(),
+                url: tab.url.clone(),
+                title: tab.title.clone(),
+            })
+            .collect(),
+        selected: core.selected.clone(),
+    }
+}
+
+/// Tell the chrome UI to rebuild the tab strip.
+fn emit_tabs(app: &AppHandle) {
+    let state = app.state::<AppState>();
+    let list = {
+        let core = state.core.read().unwrap_or_else(|e| e.into_inner());
+        snapshot(&core)
+    };
+    let _ = app.emit("tabs:changed", list);
+}
+
+/// Only the selected tab is visible; the rest keep running underneath.
+fn sync_visibility(app: &AppHandle) {
+    let pairs: Vec<(String, Option<String>)> = {
+        let state = app.state::<AppState>();
+        let core = state.core.read().unwrap_or_else(|e| e.into_inner());
+        core.tabs
+            .iter()
+            .map(|tab| (tab.id.clone(), core.selected.clone()))
+            .collect()
+    };
+    for (id, selected) in pairs {
+        if let Some(webview) = app.get_webview(&id) {
+            if selected.as_deref() == Some(id.as_str()) {
+                let _ = webview.show();
+            } else {
+                let _ = webview.hide();
+            }
+        }
+    }
+}
+
 fn spawn_tab(app: &AppHandle, id: &str, url: &str) -> Result<(), AppError> {
     let win = main_window(app)?;
     let (width, height) = crate::window::logical_size(&win)?;
@@ -151,6 +216,35 @@ pub async fn window_resize(app: AppHandle, direction: String) -> Result<(), AppE
 }
 
 #[tauri::command]
+pub async fn tab_list(state: State<'_, AppState>) -> Result<TabList, AppError> {
+    let core = state.core.read().unwrap_or_else(|e| e.into_inner());
+    Ok(snapshot(&core))
+}
+
+#[tauri::command]
+pub async fn tab_select(app: AppHandle, state: State<'_, AppState>, id: String) -> Result<(), AppError> {
+    let exists = {
+        let core = state.core.read().unwrap_or_else(|e| e.into_inner());
+        core.tabs.iter().any(|tab| tab.id == id)
+    };
+    if !exists {
+        return Err(AppError::new("no_tab", id));
+    }
+
+    {
+        let mut core = state.core.write().unwrap_or_else(|e| e.into_inner());
+        core.selected = Some(id.clone());
+    }
+
+    sync_visibility(&app);
+    if let Some(webview) = app.get_webview(&id) {
+        let _ = webview.set_focus();
+    }
+    emit_tabs(&app);
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn tab_new(
     app: AppHandle,
     state: State<'_, AppState>,
@@ -171,7 +265,8 @@ pub async fn tab_new(
     };
 
     spawn_tab(&app, &id, &target)?;
-    let _ = app.emit("tab:created", &id);
+    sync_visibility(&app);
+    emit_tabs(&app);
     Ok(id)
 }
 
@@ -190,19 +285,31 @@ pub async fn tab_close(app: AppHandle, state: State<'_, AppState>, id: String) -
         (core.tabs.len(), core.settings.start_url.clone())
     };
 
-    let _ = app.emit("tab:closed", &id);
-
     // Closing the last tab shows a fresh one instead of quitting.
     if remaining == 0 {
         let _ = tab_new(app, state, Some(next_url)).await;
+        return Ok(());
     }
+
+    sync_visibility(&app);
+    emit_tabs(&app);
     Ok(())
 }
 
 #[tauri::command]
-pub async fn tab_navigate(app: AppHandle, url: String) -> Result<(), AppError> {
+pub async fn tab_navigate(app: AppHandle, state: State<'_, AppState>, url: String) -> Result<(), AppError> {
     let target = crate::tabs::parse_url(&url);
-    if let Some(webview) = app.get_webview(&selected_label(&app)) {
+    let label = selected_label(&app);
+    if label.is_empty() {
+        return Ok(());
+    }
+    {
+        let mut core = state.core.write().unwrap_or_else(|e| e.into_inner());
+        if let Some(tab) = core.tabs.iter_mut().find(|tab| tab.id == label) {
+            tab.url = target.to_string();
+        }
+    }
+    if let Some(webview) = app.get_webview(&label) {
         webview.navigate(target)?;
     }
     Ok(())

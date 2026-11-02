@@ -1,3 +1,6 @@
+use std::collections::HashMap;
+use std::time::Duration;
+
 use tauri::{
     webview::WebviewBuilder, AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, Webview,
     WebviewUrl, Window, WindowEvent,
@@ -70,11 +73,66 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
         _ => {}
     });
 
+    start_url_watch(app.handle().clone());
+
     win.show()?;
     win.set_focus()?;
 
     crate::logging::info("main window ready");
     Ok(())
+}
+
+/// Tauri exposes no navigation event, so the address bar is kept honest by
+/// polling the selected webviews (only the ones that are attached).
+pub fn start_url_watch(app: AppHandle) {
+    std::thread::spawn(move || {
+        let mut last: HashMap<String, String> = HashMap::new();
+        loop {
+            std::thread::sleep(Duration::from_millis(400));
+            if app.get_window("main").is_none() {
+                return;
+            }
+
+            let ids: Vec<String> = match app.try_state::<AppState>() {
+                Some(state) => {
+                    let core = state.core.read().unwrap_or_else(|e| e.into_inner());
+                    core.tabs.iter().map(|tab| tab.id.clone()).collect()
+                }
+                None => return,
+            };
+
+            for id in ids {
+                let Some(webview) = app.get_webview(&id) else {
+                    continue;
+                };
+                let Ok(url) = webview.url() else {
+                    continue;
+                };
+                let current = url.to_string();
+                if last.get(&id).map(String::as_str) == Some(current.as_str()) {
+                    continue;
+                }
+                last.insert(id.clone(), current.clone());
+                publish_url(&app, &id, &current);
+            }
+        }
+    });
+}
+
+fn publish_url(app: &AppHandle, id: &str, url: &str) {
+    if let Some(state) = app.try_state::<AppState>() {
+        let mut core = state.core.write().unwrap_or_else(|e| e.into_inner());
+        if let Some(tab) = core.tabs.iter_mut().find(|tab| tab.id == id) {
+            tab.url = url.to_string();
+        }
+    }
+    let _ = app.emit(
+        "tab:url",
+        crate::ipc::UrlPayload {
+            id: id.to_string(),
+            url: url.to_string(),
+        },
+    );
 }
 
 pub fn relayout(app: &AppHandle) -> tauri::Result<()> {
