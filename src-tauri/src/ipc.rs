@@ -56,6 +56,13 @@ impl AppState {
     }
 }
 
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct SettingsPatch {
+    pub restore_session: Option<bool>,
+    pub start_url: Option<String>,
+    pub max_live_tabs: Option<usize>,
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct MenuContext {
     pub link: Option<String>,
@@ -220,6 +227,19 @@ pub(crate) fn enforce_live_limit(app: &AppHandle) {
     }
 }
 
+fn window_geometry(app: &AppHandle) -> Option<crate::session::WindowGeometry> {
+    let win = app.get_window("main")?;
+    let position = win.outer_position().ok()?;
+    let size = win.inner_size().ok()?;
+    Some(crate::session::WindowGeometry {
+        x: position.x,
+        y: position.y,
+        width: size.width,
+        height: size.height,
+        maximized: win.is_maximized().unwrap_or(false),
+    })
+}
+
 pub(crate) fn save_session(app: &AppHandle) {
     let Some(state) = app.try_state::<AppState>() else {
         return;
@@ -235,6 +255,7 @@ pub(crate) fn save_session(app: &AppHandle) {
             schema_version: crate::session::SCHEMA,
             tabs: core.tabs.iter().map(|tab| tab.url.clone()).collect(),
             selected,
+            window: window_geometry(app),
         }
     };
     if let Err(err) = session.save(&state.dirs.session_file) {
@@ -746,6 +767,71 @@ pub async fn permission_reply(app: AppHandle, id: u64, allow: bool) -> Result<()
     }
     crate::overlay::close(&app);
     Ok(())
+}
+
+#[tauri::command]
+pub async fn settings_get(state: State<'_, AppState>) -> Result<Settings, AppError> {
+    let settings = state
+        .core
+        .read()
+        .unwrap_or_else(|e| e.into_inner())
+        .settings
+        .clone();
+    Ok(settings)
+}
+
+#[tauri::command]
+pub async fn settings_set(
+    state: State<'_, AppState>,
+    patch: SettingsPatch,
+) -> Result<Settings, AppError> {
+    let settings = {
+        let mut core = state.core.write().unwrap_or_else(|e| e.into_inner());
+        if let Some(value) = patch.restore_session {
+            core.settings.restore_session = value;
+        }
+        if let Some(value) = patch.start_url {
+            if !value.trim().is_empty() {
+                core.settings.start_url = value;
+            }
+        }
+        if let Some(value) = patch.max_live_tabs {
+            core.settings.max_live_tabs = value.clamp(1, 64);
+        }
+        core.settings.clone()
+    };
+
+    settings.save(&state.dirs.settings_file)?;
+    crate::logging::info(&format!(
+        "settings saved: restore_session={} max_live_tabs={}",
+        settings.restore_session, settings.max_live_tabs
+    ));
+    Ok(settings)
+}
+
+#[tauri::command]
+pub async fn autostart_get(app: AppHandle) -> Result<bool, AppError> {
+    use tauri_plugin_autostart::ManagerExt;
+    app.autolaunch()
+        .is_enabled()
+        .map_err(|err| AppError::new("autostart", err.to_string()))
+}
+
+#[tauri::command]
+pub async fn autostart_set(app: AppHandle, enabled: bool) -> Result<bool, AppError> {
+    use tauri_plugin_autostart::ManagerExt;
+    let manager = app.autolaunch();
+    let result = if enabled {
+        manager.enable()
+    } else {
+        manager.disable()
+    };
+    result.map_err(|err| AppError::new("autostart", err.to_string()))?;
+    let now = manager
+        .is_enabled()
+        .map_err(|err| AppError::new("autostart", err.to_string()))?;
+    crate::logging::info(&format!("autostart -> {now}"));
+    Ok(now)
 }
 
 #[tauri::command]

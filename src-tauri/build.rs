@@ -28,6 +28,10 @@ fn main() {
         "permission_request",
         "permission_reply",
         "snap",
+        "settings_get",
+        "settings_set",
+        "autostart_get",
+        "autostart_set",
     ];
 
     tauri_build::try_build(

@@ -5,12 +5,24 @@ pub const SCHEMA: u32 = 1;
 
 /// Only URLs are stored: the webview back/forward stack cannot be restored,
 /// so the UI shows a disabled back button instead of pretending otherwise.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct WindowGeometry {
+    pub x: i32,
+    pub y: i32,
+    pub width: u32,
+    pub height: u32,
+    pub maximized: bool,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Session {
     pub schema_version: u32,
     pub tabs: Vec<String>,
     pub selected: usize,
+    /// Kept here instead of a plugin so it stays inside the portable folder.
+    pub window: Option<WindowGeometry>,
 }
 
 impl Default for Session {
@@ -19,6 +31,7 @@ impl Default for Session {
             schema_version: SCHEMA,
             tabs: Vec::new(),
             selected: 0,
+            window: None,
         }
     }
 }

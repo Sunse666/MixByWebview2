@@ -53,6 +53,22 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
 
     crate::platform::install_resize_borders(&win);
 
+    // Geometry from the last run, kept in session.json so it travels with the folder.
+    if let Some(geometry) = restored.as_ref().and_then(|session| session.window.clone()) {
+        let _ = win.set_position(tauri::PhysicalPosition::new(geometry.x, geometry.y));
+        let _ = win.set_size(tauri::PhysicalSize::new(
+            geometry.width.max(400),
+            geometry.height.max(300),
+        ));
+        if geometry.maximized {
+            let _ = win.maximize();
+        }
+        crate::logging::info(&format!(
+            "restored window {}x{} at {},{}",
+            geometry.width, geometry.height, geometry.x, geometry.y
+        ));
+    }
+
     let (width, height) = logical_size(&win)?;
 
     let opts = {

@@ -19,7 +19,7 @@
 
   <section class="panel" id="theme-panel">
     <header>
-      <strong>Theme</strong>
+      <strong>Preferences</strong>
       <span class="hint">live preview</span>
     </header>
 
@@ -36,6 +36,11 @@
 
     <label>Radius <input type="range" id="radius" min="0" max="32" step="1" /><output id="radius-out"></output></label>
     <label>Font size <input type="range" id="font-size" min="10" max="20" step="1" /><output id="font-out"></output></label>
+
+    <hr class="split" />
+
+    <label class="toggle"><input type="checkbox" id="autostart" /> Start Mix when the system starts</label>
+    <label class="toggle"><input type="checkbox" id="restore" /> Restore tabs on launch</label>
 
     <footer>
       <button id="cancel">Cancel</button>

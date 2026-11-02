@@ -35,6 +35,10 @@
     "allow-menu-context-get",
     "allow-permission-request",
     "allow-permission-reply",
-    "allow-snap"
+    "allow-snap",
+    "allow-settings-get",
+    "allow-settings-set",
+    "allow-autostart-get",
+    "allow-autostart-set"
   ]
 }

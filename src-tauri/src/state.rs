@@ -29,6 +29,11 @@ impl Default for Settings {
 }
 
 impl Settings {
+    pub fn save(&self, path: &Path) -> std::io::Result<()> {
+        let json = serde_json::to_string_pretty(self)?;
+        std::fs::write(path, json)
+    }
+
     pub fn load(path: &Path) -> Self {
         let Ok(raw) = std::fs::read_to_string(path) else {
             return Self::default();

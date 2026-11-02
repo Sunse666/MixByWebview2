@@ -187,6 +187,9 @@ async function bootPermission() {
   });
 }
 
+const autostartBox = document.getElementById("autostart");
+const restoreBox = document.getElementById("restore");
+
 async function boot() {
   if (kind === "context_menu") {
     await bootMenu();
@@ -199,6 +202,10 @@ async function boot() {
 
   current = await invoke("theme_get");
   render(current);
+
+  autostartBox.checked = await invoke("autostart_get");
+  const settings = await invoke("settings_get");
+  restoreBox.checked = !!settings.restore_session;
 
   for (const input of Object.values(fields)) input.addEventListener("input", preview);
   radius.addEventListener("input", preview);
@@ -217,6 +224,8 @@ async function boot() {
 
   document.getElementById("save").addEventListener("click", async () => {
     await invoke("theme_apply", { theme: current, persist: true });
+    await invoke("settings_set", { patch: { restore_session: restoreBox.checked } });
+    await invoke("autostart_set", { enabled: autostartBox.checked });
     await close();
   });
 

@@ -29,6 +29,11 @@ fn main() {
             crate::window::show_or_focus(app);
         }))
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None,
+        ))
+
         .setup(move |app| {
             let settings = state::Settings::load(&dirs.settings_file);
             let theme = theme::Theme::load(&dirs.theme_file);
@@ -57,6 +62,10 @@ fn main() {
             ipc::shortcut,
             ipc::context_menu,
             ipc::snap,
+            ipc::settings_get,
+            ipc::settings_set,
+            ipc::autostart_get,
+            ipc::autostart_set,
             ipc::permission_request,
             ipc::permission_reply,
             ipc::menu_context_get,
