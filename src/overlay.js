@@ -18,6 +18,9 @@ const PRESETS = {
   light: { bg: "#F5F6F7", chrome: "#FFFFFF", accent: "#1A73E8", text: "#202124", border: "#D6D9DC", radius: 10 },
 };
 
+const report = (message) => invoke("ui_log", { message }).catch(() => {});
+report(`overlay boot hash=${location.hash} size=${window.innerWidth}x${window.innerHeight}`);
+
 const rawHash = location.hash.replace("#", "") || "settings";
 const kind = rawHash.split("&")[0];
 const params = new Map(
@@ -76,6 +79,10 @@ async function close() {
 
 const menu = document.getElementById("menu");
 const appMenu = document.getElementById("app-menu");
+const themePanel = document.getElementById("theme-panel");
+const permissionPanel = document.getElementById("permission-panel");
+const autostartBox = document.getElementById("autostart");
+const restoreBox = document.getElementById("restore");
 
 async function bootAppMenu() {
   appMenu.hidden = false;
@@ -183,6 +190,7 @@ async function bootAppMenu() {
 }
 
 async function boot() {
+  report(`overlay kind=${kind}`);
   if (kind === "app_menu") {
     await bootAppMenu();
     return;
@@ -281,4 +289,7 @@ async function boot() {
   });
 }
 
-boot().catch((error) => console.error("overlay boot failed:", error));
+boot().catch((error) => {
+  console.error("overlay boot failed:", error);
+  report(`overlay boot failed: ${error && error.message ? error.message : error}`);
+});

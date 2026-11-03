@@ -57,6 +57,23 @@
       <button id="save" class="primary">Save</button>
     </footer>
   </section>
+  <script>
+    // Diagnostics: the overlay has no console we can read, so report into the log.
+    (function () {
+      var send = function (message) {
+        var api = window.__TAURI_INTERNALS__;
+        if (api && api.invoke) api.invoke("ui_log", { message: message }).catch(function () {});
+      };
+      window.addEventListener("error", function (event) {
+        send("overlay error: " + (event.message || "unknown"));
+      });
+      if (window.__TAURI_INTERNALS__) {
+        send("overlay html body=" + document.body.innerHTML.length + " size=" + window.innerWidth + "x" + window.innerHeight);
+      } else {
+        document.title = "no-ipc";
+      }
+    })();
+  </script>
   <script type="module" src="overlay.js"></script>
 </body>
 </html>

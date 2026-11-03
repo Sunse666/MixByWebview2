@@ -11,6 +11,47 @@ const SETTINGS: (f64, f64) = (460.0, 540.0);
 const APP_MENU: (f64, f64) = (240.0, 330.0);
 const DEFAULT: (f64, f64) = (420.0, 320.0);
 
+
+/// Overlay chrome. Transparency is only requested on platforms where a
+/// transparent child webview actually composites; on Windows it produces
+/// ghosting and black boxes, so the panel paints an opaque background instead.
+fn overlay_builder(app: &AppHandle, label: &str, page: &str) -> WebviewBuilder<tauri::Wry> {
+    let color = {
+        let state = app.state::<crate::ipc::AppState>();
+        let core = state.core.read().unwrap_or_else(|e| e.into_inner());
+        parse_color(&core.theme.colors.chrome)
+    };
+
+    let builder = WebviewBuilder::new(label, WebviewUrl::App(page.into()))
+        .background_color(color)
+        .focused(true);
+
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    let builder = builder.transparent(true);
+
+    let _ = &builder;
+    builder
+}
+
+fn parse_color(hex: &str) -> tauri::window::Color {
+    let trimmed = hex.trim_start_matches('#');
+    let value = u32::from_str_radix(trimmed, 16).unwrap_or(0x1F2020);
+    let (r, g, b) = match trimmed.len() {
+        3 => {
+            let r = ((value >> 8) & 0xF) as u8 * 17;
+            let g = ((value >> 4) & 0xF) as u8 * 17;
+            let b = (value & 0xF) as u8 * 17;
+            (r, g, b)
+        }
+        _ => (
+            ((value >> 16) & 0xFF) as u8,
+            ((value >> 8) & 0xFF) as u8,
+            (value & 0xFF) as u8,
+        ),
+    };
+    tauri::window::Color(r, g, b, 255)
+}
+
 /// The overlay is recreated on every open so it stays above tabs created later:
 /// child webviews stack in creation order and there is no bring-to-front call.
 pub fn open(app: &AppHandle, kind: &str) -> Result<(), String> {
@@ -47,12 +88,8 @@ pub fn open_url(
     };
 
     let label = format!("overlay-{}", NEXT_ID.fetch_add(1, Ordering::Relaxed));
-    let builder = crate::tabs::apply_profile(
-        WebviewBuilder::new(&label, WebviewUrl::App(page.into()))
-            .transparent(true)
-            .focused(true),
-        &opts.ui_data_dir,
-    );
+    let builder = overlay_builder(app, &label, page);
+    let builder = crate::tabs::apply_profile(builder, &opts.ui_data_dir);
 
     let webview = win
         .add_child(
@@ -94,11 +131,9 @@ pub fn open_at(
     // A fresh label each time: closing and reopening the same label races with
     // the runtime, which still owns the previous webview for a moment.
     let label = format!("overlay-{}", NEXT_ID.fetch_add(1, Ordering::Relaxed));
-    let url = WebviewUrl::App(format!("overlay.html#{kind}").into());
-    let builder = crate::tabs::apply_profile(
-        WebviewBuilder::new(&label, url).transparent(true).focused(true),
-        &opts.ui_data_dir,
-    );
+    let page = format!("overlay.html#{kind}");
+    let builder = overlay_builder(app, &label, &page);
+    let builder = crate::tabs::apply_profile(builder, &opts.ui_data_dir);
 
     let webview = win
         .add_child(

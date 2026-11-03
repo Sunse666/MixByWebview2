@@ -151,6 +151,23 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
 
     crate::snap::install_hotkeys(app.handle());
     crate::tray::install(&app.handle().clone())?;
+    // Debug helper: MIX_OPEN_ON_START=settings opens that overlay shortly after
+    // startup. Opening it inside setup deadlocks the page: the main thread is
+    // still creating webviews, so its invoke never resolves.
+    #[cfg(debug_assertions)]
+    if let Ok(kind) = std::env::var("MIX_OPEN_ON_START") {
+        let handle = app.handle().clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(1500));
+            let target = handle.clone();
+            let _ = handle.run_on_main_thread(move || {
+                if let Err(err) = crate::overlay::open(&target, &kind) {
+                    crate::logging::warn(&format!("debug overlay failed: {err}"));
+                }
+            });
+        });
+    }
+
     crate::logging::info("main window ready");
     Ok(())
 }

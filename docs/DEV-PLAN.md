@@ -210,6 +210,7 @@ mix/
 | 页面崩溃提示 | P1 | 检测 → "重新加载 / 关闭标签" | — |
 | 诊断包 | P1 | 日志 + 版本 + 脱敏设置 → zip，一键导出 | 见 §7.3 |
 | 主题自定义 | P1 | CSS 变量 + `theme.json`，预设 / 导入 / 导出 | 见 §3.7 |
+| overlay 渲染 | P0 | Windows 上 **不要用 `transparent(true)`**：WebView2 的透明子 webview 合成不可靠，会出现"页面文字透过面板"和"整块黑"两种花屏；改成不透明 + `background_color(主题色)`，圆角只在 mac/Linux 用透明 | 前端资源是**编译进二进制**的，改完 `src/*.js` 必须重新 `cargo build`，否则跑的还是旧页面 |
 | 启动顺序 | P0 | **先填 `core.tabs` 再建任何 webview**；chrome ui 也是先挂事件监听、最后再取一次 `tab_list` | 两处都反了会出现"标签栏空着、页面正常"；`ui_log` 命令把 UI 侧的问题写进 `mix.log`，否则前端报错完全不可见 |
 | 新窗口 | P0 | `on_new_window` 拦下 `target=_blank` / `window.open` → 发 `ui:open-url` 事件 → chrome 调 `tab_new` | 不接这个处理器时 Tauri **默认拒绝**，表现就是"点了没反应"；不能在这条线程直接建 webview（会死锁） |
 | 用户脚本 | P1 | 头解析 → 正则编译 → 一次注入所有脚本，页面内按 URL 选 | **`@match` 的路径片段不能自带首尾锚点**：早期版本把 `^...# Mix · 开发大纲
@@ -678,6 +679,3 @@ pwsh scripts/build-portable.ps1        # 打便携 zip：exe + 图标 + README +
 
 - [ ] zip 解压即用：数据落在程序旁的 `UserData/`；删目录无残留（不写注册表，自启除外）
 - [ ] 冷启动 ≤ 1.5 s；5 标签内存 ≤ 700 MB；10 标签切换无白屏
-- [ ] 扩展：uBO Lite 在测试页拦截计数 > 0，日常站点可用
-- [ ] 右键菜单/地址补全/设置面板/权限询问都在页面之上正常显示（overlay 生效）
-- [ ] 快捷键在"焦点在页面内"时也生效（Ctrl+T/W/R/F/±、F5、F12）
