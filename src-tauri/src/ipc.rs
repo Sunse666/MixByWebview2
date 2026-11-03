@@ -888,6 +888,7 @@ pub struct AppInfo {
     version: &'static str,
     git: &'static str,
     os: &'static str,
+    webview: String,
 }
 
 #[tauri::command]
@@ -969,6 +970,7 @@ pub async fn app_info() -> Result<AppInfo, AppError> {
         version: env!("CARGO_PKG_VERSION"),
         git: env!("MIX_GIT"),
         os: std::env::consts::OS,
+        webview: tauri::webview_version().unwrap_or_else(|_| "unknown".into()),
     })
 }
 
@@ -1039,6 +1041,7 @@ pub async fn open_dir(state: State<'_, AppState>, which: String) -> Result<(), A
         "logs" => &dirs.logs,
         "downloads" => &dirs.downloads,
         "diag" => &dirs.diag,
+        "root" => &dirs.root,
         other => return Err(AppError::new("bad_dir", other)),
     };
     reveal(path)?;

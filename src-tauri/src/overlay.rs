@@ -58,7 +58,9 @@ pub fn open(app: &AppHandle, kind: &str) -> Result<(), String> {
         .ok_or_else(|| "main window missing".to_string())?;
     let (win_w, win_h) = logical_size(&win).map_err(|e| e.to_string())?;
 
-    let (ow, oh) = match kind {
+    // The page can ride along in the hash ("app_menu&page=extensions").
+    let base = kind.split('&').next().unwrap_or(kind);
+    let (ow, oh) = match base {
         "settings" => SETTINGS,
         "app_menu" => APP_MENU,
         _ => DEFAULT,
@@ -66,10 +68,11 @@ pub fn open(app: &AppHandle, kind: &str) -> Result<(), String> {
     // Never taller than the space under the chrome strip.
     let oh = oh.min((win_h - CHROME_H - 12.0).max(180.0));
 
-    let (x, y) = match kind {
+    let (x, y) = if base == "app_menu" {
         // Right aligned under the menu button, like a desktop app menu.
-        "app_menu" => ((win_w - ow - 8.0).max(0.0), CHROME_H + 6.0),
-        _ => (((win_w - ow) / 2.0).max(0.0), CHROME_H + 6.0),
+        ((win_w - ow - 8.0).max(0.0), CHROME_H + 6.0)
+    } else {
+        (((win_w - ow) / 2.0).max(0.0), CHROME_H + 6.0)
     };
 
     crate::logging::info(&format!(
