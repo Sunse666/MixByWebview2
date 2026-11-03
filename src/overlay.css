@@ -154,3 +154,47 @@ footer { margin-top: auto; display: flex; justify-content: flex-end; gap: 8px; }
   opacity: 0.6;
   font-size: 0.9em;
 }
+.menu .row {
+  display: grid;
+  grid-template-columns: 20px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+}
+
+.menu .row:hover { background: color-mix(in srgb, var(--accent) 20%, transparent); }
+.menu .row.danger:hover { background: #c0392b; color: #fff; }
+
+.row-icon { opacity: 0.75; text-align: center; }
+.row-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row-key { opacity: 0.45; font-size: 0.9em; }
+
+.zoom-row {
+  display: grid;
+  grid-template-columns: 28px 1fr 28px;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+}
+
+.zoom-step {
+  height: 24px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--panel) 70%, var(--text) 10%);
+  border: 1px solid var(--border);
+}
+
+.zoom-level {
+  height: 24px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+}

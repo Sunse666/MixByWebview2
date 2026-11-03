@@ -582,6 +582,7 @@ pub async fn download_open_dir(state: State<'_, AppState>, id: u64) -> Result<()
 
 #[tauri::command]
 pub async fn shortcut(app: AppHandle, state: State<'_, AppState>, action: String) -> Result<(), AppError> {
+    crate::logging::info(&format!("shortcut {action}"));
     match action.as_str() {
         "new_tab" => {
             tab_new(app, state, None).await?;
@@ -605,6 +606,22 @@ pub async fn shortcut(app: AppHandle, state: State<'_, AppState>, action: String
         "zoom_in" => zoom_by(&app, 0.1)?,
         "zoom_out" => zoom_by(&app, -0.1)?,
         "zoom_reset" => set_zoom(&app, 1.0)?,
+        "print" => {
+            if let Some(webview) = app.get_webview(&selected_label(&app)) {
+                let _ = webview.print();
+            }
+        }
+        "fullscreen" => {
+            if let Some(win) = app.get_window("main") {
+                let next = !win.is_fullscreen().unwrap_or(false);
+                let _ = win.set_fullscreen(next);
+            }
+        }
+        "downloads" => {
+            if let Err(err) = reveal(&app.state::<AppState>().dirs.downloads) {
+                crate::logging::warn(&format!("cannot open downloads: {err}"));
+            }
+        }
         "devtools" => {
             #[cfg(debug_assertions)]
             if let Some(webview) = app.get_webview(&selected_label(&app)) {
@@ -668,6 +685,7 @@ fn set_zoom(app: &AppHandle, level: f64) -> Result<(), AppError> {
     if let Some(webview) = app.get_webview(&id) {
         webview.set_zoom(level)?;
     }
+    crate::logging::info(&format!("zoom -> {level:.1}"));
     Ok(())
 }
 
@@ -870,6 +888,72 @@ pub struct AppInfo {
     version: &'static str,
     git: &'static str,
     os: &'static str,
+}
+
+#[tauri::command]
+pub async fn zoom_get(state: State<'_, AppState>) -> Result<f64, AppError> {
+    let core = state.core.read().unwrap_or_else(|e| e.into_inner());
+    let zoom = core
+        .selected
+        .as_ref()
+        .and_then(|id| core.tabs.iter().find(|tab| &tab.id == id))
+        .map(|tab| tab.zoom)
+        .unwrap_or(1.0);
+    Ok(zoom)
+}
+
+#[tauri::command]
+pub async fn zoom_step(app: AppHandle, delta: f64) -> Result<f64, AppError> {
+    let current = {
+        let state = app.state::<AppState>();
+        let core = state.core.read().unwrap_or_else(|e| e.into_inner());
+        core.selected
+            .as_ref()
+            .and_then(|id| core.tabs.iter().find(|tab| &tab.id == id))
+            .map(|tab| tab.zoom)
+            .unwrap_or(1.0)
+    };
+    set_zoom(&app, current + delta)?;
+    Ok(((current + delta) * 10.0).round() / 10.0)
+}
+
+#[tauri::command]
+pub async fn tab_print(app: AppHandle) -> Result<(), AppError> {
+    if let Some(webview) = app.get_webview(&selected_label(&app)) {
+        webview.print()?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn window_fullscreen(app: AppHandle, enabled: Option<bool>) -> Result<bool, AppError> {
+    let win = main_window(&app)?;
+    let next = enabled.unwrap_or(!win.is_fullscreen()?);
+    win.set_fullscreen(next)?;
+    Ok(next)
+}
+
+/// Wipes cookies, storage and caches for every webview we own.
+#[tauri::command]
+pub async fn app_clear_data(app: AppHandle) -> Result<(), AppError> {
+    let labels: Vec<String> = {
+        let state = app.state::<AppState>();
+        let core = state.core.read().unwrap_or_else(|e| e.into_inner());
+        core.tabs.iter().map(|tab| tab.id.clone()).collect()
+    };
+
+    for label in labels {
+        if let Some(webview) = app.get_webview(&label) {
+            let _ = webview.clear_all_browsing_data();
+        }
+    }
+    for label in ["chrome"] {
+        if let Some(webview) = app.get_webview(label) {
+            let _ = webview.clear_all_browsing_data();
+        }
+    }
+    crate::logging::info("browsing data cleared");
+    Ok(())
 }
 
 #[tauri::command]

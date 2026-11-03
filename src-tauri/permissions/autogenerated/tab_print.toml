@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-tab-print"
+description = "Enables the tab_print command without any pre-configured scope."
+commands.allow = ["tab_print"]
+
+[[permission]]
+identifier = "deny-tab-print"
+description = "Denies the tab_print command without any pre-configured scope."
+commands.deny = ["tab_print"]

@@ -20,6 +20,7 @@ const SHORTCUT_FORWARDER: &str = r#"
 
   var actionFor = function (event) {
     if (event.key === "F5") return "reload";
+    if (event.key === "F11") return "fullscreen";
     if (event.key === "F12") return "devtools";
     var ctrl = event.ctrlKey || event.metaKey;
     if (!ctrl) return null;
@@ -33,6 +34,8 @@ const SHORTCUT_FORWARDER: &str = r#"
       case "+": return "zoom_in";
       case "-": return "zoom_out";
       case "0": return "zoom_reset";
+      case "p": return "print";
+      case "j": return "downloads";
       default: return null;
     }
   };

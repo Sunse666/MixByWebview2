@@ -83,149 +83,104 @@ async function bootAppMenu() {
   menu.hidden = true;
   applyTheme(await invoke("theme_get"));
 
-  const item = (label, run, hint) => {
+  const info = await invoke("app_info");
+
+  const row = (glyph, label, hint, run, options = {}) => {
     const button = document.createElement("button");
-    button.textContent = label;
-    if (hint) button.title = hint;
-    button.addEventListener("click", run);
+    button.className = "row" + (options.danger ? " danger" : "");
+
+    const icon = document.createElement("span");
+    icon.className = "row-icon";
+    icon.textContent = glyph;
+
+    const text = document.createElement("span");
+    text.className = "row-label";
+    text.textContent = label;
+
+    button.append(icon, text);
+
+    if (hint) {
+      const key = document.createElement("span");
+      key.className = "row-key";
+      key.textContent = hint;
+      button.append(key);
+    }
+
+    if (run) button.addEventListener("click", run);
     appMenu.append(button);
+    return button;
   };
 
-  const info = await invoke("app_info");
-  const version = document.createElement("div");
-  version.className = "app-version";
-  version.textContent = `Mix v${info.version} (${info.git})`;
-  appMenu.append(version);
-
+  const close = () => invoke("overlay_close");
   const act = (fn) => async () => {
     await fn();
-    await invoke("overlay_close");
+    await close();
   };
 
-  item("New tab", act(() => invoke("tab_new", {})));
-  item("Downloads", act(() => invoke("open_dir", { which: "downloads" })));
-  item("Extensions folder", act(() => invoke("open_dir", { which: "crx" })));
-  item("Userscripts folder", act(() => invoke("open_dir", { which: "scripts" })));
-  item("Data folder", act(() => invoke("open_dir", { which: "userdata" })));
-  item("Logs", act(() => invoke("open_dir", { which: "logs" })));
+  const header = document.createElement("div");
+  header.className = "app-version";
+  header.textContent = `Mix v${info.version} (${info.git})`;
+  appMenu.append(header);
+
+  row("+", "New tab", "Ctrl+T", act(() => invoke("tab_new", {})));
+  row("\u2193", "Downloads", "Ctrl+J", act(() => invoke("open_dir", { which: "downloads" })));
+
   appMenu.append(document.createElement("hr"));
-  item("Preferences...", () => invoke("overlay_open", { kind: "settings" }));
-  item("Quit", () => invoke("app_quit"));
-}
-const themePanel = document.getElementById("theme-panel");
 
-async function closeSelf() {
-  await invoke("overlay_close");
-}
+  // zoom strip: - 100% +
+  let zoom = await invoke("zoom_get");
+  const zoomRow = document.createElement("div");
+  zoomRow.className = "row zoom-row";
 
-async function copyText(text) {
-  try {
-    await navigator.clipboard.writeText(text);
-  } catch (_) {
-    const area = document.createElement("textarea");
-    area.value = text;
-    document.body.appendChild(area);
-    area.select();
-    document.execCommand("copy");
-    area.remove();
-  }
-}
+  const minus = document.createElement("button");
+  minus.className = "zoom-step";
+  minus.textContent = "\u2212";
+  const level = document.createElement("span");
+  level.className = "zoom-level";
+  const plus = document.createElement("button");
+  plus.className = "zoom-step";
+  plus.textContent = "+";
+  const reset = document.createElement("button");
+  reset.className = "zoom-level reset";
+  reset.title = "Reset zoom";
+  reset.textContent = Math.round(zoom * 100) + "%";
 
-function addItem(label, run) {
-  const button = document.createElement("button");
-  button.textContent = label;
-  button.addEventListener("click", run);
-  menu.append(button);
-  return button;
-}
-
-function addSeparator() {
-  menu.append(document.createElement("hr"));
-}
-
-async function bootMenu() {
-  menu.hidden = false;
-  themePanel.hidden = true;
-
-  applyTheme(await invoke("theme_get"));
-  const context = await invoke("menu_context_get");
-  const openInTab = async (url) => {
-    await invoke("tab_new", { url });
-    await closeSelf();
+  const paint = (value) => {
+    zoom = value;
+    reset.textContent = Math.round(value * 100) + "%";
   };
+  paint(zoom);
 
-  if (context.link) {
-    addItem("Open link in new tab", () => openInTab(context.link));
-    addItem("Copy link address", async () => {
-      await copyText(context.link);
-      await closeSelf();
-    });
-  }
-  if (context.image) {
-    addItem("Open image in new tab", () => openInTab(context.image));
-    addItem("Copy image address", async () => {
-      await copyText(context.image);
-      await closeSelf();
-    });
-  }
-  if (context.selection) {
-    addItem("Copy", async () => {
-      await copyText(context.selection);
-      await closeSelf();
-    });
-    addItem("Search for the selection", () =>
-      openInTab("https://www.bing.com/search?q=" + encodeURIComponent(context.selection)),
-    );
-  }
+  minus.addEventListener("click", async () => paint(await invoke("zoom_step", { delta: -0.1 })));
+  plus.addEventListener("click", async () => paint(await invoke("zoom_step", { delta: 0.1 })));
+  reset.addEventListener("click", async () => paint(await invoke("zoom_step", { delta: 1 - zoom })));
 
-  if (context.link || context.image || context.selection) addSeparator();
+  zoomRow.append(minus, reset, plus);
+  appMenu.append(zoomRow);
+  void level;
 
-  addItem("Back", async () => {
-    await invoke("tab_nav", { action: "back" });
-    await closeSelf();
-  });
-  addItem("Forward", async () => {
-    await invoke("tab_nav", { action: "forward" });
-    await closeSelf();
-  });
-  addItem("Reload", async () => {
-    await invoke("tab_nav", { action: "reload" });
-    await closeSelf();
-  });
-  addSeparator();
-  addItem("Close menu", closeSelf);
+  row("\u25a3", "Full screen", "F11", act(() => invoke("window_fullscreen", { enabled: null })));
 
-  document.addEventListener("keydown", async (event) => {
-    if (event.key === "Escape") await closeSelf();
+  appMenu.append(document.createElement("hr"));
+
+  row("\u2399", "Print", "Ctrl+P", act(() => invoke("tab_print")));
+  row("\u2717", "Clear browsing data", "", async () => {
+    await invoke("app_clear_data");
+    await close();
   });
+
+  appMenu.append(document.createElement("hr"));
+
+  row("\u25a4", "Extensions folder", "", act(() => invoke("open_dir", { which: "crx" })));
+  row("\u2699", "Userscripts folder", "", act(() => invoke("open_dir", { which: "scripts" })));
+  row("\u2261", "Data folder", "", act(() => invoke("open_dir", { which: "userdata" })));
+  row("\u26a0", "Logs", "", act(() => invoke("open_dir", { which: "logs" })));
+
+  appMenu.append(document.createElement("hr"));
+
+  row("\u2699", "Preferences", "", () => invoke("overlay_open", { kind: "settings" }));
+  row("\u23fb", "Quit", "Ctrl+Q", () => invoke("app_quit"), { danger: true });
 }
-
-const permissionPanel = document.getElementById("permission-panel");
-
-async function bootPermission() {
-  permissionPanel.hidden = false;
-  themePanel.hidden = true;
-  applyTheme(await invoke("theme_get"));
-
-  const origin = params.get("origin") || "this site";
-  const action = params.get("kind") || "permission";
-  const id = Number(params.get("id") || "0");
-
-  document.getElementById("permission-text").textContent = `${origin} wants to use ${action}`;
-
-  const send = async (allow) => {
-    await invoke("permission_reply", { id, allow });
-  };
-
-  document.getElementById("permission-allow").addEventListener("click", () => send(true));
-  document.getElementById("permission-block").addEventListener("click", () => send(false));
-  document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape") send(false);
-  });
-}
-
-const autostartBox = document.getElementById("autostart");
-const restoreBox = document.getElementById("restore");
 
 async function boot() {
   if (kind === "app_menu") {

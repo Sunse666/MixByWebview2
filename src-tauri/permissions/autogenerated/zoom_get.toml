@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-zoom-get"
+description = "Enables the zoom_get command without any pre-configured scope."
+commands.allow = ["zoom_get"]
+
+[[permission]]
+identifier = "deny-zoom-get"
+description = "Denies the zoom_get command without any pre-configured scope."
+commands.deny = ["zoom_get"]

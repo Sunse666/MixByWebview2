@@ -162,6 +162,7 @@ async function boot() {
     }
     let action = null;
     if (event.key === "F5") action = "reload";
+    else if (event.key === "F11") action = "fullscreen";
     else if (event.key === "F12") action = "devtools";
     else if (event.ctrlKey || event.metaKey) {
       switch (event.key) {
@@ -174,6 +175,8 @@ async function boot() {
         case "+": action = "zoom_in"; break;
         case "-": action = "zoom_out"; break;
         case "0": action = "zoom_reset"; break;
+        case "p": action = "print"; break;
+        case "j": action = "downloads"; break;
         default: action = null;
       }
     }
