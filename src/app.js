@@ -118,6 +118,7 @@ async function boot() {
   await listen("theme:changed", (event) => applyTheme(event.payload));
   await listen("download:changed", (event) => renderDownloads(event.payload));
   await listen("ui:new-tab", () => invoke("tab_new", {}));
+  await listen("ui:open-url", (event) => invoke("tab_new", { url: event.payload }));
   await listen("ui:focus-url", () => {
     urlInput.focus();
     urlInput.select();

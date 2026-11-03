@@ -413,6 +413,7 @@ pub async fn tab_new(
     };
 
     spawn_tab(&app, &id, &target)?;
+    crate::logging::info(&format!("tab created {id} -> {target}"));
     sync_visibility(&app);
     enforce_live_limit(&app);
     emit_tabs(&app);

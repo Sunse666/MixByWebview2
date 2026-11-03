@@ -220,10 +220,17 @@ pub fn create(
     height: f64,
     opts: &WebviewOpts,
 ) -> tauri::Result<Webview> {
+    let app = win.app_handle().clone();
     let builder = WebviewBuilder::new(id, WebviewUrl::External(parse_url(url)))
         // WebView2 keeps ctrl+wheel zoom off unless asked (M0 E2).
         .zoom_hotkeys_enabled(true)
         .on_download(crate::downloads::handle)
+        // target=_blank and window.open land here. Creating a webview on this
+        // thread would deadlock, so the chrome ui opens the tab for us.
+        .on_new_window(move |url, _features| {
+            let _ = app.emit("ui:open-url", url.to_string());
+            tauri::webview::NewWindowResponse::Deny
+        })
         .initialization_script(SHORTCUT_FORWARDER)
         .on_document_title_changed(|webview, title| {
             #[cfg(debug_assertions)]
