@@ -76,17 +76,6 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
         state.opts.clone()
     };
 
-    let chrome_builder = tabs::apply_profile(
-        WebviewBuilder::new("chrome", WebviewUrl::App("index.html".into())),
-        &opts.ui_data_dir,
-    );
-
-    win.add_child(
-        chrome_builder,
-        LogicalPosition::new(0.0, 0.0),
-        LogicalSize::new(width, CHROME_H),
-    )?;
-
     let (urls, selected_index) = match restored {
         Some(session) => {
             let index = session.selected.min(session.tabs.len() - 1);
@@ -94,11 +83,6 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
         }
         None => (vec![start_url], 0),
     };
-
-    for (index, url) in urls.iter().enumerate() {
-        let id = format!("tab-{}", index + 1);
-        tabs::create(&win, &id, url, width, height - CHROME_H, &opts)?;
-    }
 
     {
         let state = app.state::<AppState>();
@@ -118,6 +102,23 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
             })
             .collect();
         core.selected = Some(format!("tab-{}", selected_index + 1));
+    }
+
+    let chrome_builder = tabs::apply_profile(
+        WebviewBuilder::new("chrome", WebviewUrl::App("index.html".into())),
+        &opts.ui_data_dir,
+    );
+
+    win.add_child(
+        chrome_builder,
+        LogicalPosition::new(0.0, 0.0),
+        LogicalSize::new(width, CHROME_H),
+    )?;
+
+
+    for (index, url) in urls.iter().enumerate() {
+        let id = format!("tab-{}", index + 1);
+        tabs::create(&win, &id, url, width, height - CHROME_H, &opts)?;
     }
 
     let handle = app.handle().clone();

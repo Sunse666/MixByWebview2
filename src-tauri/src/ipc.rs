@@ -865,6 +865,13 @@ pub async fn ext_list(state: State<'_, AppState>) -> Result<Vec<ExtInfo>, AppErr
     Ok(state.extensions.clone())
 }
 
+/// The chrome ui has no console we can read, so it reports through here.
+#[tauri::command]
+pub async fn ui_log(message: String) -> Result<(), AppError> {
+    crate::logging::info(&format!("ui: {message}"));
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn script_list(state: State<'_, AppState>) -> Result<Vec<crate::userscripts::ScriptInfo>, AppError> {
     Ok(state.scripts.clone())

@@ -68,6 +68,7 @@ fn main() {
             ipc::overlay_close,
             ipc::ext_list,
             ipc::script_list,
+            ipc::ui_log,
             ipc::shortcut,
             ipc::context_menu,
             ipc::snap,

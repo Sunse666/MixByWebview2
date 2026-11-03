@@ -29,6 +29,7 @@
     "allow-open-dir",
     "allow-ext-list",
     "allow-script-list",
+    "allow-ui-log",
     "allow-download-list",
     "allow-download-open-dir",
     "allow-shortcut",

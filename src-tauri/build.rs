@@ -21,6 +21,7 @@ fn main() {
         "open_dir",
         "ext_list",
         "script_list",
+        "ui_log",
         "download_list",
         "download_open_dir",
         "shortcut",

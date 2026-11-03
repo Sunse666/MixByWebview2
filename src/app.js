@@ -97,10 +97,12 @@ function setTabs(payload) {
   syncUrl();
 }
 
+const report = (message) => invoke("ui_log", { message }).catch(() => {});
+
 async function boot() {
   applyTheme(await invoke("theme_get"));
-  setTabs(await invoke("tab_list"));
 
+  // Listeners first: the backend may emit while this page is still starting.
   await listen("tabs:changed", (event) => setTabs(event.payload));
   await listen("tab:title", (event) => {
     const tab = tabs.find((item) => item.id === event.payload.id);
@@ -117,6 +119,9 @@ async function boot() {
   });
   await listen("theme:changed", (event) => applyTheme(event.payload));
   await listen("download:changed", (event) => renderDownloads(event.payload));
+  setTabs(await invoke("tab_list"));
+  report(`boot tabs=${tabs.length} selected=${selected}`);
+
   await listen("ui:new-tab", () => invoke("tab_new", {}));
   await listen("ui:open-url", (event) => invoke("tab_new", { url: event.payload }));
   await listen("ui:focus-url", () => {
@@ -204,4 +209,7 @@ async function boot() {
   urlInput.focus();
 }
 
-boot().catch((error) => console.error("boot failed:", error));
+boot().catch((error) => {
+  console.error("boot failed:", error);
+  report(`boot failed: ${error && error.message ? error.message : error}`);
+});
