@@ -185,6 +185,14 @@ async function bootAppMenu() {
         await close();
       });
       divider();
+      row("\u2606", "Bookmark this page", "Ctrl+D", async () => {
+        const added = await invoke("bookmark_toggle");
+        report("bookmark toggled -> " + added);
+        await close();
+      });
+      row("\u2606", "Bookmarks", "", () => render("bookmarks"), { page: true });
+      row("\u21ba", "History", "", () => render("history"), { page: true });
+      divider();
       row("\u25a4", "Extensions", "", () => render("extensions"), { page: true });
       row("\u2699", "Userscripts", "", () => render("scripts"), { page: true });
       row("\u2261", "More tools", "", () => render("tools"), { page: true });
@@ -250,6 +258,81 @@ async function bootAppMenu() {
       row("\u2699", "Open userscripts folder", "", act(() => invoke("open_dir", { which: "scripts" })));
     },
 
+    bookmarks: async () => {
+      header("Bookmarks");
+      const list = await invoke("bookmark_list");
+      if (!list.length) {
+        const empty = document.createElement("div");
+        empty.className = "menu-note";
+        empty.textContent = "No bookmarks yet. Press Ctrl+D on a page, or use Bookmark this page.";
+        appMenu.append(empty);
+      }
+      for (const bookmark of list) {
+        const item = document.createElement("button");
+        item.className = "row";
+        const icon = document.createElement("span");
+        icon.className = "ico";
+        icon.textContent = "\u2606";
+        const label = document.createElement("span");
+        label.className = "label";
+        label.textContent = bookmark.title || bookmark.url;
+        label.title = bookmark.url;
+        const remove = document.createElement("span");
+        remove.className = "hint";
+        remove.textContent = "\u00d7";
+        remove.title = "Remove";
+        remove.addEventListener("click", async (event) => {
+          event.stopPropagation();
+          await invoke("bookmark_remove", { url: bookmark.url });
+          render("bookmarks");
+        });
+        item.append(icon, label, remove);
+        item.addEventListener("click", async () => {
+          await invoke("tab_new", { url: bookmark.url });
+          await close();
+        });
+        appMenu.append(item);
+      }
+    },
+
+    history: async () => {
+      header("History");
+      const list = await invoke("history_list", { limit: 60 });
+      if (!list.length) {
+        const empty = document.createElement("div");
+        empty.className = "menu-note";
+        empty.textContent = "Nothing recorded yet.";
+        appMenu.append(empty);
+      }
+      for (const visit of list) {
+        const item = document.createElement("button");
+        item.className = "row";
+        const icon = document.createElement("span");
+        icon.className = "ico";
+        icon.textContent = "\u21ba";
+        const label = document.createElement("span");
+        label.className = "label";
+        label.textContent = visit.title || visit.url;
+        label.title = visit.url;
+        const when = document.createElement("span");
+        when.className = "hint";
+        when.textContent = new Date(visit.at * 1000).toLocaleDateString();
+        item.append(icon, label, when);
+        item.addEventListener("click", async () => {
+          await invoke("tab_new", { url: visit.url });
+          await close();
+        });
+        appMenu.append(item);
+      }
+      if (list.length) {
+        divider();
+        row("\u2717", "Clear history", "", async () => {
+          await invoke("history_clear");
+          render("history");
+        });
+      }
+    },
+
     tools: async () => {
       header("More tools");
       row("\u2318", "Developer tools", "F12", act(() => invoke("shortcut", { action: "devtools" })));
@@ -288,6 +371,7 @@ async function bootAppMenu() {
         ["Ctrl+R / F5", "Reload"],
         ["Ctrl+P", "Print"],
         ["Ctrl+J", "Open downloads"],
+        ["Ctrl+D", "Bookmark this page"],
         ["Ctrl+\u00b1", "Zoom in / out"],
         ["Ctrl+0", "Reset zoom"],
         ["F11", "Full screen"],

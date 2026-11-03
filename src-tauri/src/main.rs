@@ -4,6 +4,7 @@ mod diag;
 mod downloads;
 mod extensions;
 mod ipc;
+mod library;
 mod logging;
 mod overlay;
 mod paths;
@@ -80,6 +81,11 @@ fn main() {
             ipc::tab_print,
             ipc::window_fullscreen,
             ipc::app_clear_data,
+            ipc::history_list,
+            ipc::history_clear,
+            ipc::bookmark_list,
+            ipc::bookmark_toggle,
+            ipc::bookmark_remove,
             ipc::diag_export,
             ipc::app_info,
             ipc::app_quit,

@@ -232,6 +232,17 @@ fn publish_url(app: &AppHandle, id: &str, url: &str) {
             tab.url = url.to_string();
         }
     }
+    let title = {
+        let state = app.state::<AppState>();
+        let core = state.core.read().unwrap_or_else(|e| e.into_inner());
+        core.tabs
+            .iter()
+            .find(|tab| tab.id == id)
+            .map(|tab| tab.title.clone())
+            .unwrap_or_default()
+    };
+    crate::ipc::record_visit(app, url, &title);
+
     let _ = app.emit(
         "tab:url",
         crate::ipc::UrlPayload {

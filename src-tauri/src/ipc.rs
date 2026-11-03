@@ -1,4 +1,5 @@
 use crate::extensions::ExtInfo;
+use crate::library::{Bookmark, Visit};
 use crate::paths::AppDirs;
 use crate::state::Settings;
 use crate::tabs::Tab;
@@ -29,6 +30,8 @@ pub struct AppState {
     pub core: RwLock<Core>,
     pub opts: crate::tabs::WebviewOpts,
     pub extensions: Vec<ExtInfo>,
+    pub history: RwLock<Vec<Visit>>,
+    pub bookmarks: RwLock<Vec<Bookmark>>,
     pub scripts: Vec<crate::userscripts::ScriptInfo>,
 }
 
@@ -46,9 +49,13 @@ impl AppState {
         // The loader travels with every tab webview; keeping it in the options means
         // tab creation does not have to reach back into state for it.
         opts.userscripts = scripts_js.clone();
+        let history = crate::library::load_visits(&dirs.history_file);
+        let bookmarks = crate::library::load_bookmarks(&dirs.bookmarks_file);
         Self {
             opts,
             extensions,
+            history: RwLock::new(history),
+            bookmarks: RwLock::new(bookmarks),
             scripts,
             dirs,
             downloads: RwLock::new(Vec::new()),
@@ -609,6 +616,9 @@ pub async fn shortcut(app: AppHandle, state: State<'_, AppState>, action: String
         "new_incognito" => {
             tab_new(app, state, None, Some(true)).await?;
         }
+        "bookmark" => {
+            let _ = bookmark_toggle(app.clone(), state).await?;
+        }
         "close_tab" => {
             let id = selected_label(&app);
             if !id.is_empty() {
@@ -976,6 +986,88 @@ pub async fn app_clear_data(app: AppHandle) -> Result<(), AppError> {
         }
     }
     crate::logging::info("browsing data cleared");
+    Ok(())
+}
+
+pub(crate) fn record_visit(app: &AppHandle, url: &str, title: &str) {
+    if !crate::library::worth_recording(url) {
+        return;
+    }
+    let Some(state) = app.try_state::<AppState>() else {
+        return;
+    };
+    let snapshot = {
+        let mut visits = state.history.write().unwrap_or_else(|e| e.into_inner());
+        crate::library::push_visit(&mut visits, url, title);
+        visits.clone()
+    };
+    if let Err(err) = crate::library::save_visits(&state.dirs.history_file, &snapshot) {
+        crate::logging::warn(&format!("history save failed: {err}"));
+    }
+}
+
+#[tauri::command]
+pub async fn history_list(state: State<'_, AppState>, limit: Option<usize>) -> Result<Vec<Visit>, AppError> {
+    let visits = state.history.read().unwrap_or_else(|e| e.into_inner());
+    let take = limit.unwrap_or(500).min(visits.len());
+    Ok(visits.iter().take(take).cloned().collect())
+}
+
+#[tauri::command]
+pub async fn history_clear(state: State<'_, AppState>) -> Result<(), AppError> {
+    {
+        let mut visits = state.history.write().unwrap_or_else(|e| e.into_inner());
+        visits.clear();
+    }
+    crate::library::save_visits(&state.dirs.history_file, &[])?;
+    crate::logging::info("history cleared");
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn bookmark_list(state: State<'_, AppState>) -> Result<Vec<Bookmark>, AppError> {
+    Ok(state.bookmarks.read().unwrap_or_else(|e| e.into_inner()).clone())
+}
+
+/// Toggles the selected tab and reports whether it is bookmarked now.
+#[tauri::command]
+pub async fn bookmark_toggle(app: AppHandle, state: State<'_, AppState>) -> Result<bool, AppError> {
+    let (url, title) = {
+        let core = state.core.read().unwrap_or_else(|e| e.into_inner());
+        match core
+            .selected
+            .as_ref()
+            .and_then(|id| core.tabs.iter().find(|tab| &tab.id == id))
+        {
+            Some(tab) => (tab.url.clone(), tab.title.clone()),
+            None => return Ok(false),
+        }
+    };
+
+    let (added, snapshot) = {
+        let mut bookmarks = state.bookmarks.write().unwrap_or_else(|e| e.into_inner());
+        let added = crate::library::toggle_bookmark(&mut bookmarks, &url, &title);
+        (added, bookmarks.clone())
+    };
+    crate::library::save_bookmarks(&state.dirs.bookmarks_file, &snapshot)?;
+    crate::logging::info(&format!("bookmark {url} -> {added}"));
+    let _ = app.emit("bookmarks:changed", added);
+    Ok(added)
+}
+
+#[tauri::command]
+pub async fn bookmark_remove(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    url: String,
+) -> Result<(), AppError> {
+    let snapshot = {
+        let mut bookmarks = state.bookmarks.write().unwrap_or_else(|e| e.into_inner());
+        bookmarks.retain(|bookmark| bookmark.url != url);
+        bookmarks.clone()
+    };
+    crate::library::save_bookmarks(&state.dirs.bookmarks_file, &snapshot)?;
+    let _ = app.emit("bookmarks:changed", false);
     Ok(())
 }
 

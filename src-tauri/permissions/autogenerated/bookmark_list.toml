@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-bookmark-list"
+description = "Enables the bookmark_list command without any pre-configured scope."
+commands.allow = ["bookmark_list"]
+
+[[permission]]
+identifier = "deny-bookmark-list"
+description = "Denies the bookmark_list command without any pre-configured scope."
+commands.deny = ["bookmark_list"]

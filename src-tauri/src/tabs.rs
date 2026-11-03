@@ -36,6 +36,7 @@ const SHORTCUT_FORWARDER: &str = r#"
       case "0": return "zoom_reset";
       case "p": return "print";
       case "j": return "downloads";
+      case "d": return "bookmark";
       default: return null;
     }
   };

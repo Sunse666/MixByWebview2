@@ -178,6 +178,7 @@ async function boot() {
         case "0": action = "zoom_reset"; break;
         case "p": action = "print"; break;
         case "j": action = "downloads"; break;
+        case "d": action = "bookmark"; break;
         default: action = null;
       }
     }
