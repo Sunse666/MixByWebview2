@@ -1,4 +1,14 @@
 fn main() {
+    let git = std::process::Command::new("git")
+        .args(["rev-parse", "--short", "HEAD"])
+        .output()
+        .ok()
+        .filter(|output| output.status.success())
+        .and_then(|output| String::from_utf8(output.stdout).ok())
+        .map(|hash| hash.trim().to_string())
+        .unwrap_or_else(|| "unknown".to_string());
+    println!("cargo:rustc-env=MIX_GIT={git}");
+
     // Declaring the commands here turns them into ACL permissions, which lets
     // remote pages be granted a single command (see capabilities/remote.json).
     let commands: &'static [&'static str] = &[
@@ -22,6 +32,8 @@ fn main() {
         "ext_list",
         "script_list",
         "ui_log",
+        "app_info",
+        "app_quit",
         "download_list",
         "download_open_dir",
         "shortcut",

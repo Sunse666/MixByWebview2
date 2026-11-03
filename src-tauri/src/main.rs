@@ -22,6 +22,11 @@ use tauri::Manager;
 fn main() {
     let dirs = paths::AppDirs::resolve().ensure();
     logging::init(&dirs.logs);
+    logging::info(&format!(
+        "mix v{} (git {})",
+        env!("CARGO_PKG_VERSION"),
+        env!("MIX_GIT")
+    ));
 
     tauri::Builder::default()
         // Registered first so a second launch is caught before anything else starts.
@@ -69,6 +74,8 @@ fn main() {
             ipc::ext_list,
             ipc::script_list,
             ipc::ui_log,
+            ipc::app_info,
+            ipc::app_quit,
             ipc::shortcut,
             ipc::context_menu,
             ipc::snap,

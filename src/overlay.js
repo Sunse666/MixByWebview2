@@ -75,6 +75,43 @@ async function close() {
 }
 
 const menu = document.getElementById("menu");
+const appMenu = document.getElementById("app-menu");
+
+async function bootAppMenu() {
+  appMenu.hidden = false;
+  themePanel.hidden = true;
+  menu.hidden = true;
+  applyTheme(await invoke("theme_get"));
+
+  const item = (label, run, hint) => {
+    const button = document.createElement("button");
+    button.textContent = label;
+    if (hint) button.title = hint;
+    button.addEventListener("click", run);
+    appMenu.append(button);
+  };
+
+  const info = await invoke("app_info");
+  const version = document.createElement("div");
+  version.className = "app-version";
+  version.textContent = `Mix v${info.version} (${info.git})`;
+  appMenu.append(version);
+
+  const act = (fn) => async () => {
+    await fn();
+    await invoke("overlay_close");
+  };
+
+  item("New tab", act(() => invoke("tab_new", {})));
+  item("Downloads", act(() => invoke("open_dir", { which: "downloads" })));
+  item("Extensions folder", act(() => invoke("open_dir", { which: "crx" })));
+  item("Userscripts folder", act(() => invoke("open_dir", { which: "scripts" })));
+  item("Data folder", act(() => invoke("open_dir", { which: "userdata" })));
+  item("Logs", act(() => invoke("open_dir", { which: "logs" })));
+  appMenu.append(document.createElement("hr"));
+  item("Preferences...", () => invoke("overlay_open", { kind: "settings" }));
+  item("Quit", () => invoke("app_quit"));
+}
 const themePanel = document.getElementById("theme-panel");
 
 async function closeSelf() {
@@ -191,6 +228,10 @@ const autostartBox = document.getElementById("autostart");
 const restoreBox = document.getElementById("restore");
 
 async function boot() {
+  if (kind === "app_menu") {
+    await bootAppMenu();
+    return;
+  }
   if (kind === "context_menu") {
     await bootMenu();
     return;

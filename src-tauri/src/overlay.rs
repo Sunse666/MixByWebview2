@@ -8,6 +8,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 static NEXT_ID: AtomicU64 = AtomicU64::new(1);
 
 const SETTINGS: (f64, f64) = (460.0, 540.0);
+const APP_MENU: (f64, f64) = (240.0, 330.0);
 const DEFAULT: (f64, f64) = (420.0, 320.0);
 
 /// The overlay is recreated on every open so it stays above tabs created later:
@@ -19,6 +20,7 @@ pub fn open(app: &AppHandle, kind: &str) -> Result<(), String> {
     let (win_w, _) = logical_size(&win).map_err(|e| e.to_string())?;
     let (ow, oh) = match kind {
         "settings" => SETTINGS,
+        "app_menu" => APP_MENU,
         _ => DEFAULT,
     };
     let x = ((win_w - ow) / 2.0).max(0.0);

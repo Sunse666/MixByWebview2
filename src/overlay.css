@@ -149,3 +149,8 @@ footer { margin-top: auto; display: flex; justify-content: flex-end; gap: 8px; }
 .ext-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ext-state { opacity: 0.7; flex: 0 0 auto; }
 .ext-state.error { color: #ff6b6b; opacity: 1; }
+.app-version {
+  padding: 2px 10px 8px;
+  opacity: 0.6;
+  font-size: 0.9em;
+}

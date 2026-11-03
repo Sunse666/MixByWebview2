@@ -865,6 +865,31 @@ pub async fn ext_list(state: State<'_, AppState>) -> Result<Vec<ExtInfo>, AppErr
     Ok(state.extensions.clone())
 }
 
+#[derive(Serialize)]
+pub struct AppInfo {
+    version: &'static str,
+    git: &'static str,
+    os: &'static str,
+}
+
+#[tauri::command]
+pub async fn app_info() -> Result<AppInfo, AppError> {
+    Ok(AppInfo {
+        version: env!("CARGO_PKG_VERSION"),
+        git: env!("MIX_GIT"),
+        os: std::env::consts::OS,
+    })
+}
+
+/// Quits for real: the window close button only hides to the tray.
+#[tauri::command]
+pub async fn app_quit(app: AppHandle) -> Result<(), AppError> {
+    save_session(&app);
+    crate::logging::info("quit from the app menu");
+    app.exit(0);
+    Ok(())
+}
+
 /// The chrome ui has no console we can read, so it reports through here.
 #[tauri::command]
 pub async fn ui_log(message: String) -> Result<(), AppError> {
