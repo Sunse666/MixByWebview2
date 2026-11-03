@@ -2,12 +2,22 @@ use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::path::Path;
 use std::sync::{Mutex, OnceLock};
+use std::time::Instant;
+
+/// Elapsed time since the process started, printed on every line so support
+/// bundles and startup measurements do not need guesswork.
+static START: OnceLock<Instant> = OnceLock::new();
+
+pub fn elapsed_ms() -> u128 {
+    START.get().map(|start| start.elapsed().as_millis()).unwrap_or(0)
+}
 
 const MAX_BYTES: u64 = 10 * 1024 * 1024;
 
 static SINK: OnceLock<Mutex<Option<File>>> = OnceLock::new();
 
 pub fn init(log_dir: &Path) {
+    let _ = START.set(Instant::now());
     let file = open_log(log_dir);
     let _ = SINK.set(Mutex::new(file));
 
@@ -29,11 +39,12 @@ pub fn warn(message: &str) {
 }
 
 fn write(level: &str, message: &str) {
-    eprintln!("[{level}] {message}");
+    let stamp = elapsed_ms();
+    eprintln!("[{level} {stamp}ms] {message}");
     let Some(sink) = SINK.get() else { return };
     if let Ok(mut guard) = sink.lock() {
         if let Some(file) = guard.as_mut() {
-            let _ = writeln!(file, "{level} {message}");
+            let _ = writeln!(file, "{level} {stamp}ms {message}");
             let _ = file.flush();
         }
     }

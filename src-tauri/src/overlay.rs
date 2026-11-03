@@ -1,6 +1,4 @@
-use tauri::{
-    webview::WebviewBuilder, AppHandle, LogicalPosition, LogicalSize, Manager, WebviewUrl,
-};
+use tauri::{webview::WebviewBuilder, AppHandle, Manager, WebviewUrl};
 
 use crate::window::{logical_size, CHROME_H};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -8,7 +6,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 static NEXT_ID: AtomicU64 = AtomicU64::new(1);
 
 const SETTINGS: (f64, f64) = (460.0, 540.0);
-const APP_MENU: (f64, f64) = (240.0, 330.0);
+const APP_MENU: (f64, f64) = (320.0, 566.0);
 const DEFAULT: (f64, f64) = (420.0, 320.0);
 
 
@@ -58,14 +56,28 @@ pub fn open(app: &AppHandle, kind: &str) -> Result<(), String> {
     let win = app
         .get_window("main")
         .ok_or_else(|| "main window missing".to_string())?;
-    let (win_w, _) = logical_size(&win).map_err(|e| e.to_string())?;
+    let (win_w, win_h) = logical_size(&win).map_err(|e| e.to_string())?;
+
     let (ow, oh) = match kind {
         "settings" => SETTINGS,
         "app_menu" => APP_MENU,
         _ => DEFAULT,
     };
-    let x = ((win_w - ow) / 2.0).max(0.0);
-    open_at(app, kind, x, CHROME_H + 6.0, ow, oh)
+    // Never taller than the space under the chrome strip.
+    let oh = oh.min((win_h - CHROME_H - 12.0).max(180.0));
+
+    let (x, y) = match kind {
+        // Right aligned under the menu button, like a desktop app menu.
+        "app_menu" => ((win_w - ow - 8.0).max(0.0), CHROME_H + 6.0),
+        _ => (((win_w - ow) / 2.0).max(0.0), CHROME_H + 6.0),
+    };
+
+    crate::logging::info(&format!(
+        "overlay geometry: window={win_w}x{win_h} scale={} panel={ow}x{oh} at {x},{y}",
+        win.scale_factor().unwrap_or(0.0)
+    ));
+
+    open_at(app, kind, x, y, ow, oh)
 }
 
 /// Open a page with the caller-built hash, e.g. "permission&id=1&origin=...".
@@ -91,13 +103,7 @@ pub fn open_url(
     let builder = overlay_builder(app, &label, page);
     let builder = crate::tabs::apply_profile(builder, &opts.ui_data_dir);
 
-    let webview = win
-        .add_child(
-            builder,
-            LogicalPosition::new(x, y),
-            LogicalSize::new(width, height),
-        )
-        .map_err(|e| e.to_string())?;
+    let webview = place(&win, builder, x, y, width, height)?;
 
     let _ = webview.set_focus();
     {
@@ -107,6 +113,26 @@ pub fn open_url(
     }
     crate::logging::info(&format!("overlay open {page}"));
     Ok(())
+}
+
+/// Positions are computed in logical units but the window reports physical
+/// pixels; converting here once keeps the two from drifting under DPI scaling.
+fn place(
+    win: &tauri::Window,
+    builder: WebviewBuilder<tauri::Wry>,
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+) -> Result<tauri::Webview, String> {
+    let scale = win.scale_factor().map_err(|e| e.to_string())?;
+    let position = tauri::PhysicalPosition::new((x * scale).round() as i32, (y * scale).round() as i32);
+    let size = tauri::PhysicalSize::new(
+        (width * scale).round() as u32,
+        (height * scale).round() as u32,
+    );
+    win.add_child(builder, position, size)
+        .map_err(|e| e.to_string())
 }
 
 /// Place the overlay at an exact spot; used by the context menu.
@@ -135,13 +161,7 @@ pub fn open_at(
     let builder = overlay_builder(app, &label, &page);
     let builder = crate::tabs::apply_profile(builder, &opts.ui_data_dir);
 
-    let webview = win
-        .add_child(
-            builder,
-            LogicalPosition::new(x, y),
-            LogicalSize::new(width, height),
-        )
-        .map_err(|e| e.to_string())?;
+    let webview = place(&win, builder, x, y, width, height)?;
 
     let _ = webview.set_focus();
     {

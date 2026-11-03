@@ -180,7 +180,10 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
         });
     }
 
-    crate::logging::info("main window ready");
+    crate::logging::info(&format!(
+        "main window ready, startup {} ms",
+        crate::logging::elapsed_ms()
+    ));
     Ok(())
 }
 

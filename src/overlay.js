@@ -90,111 +90,117 @@ async function bootAppMenu() {
   menu.hidden = true;
   applyTheme(await invoke("theme_get"));
 
-  const info = await invoke("app_info");
-
-  const row = (glyph, label, hint, run, options = {}) => {
-    const button = document.createElement("button");
-    button.className = "row" + (options.danger ? " danger" : "");
-
-    const icon = document.createElement("span");
-    icon.className = "row-icon";
-    icon.textContent = glyph;
-
-    const text = document.createElement("span");
-    text.className = "row-label";
-    text.textContent = label;
-
-    button.append(icon, text);
-
-    if (hint) {
-      const key = document.createElement("span");
-      key.className = "row-key";
-      key.textContent = hint;
-      button.append(key);
-    }
-
-    if (run) button.addEventListener("click", run);
-    appMenu.append(button);
-    return button;
-  };
-
   const close = () => invoke("overlay_close");
   const act = (fn) => async () => {
     await fn();
     await close();
   };
 
-  const header = document.createElement("div");
-  header.className = "app-version";
-  header.textContent = `Mix v${info.version} (${info.git})`;
-  appMenu.append(header);
+  const divider = () => appMenu.append(Object.assign(document.createElement("div"), { className: "divider" }));
+
+  const row = (glyph, label, hint, run, options = {}) => {
+    const button = document.createElement("button");
+    button.className = "row" + (options.danger ? " danger" : "");
+
+    const icon = document.createElement("span");
+    icon.className = "ico";
+    icon.textContent = glyph;
+
+    const text = document.createElement("span");
+    text.className = "label";
+    text.textContent = label;
+
+    const key = document.createElement("span");
+    key.className = "hint";
+    key.textContent = hint || "";
+
+    button.append(icon, text, key);
+    if (run) button.addEventListener("click", run);
+    appMenu.append(button);
+    return button;
+  };
 
   row("+", "New tab", "Ctrl+T", act(() => invoke("tab_new", {})));
   row("\u2193", "Downloads", "Ctrl+J", act(() => invoke("open_dir", { which: "downloads" })));
+  divider();
 
-  appMenu.append(document.createElement("hr"));
-
-  // zoom strip: - 100% +
-  let zoom = await invoke("zoom_get");
+  // Zoom strip: - 100% +
   const zoomRow = document.createElement("div");
   zoomRow.className = "row zoom-row";
+  const zoomIcon = document.createElement("span");
+  zoomIcon.className = "ico";
+  zoomIcon.textContent = "\u2315";
 
   const minus = document.createElement("button");
-  minus.className = "zoom-step";
+  minus.className = "step";
   minus.textContent = "\u2212";
-  const level = document.createElement("span");
-  level.className = "zoom-level";
+  const level = document.createElement("button");
+  level.className = "level";
+  level.title = "Reset zoom";
   const plus = document.createElement("button");
-  plus.className = "zoom-step";
+  plus.className = "step";
   plus.textContent = "+";
-  const reset = document.createElement("button");
-  reset.className = "zoom-level reset";
-  reset.title = "Reset zoom";
-  reset.textContent = Math.round(zoom * 100) + "%";
 
+  let zoom = await invoke("zoom_get");
   const paint = (value) => {
     zoom = value;
-    reset.textContent = Math.round(value * 100) + "%";
+    level.textContent = Math.round(value * 100) + "%";
   };
   paint(zoom);
 
   minus.addEventListener("click", async () => paint(await invoke("zoom_step", { delta: -0.1 })));
   plus.addEventListener("click", async () => paint(await invoke("zoom_step", { delta: 0.1 })));
-  reset.addEventListener("click", async () => paint(await invoke("zoom_step", { delta: 1 - zoom })));
+  level.addEventListener("click", async () => paint(await invoke("zoom_step", { delta: 1 - zoom })));
 
-  zoomRow.append(minus, reset, plus);
+  const zoomControls = document.createElement("div");
+  zoomControls.className = "zoom-controls";
+  zoomControls.append(minus, level, plus);
+  zoomRow.append(zoomIcon, zoomControls);
   appMenu.append(zoomRow);
-  void level;
 
   row("\u25a3", "Full screen", "F11", act(() => invoke("window_fullscreen", { enabled: null })));
-
-  appMenu.append(document.createElement("hr"));
+  divider();
 
   row("\u2399", "Print", "Ctrl+P", act(() => invoke("tab_print")));
   row("\u2717", "Clear browsing data", "", async () => {
     await invoke("app_clear_data");
     await close();
   });
+  divider();
 
-  appMenu.append(document.createElement("hr"));
-
-  row("\u25a4", "Extensions folder", "", act(() => invoke("open_dir", { which: "crx" })));
-  row("\u2699", "Userscripts folder", "", act(() => invoke("open_dir", { which: "scripts" })));
-  row("\u2261", "Data folder", "", act(() => invoke("open_dir", { which: "userdata" })));
+  row("\u25a4", "Extensions", "", act(() => invoke("open_dir", { which: "crx" })));
+  row("\u2699", "Userscripts", "", act(() => invoke("open_dir", { which: "scripts" })));
+  row("\u2261", "Profile folder", "", act(() => invoke("open_dir", { which: "userdata" })));
   row("\u26a0", "Logs", "", act(() => invoke("open_dir", { which: "logs" })));
   row("\u2691", "Export diagnostics", "", async () => {
     const path = await invoke("diag_export");
-    report(`diagnostics saved to ${path}`);
+    report("diagnostics saved to " + path);
     await invoke("open_dir", { which: "diag" });
     await close();
   });
-
-  appMenu.append(document.createElement("hr"));
+  divider();
 
   row("\u2699", "Preferences", "", () => invoke("overlay_open", { kind: "settings" }));
-  row("\u23fb", "Quit", "Ctrl+Q", () => invoke("app_quit"), { danger: true });
-}
 
+  const info = await invoke("app_info");
+  const about = document.createElement("div");
+  about.className = "about";
+  about.textContent = "Mix " + info.version + " (" + info.git + ")";
+  appMenu.append(about);
+
+  row("\u23fb", "Quit", "Ctrl+Q", () => invoke("app_quit"), { danger: true });
+
+  const box = appMenu.getBoundingClientRect();
+  const style = getComputedStyle(appMenu);
+  report(
+    "menu rows=" + appMenu.querySelectorAll(".row").length +
+    " box=" + Math.round(box.width) + "x" + Math.round(box.height) +
+    " at " + Math.round(box.left) + "," + Math.round(box.top) +
+    " bg=" + style.backgroundColor +
+    " color=" + style.color +
+    " display=" + style.display
+  );
+}
 async function boot() {
   report(`overlay kind=${kind}`);
   if (kind === "app_menu") {
