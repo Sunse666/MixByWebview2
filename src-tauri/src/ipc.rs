@@ -29,14 +29,27 @@ pub struct AppState {
     pub core: RwLock<Core>,
     pub opts: crate::tabs::WebviewOpts,
     pub extensions: Vec<ExtInfo>,
+    pub scripts: Vec<crate::userscripts::ScriptInfo>,
 }
 
 impl AppState {
-    pub fn new(dirs: AppDirs, settings: Settings, theme: Theme, extensions: Vec<ExtInfo>) -> Self {
-        let opts = crate::tabs::WebviewOpts::for_dirs(&dirs, &extensions);
+    pub fn new(
+        dirs: AppDirs,
+        settings: Settings,
+        theme: Theme,
+        extensions: Vec<ExtInfo>,
+        userscripts: Vec<crate::userscripts::Userscript>,
+    ) -> Self {
+        let mut opts = crate::tabs::WebviewOpts::for_dirs(&dirs, &extensions);
+        let scripts = userscripts.iter().map(|script| script.info()).collect();
+        let scripts_js = crate::userscripts::loader_js(&userscripts);
+        // The loader travels with every tab webview; keeping it in the options means
+        // tab creation does not have to reach back into state for it.
+        opts.userscripts = scripts_js.clone();
         Self {
             opts,
             extensions,
+            scripts,
             dirs,
             downloads: RwLock::new(Vec::new()),
             menu_context: RwLock::new(MenuContext::default()),
@@ -849,6 +862,11 @@ pub async fn snap(app: AppHandle, direction: String) -> Result<(), AppError> {
 #[tauri::command]
 pub async fn ext_list(state: State<'_, AppState>) -> Result<Vec<ExtInfo>, AppError> {
     Ok(state.extensions.clone())
+}
+
+#[tauri::command]
+pub async fn script_list(state: State<'_, AppState>) -> Result<Vec<crate::userscripts::ScriptInfo>, AppError> {
+    Ok(state.scripts.clone())
 }
 
 #[tauri::command]

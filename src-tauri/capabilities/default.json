@@ -28,6 +28,7 @@
     "allow-paths-get",
     "allow-open-dir",
     "allow-ext-list",
+    "allow-script-list",
     "allow-download-list",
     "allow-download-open-dir",
     "allow-shortcut",

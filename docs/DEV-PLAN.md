@@ -9,7 +9,7 @@
 | 技术选型 | Tauri 2（`unstable` 多 webview）；某平台失败时只对该平台局部下沉 wry，不全局重写 |
 | 周期 | **三平台 8–9 周（单人）**；不为平台一致性拖周期，小问题按 §1.1 放行 |
 | 相关文档 | `DEV-PLAN.v1.0.md`（最初的立项草案，仅存档）· `M0-REPORT.md`（M0 结论） |
-| 进度 | **M0–M4 完成**（两处待人工确认：上传文件选择框、开机自启开关）· 下一步 M5 三平台打包 |
+| 进度 | **M0–M4 完成 + 用户脚本引擎**（两处待人工确认：上传文件选择框、开机自启开关）· M5 打包管线已跑通（Windows zip 2.56 MB） |
 
 ## 变更要点
 
@@ -205,11 +205,224 @@ mix/
 | 文件上传 | P0 | `<input type=file>` | WKWebView 需 `runOpenPanel` |
 | 权限提示 | P0 | `on_permission_request` → overlay 询问 → 会话内记忆 | 三平台统一 |
 | 扩展加载（Win） | P0 | 扫描 `crx/*.crx` → 校验解包 → 加载；增删改提示重启 | 仅 Win（§3.8） |
-| 用户脚本（三平台） | P1 | 扫描 `javascript/**/*.user.js` → `@match` 分发 + `@run-at` + `GM_setValue/getValue` | 三平台都加载（§3.8） |
+| 用户脚本（三平台） | P1 | 扫描 `javascript/**/*.user.js`（两层）→ 解析头 → `@match`/`@include`/`@exclude` 编译成正则 → 单个初始化脚本在页面里分发；`@run-at document-start` 立即跑，其余等 DOMContentLoaded | `GM_setValue/getValue` 走带脚本名前缀的 localStorage；脚本在页面上下文执行，无沙箱（P2） |
 | 错误页 / 缩放 / 查找 / 全屏视频 | P1 | 见 §3.6 | — |
 | 页面崩溃提示 | P1 | 检测 → "重新加载 / 关闭标签" | — |
 | 诊断包 | P1 | 日志 + 版本 + 脱敏设置 → zip，一键导出 | 见 §7.3 |
 | 主题自定义 | P1 | CSS 变量 + `theme.json`，预设 / 导入 / 导出 | 见 §3.7 |
+| 用户脚本 | P1 | 头解析 → 正则编译 → 一次注入所有脚本，页面内按 URL 选 | **`@match` 的路径片段不能自带首尾锚点**：早期版本把 `^...# Mix · 开发大纲
+
+| 项目 | 内容 |
+| --- | --- |
+| 文档版本 | **v1.5**（2026-11-02；便携目录 · 主题实时预览 · 开发约定已固化） |
+| 定位 | 自己和身边几个人用的多标签浏览器壳；**不对外发布、不上架、不商业分发** |
+| 许可 | **MIT**（含 `LICENSE` 与第三方署名，见附录 A） |
+| 平台 | **三平台都做**（Win / macOS / Linux）；Windows 为一等公民，其余"尽力而为"，已知缺陷见 §1.1 |
+| 技术选型 | Tauri 2（`unstable` 多 webview）；某平台失败时只对该平台局部下沉 wry，不全局重写 |
+| 周期 | **三平台 8–9 周（单人）**；不为平台一致性拖周期，小问题按 §1.1 放行 |
+| 相关文档 | `DEV-PLAN.v1.0.md`（最初的立项草案，仅存档）· `M0-REPORT.md`（M0 结论） |
+| 进度 | **M0–M4 完成 + 用户脚本引擎**（两处待人工确认：上传文件选择框、开机自启开关）· M5 打包管线已跑通（Windows zip 2.56 MB） |
+
+## 变更要点
+
+| # | 变更 | 原因 |
+| --- | --- | --- |
+| 1 | **删除签名 / 公证 / SmartScreen / Apple 开发者账号** | 不发布，就没有"通过 Gatekeeper 与 SmartScreen"这回事 |
+| 2 | **删除自动更新**（updater 服务、`latest.json`、密钥保管） | 自用只需手动替换 exe；省掉一整块永久运维负担 |
+| 3 | **删除 CI 四目标矩阵与体积守门** | 只需本地一条构建命令 + 可选 GitHub Actions 跑测试 |
+| 4 | **分发方式改为便携 zip** | 解压即用、不写注册表、删了就干净，朋友最省事（ADR-012） |
+| 5 | 平台从"三平台齐发（含签名公证）"改为**不发布的自用分发** | 省掉签名/公证/商店后，跨平台变得可行 |
+| 6 | 体积从硬指标降为**观察项**；扩展兼容从"10 项对照表"降为"实际在用的 3–5 项" | 自用不做发布门槛 |
+| 7 | 新增**诊断包**（日志 + 版本 + 设置打包导出） | 没有遥测，朋友出问题只能靠你隔空取日志 |
+| 8 | 合规附录缩为 MIT + FontAwesome 署名 | MIT 自用不承担商业合规义务，但署名义务仍然存在 |
+| 9 | i18n、多窗口、标签拖出成窗全部移出范围 | 自用不做 |
+| 10 | 平台从"按需裁剪"→ **三平台都做**，质量线为"尽力而为" | 三个平台都有人用；小问题可接受，不为一致性拖周期 |
+| 11 | 新增 §1.1 已知可接受缺陷清单 | 显式列出不修的平台差异，避免每次都想"顺手补一下" |
+| 12 | 视觉从"沿用"→ **可自定义**（配色/圆角/字号/背景图，JSON 导入导出） | 自用要顺眼，且不想每次改样式都改代码 |
+| 13 | 删除 "Cute 按钮" | 暂不需要 |
+| 14 | 周期 6–7 周 → **8–9 周** | 摊进 M0 的三环境验证与三套打包 |
+| 15 | 数据布局定死：`UserData/` + `crx/` + `javascript/`，默认便携（去掉 `--portable` 开关） | 你要的就是"拷走目录即带走一切" |
+| 16 | 用户脚本改为**三平台都支持**（不再只 mac/Linux） | 既然 `javascript/` 一直存在，Windows 上也没理由不加载 |
+| 17 | 主题编辑器支持**实时预览**（改即套用，取消还原） | 你的明确要求 |
+| 18 | 新增 §13 开发约定（commit 粒度与格式、英文注释、push 归属） | 避免以后反复对齐工作方式 |
+| 19 | identifier 定为 `com.mix.browser` | 便携目录已与 identifier 解耦，改它不丢配置 |
+| 20 | 落盘 `m0-probe/` 实验工程与 `docs/M0-REPORT.md` 模板 | W1 唯一必须产出的东西 |
+
+---
+
+## 1. 平台与质量线（三平台都做，但不追求一致）
+
+| 平台 | 定位 | 质量线（承诺上限） | 备注 |
+| --- | --- | --- | --- |
+| **Windows 10/11** | P0 · 一等公民 | 全功能可用 | 多 webview 与 MV3 扩展最成熟的一侧 |
+| **macOS 12+** | P1 | 除扩展外全功能可用 | 扩展由用户脚本替代；需 ad-hoc 签名；首次"右键打开" |
+| **Linux X11** | P2 | 除扩展外全功能可用 | 停靠与全局热键在 X11 正常 |
+| **Linux Wayland** | P2 | 浏览器功能可用，**停靠与全局热键不可用** | 协议限制，不做绕路 |
+
+> 三平台都做，但**不追求一致性**：上表"质量线"就是承诺上限，表外的差异按 §1.1 处理——不修、写清楚、能接受就发。这就是"尽量跨平台 + 小问题不要紧"的落地口径。
+
+### 1.1 已知可接受缺陷（不打算修，写清楚就行）
+
+| 缺陷 | 平台 | 影响 | 为什么不修 |
+| --- | --- | --- | --- |
+| 停靠 / 全局热键不可用 | Linux Wayland | 少两个系统集成功能 | 协议禁止客户端自定位窗口；全局热键无 portal 支持 |
+| 无扩展，只能用户脚本 | macOS / Linux | 装不了 crx | 平台 webview 不提供扩展机制 |
+| 未公证：首次要"右键打开"或去掉隔离属性 | macOS | 一次手动操作 | 不做公证（§2.2） |
+| 未签名：SmartScreen 提示 + 偶发杀软误报 | Windows | 一次手动放行 | 不做签名（§2.2） |
+| 部分站点视频黑屏 | Linux | 少数站点不可看 | 缺 H.264，需系统装 gstreamer 插件；文档提示 |
+| PDF 依赖后端 | Linux | PDF 打不开 | WebKitGTK 需额外组件，降级为"用系统浏览器打开" |
+| 托盘需 AppIndicator | Linux | GNOME 默认不显示 | 降级为"仅标题栏最小化" |
+
+---
+
+## 2. 范围
+
+### 2.1 做
+
+- 无边框自绘窗口（圆角 / 阴影 / 淡入 / 拖拽 / 8 向 resize）
+- **界面可自定义**：配色 / 圆角 / 字号 / chrome 高度 / 背景图，主题 JSON 导入导出，内置 3 套预设（§3.7）
+- 多标签浏览（独立 webview、标题/URL 同步、关闭、会话恢复、上限保护、挂起）
+- **Windows**：加载本地 MV3 crx 扩展 ／ **macOS·Linux**：用户脚本注入
+- 浏览器基线：下载、文件上传、右键菜单、键盘快捷键、查找、缩放、权限提示、全屏视频、错误页
+- 托盘、全局停靠热键、单实例、开机自启（可选）、窗口位置记忆
+- 便携 zip 分发 + 诊断包导出
+
+### 2.2 不做（明确排除，避免中途加戏）
+
+- 应用签名、公证、SmartScreen、Apple 开发者账号、应用商店
+- 自动更新（含 updater 服务、版本清单、密钥）
+- 遥测、崩溃上报服务、EULA、隐私政策
+- MV2 扩展、扩展 popup UI、DRM（Widevine）、账号同步、书签/历史管理
+- 多窗口、标签拖出成窗、i18n（只 zh_CN）
+- 主题只做"样式自定义"，不做布局结构自定义（标签栏在顶、地址栏在下的结构固定，见 §3.7）
+- "Cute 按钮"（暂不需要，已从 chrome 移除）
+- 旧实现复用与旧数据迁移：不复用旧代码、不写旧配置导入器、不继承旧交互（见 §11）
+
+### 2.3 验收口径（自用标准，不是发布标准）
+
+| 指标 | 目标 | 口径 |
+| --- | --- | --- |
+| 冷启动到可交互 | ≤ 1.5 s | 你的主力机，空 profile，n≥5 取中位数 |
+| 切标签 | 无可见白屏 | 10 标签全 attached；P95 ≤ 100 ms |
+| 内存 | 5 标签 ≤ 700 MB | 全进程 RSS 之和 |
+| 常用站可用 | 你日常 5 个站点正常（含视频、登录、上传） | 手工清单 |
+| 朋友装机 | 3 人拿到 zip 后 5 分钟内跑起来 | 一人一份说明 |
+| 体积 | 观察项：Win zip ≤ 10 MB 最好 | 只为下载/传输方便，不是门槛 |
+| 可迁移 | 整个目录拷到另一台机器，设置/扩展/脚本/会话全部跟随 | 手工：两台机各启动一次 |
+
+---
+
+## 3. 架构
+
+### 3.1 分层与 z-order（核心约束，别改）
+
+```
+┌──────────────────────── Tauri 2（unstable 多 webview） ────────────────────────┐
+│  Rust 主进程                                                                   │
+│  ├─ window      : 无边框窗 / 拖拽 / 最大化 / 圆角 / 8 向 resize                 │
+│  ├─ tabs        : TabManager（Vec<Tab>、布局、生命周期、挂起）                   │
+│  ├─ overlay     : 弹层 webview（地址栏补全 / 右键菜单 / 设置 / 权限询问）        │
+│  ├─ downloads   : on_download → 任务 + 进度 + 打开所在文件夹                    │
+│  ├─ permissions : on_permission_request → 询问 → 会话内记忆                     │
+│  ├─ profile     : data_directory / 便携模式 / 缓存清理 / 诊断包                  │
+│  ├─ extensions  : crx 解包 → 校验 → WebView2 加载（Win only）                   │
+│  ├─ userscripts : 脚本库 + loader 生成 + 按 URL/帧分发（mac·Linux 用）           │
+│  ├─ shortcuts / snap / tray / store / logging                                   │
+│                                                                                │
+│  z-order（自下而上，后者覆盖前者）                                                │
+│   ① chrome webview（标签栏 32px + 地址栏 36px = 68px）                           │
+│   ② tab webview × N（y = chrome_height，仅当前 tab 可见）                         │
+│   ③ overlay webview（默认 hide，按需定位 show）                                  │
+└────────────────────────────────────────────────────────────────────────────────┘
+```
+
+**为什么必须有 ③**：子 webview 是原生视图，HTML 内容压不住它。地址栏补全、右键菜单、设置面板如果不走 overlay 层，就会在 68px 的 chrome 区域里被裁掉。这是本项目最容易在第 3 周才发现的坑，**M1 就要跑通原型**（ADR-006）。
+
+### 3.2 并发硬约束（违反即死锁）
+
+1. 所有 IPC 命令 `async`。**禁止**在同步命令或 `on_window_event` 里创建 webview（Windows 上 `add_child` 死锁，官方 Known issues）。
+2. `AppState` 用 `RwLock`；**禁止持锁发起 webview 操作或 await**：读快照 → 放锁 → 动作 → 重新加锁提交。
+3. webview 变更全部投递到主线程队列（`mpsc` + `run_on_main_thread`）串行执行，避免抢 z-order。
+4. 坐标一律 `PhysicalPosition`/`PhysicalSize`，入口由 `scale_factor` 换算。
+5. 布局在 Rust 侧 `on_resized`/`on_scale_changed` 重算；前端只上报一次 `chrome_height`。（`auto_resize` 只按比例跟随，无法保持固定顶部偏移，不能替代重算。）
+
+### 3.3 状态模型
+
+```rust
+pub struct Tab {
+    pub id: TabId,            // "tab-{n}"，同时是 webview label
+    pub url: String, pub title: String,
+    pub favicon: Option<String>, pub loading: bool,
+    pub alive: TabAlive,      // Attached / Suspended { scroll_y }
+    pub zoom: f64,
+    pub last_active: Instant,
+}
+
+pub struct AppState {
+    pub tabs: Vec<Tab>, pub selected: Option<TabId>,
+    pub settings: Settings, pub chrome_height: f64,
+    pub overlay_open: Option<OverlayKind>,
+}
+
+pub struct Settings {
+    pub restore_session: bool, pub start_url: String,
+    pub hotkeys_enabled: bool, pub autostart: bool,
+    pub max_live_tabs: usize,     // 默认 12，超出挂起最久未用
+    pub download_dir: PathBuf,    // 默认 UserData/downloads
+}
+```
+
+### 3.4 目录结构（精简版）
+
+```
+mix/
+├─ src-tauri/
+│  ├─ Cargo.toml            # features = ["unstable", "tray-icon"]
+│  ├─ tauri.conf.json
+│  ├─ capabilities/default.json
+│  └─ src/
+│     ├─ main.rs  lib.rs
+│     ├─ ipc/{commands.rs, events.rs, error.rs}
+│     ├─ state.rs  window.rs  tabs.rs  overlay.rs
+│     ├─ downloads.rs  permissions.rs  profile.rs
+│     ├─ extensions/{mod.rs, crx.rs}
+│     ├─ userscripts.rs  shortcuts.rs  snap.rs  tray.rs
+│     ├─ platform/{mod.rs, windows.rs, macos.rs, linux.rs}
+│     └─ logging.rs         # panic hook + 文件日志 + 诊断包
+├─ src/                     # chrome UI（Vite + TS）
+│  ├─ index.html  main.ts  tabbar.ts  addressbar.ts  shortcuts.ts  bridge.ts
+│  ├─ overlay/{index.html, menus.ts}
+│  └─ styles/theme.css      # 默认主题变量（#1F2020 / #00FF00 / r15），可被 theme.json 覆盖
+├─ assets/fonts/            # 内置字体子集（用户脚本不再内置，统一放根目录 javascript/）
+├─ scripts/build-portable.ps1  # 打 zip，排除 UserData/ crx/ javascript/
+├─ m0-probe/                # M0 实验工程（一次性，验证完可删）
+├─ docs/{M0-REPORT.md, ADR/}
+├─ LICENSE                  # MIT
+├─ THIRD-PARTY.md
+├─ README-friend.md         # 发给朋友的 5 行说明
+└─ .gitignore               # 忽略 target/、node_modules/、UserData/、crx/、javascript/
+```
+
+### 3.5 功能清单与优先级
+
+| 能力 | 优先 | 要点 | 平台注意 |
+| --- | --- | --- | --- |
+| 多标签增删切 + 标题同步 | P0 | `add_child`/`close`、`on_document_title_changed` | — |
+| URL 同步 | P0 | 无原生事件：注入 `pushState/replaceState/popstate` + 300 ms 轮询兜底 | — |
+| 会话恢复 | P0 | 存 `{url,index,title}`；**历史栈不恢复**，back 置灰并明示 | — |
+| 挂起策略 | P0 | `max_live_tabs=12` 超过挂起最久未用；RSS > 1.2 GB 主动挂起 | — |
+| 右键菜单 / 地址栏补全 / 设置面板 | P0 | 全部走 overlay 层 | — |
+| 键盘快捷键 | P0 | Ctrl+T/W/L/R、F5、Ctrl+Tab、Ctrl+±、F12；页面内由 `initialization_script` 转发到 `shortcut` 命令，chrome 侧同一张映射表本地处理 | 见 §3.9 的 capability 拆分 |
+| 下载 | P0 | `on_download`(`DownloadEvent`) → 任务表 + 进度 + 打开目录 | mac/Linux 需自实现 |
+| 文件上传 | P0 | `<input type=file>` | WKWebView 需 `runOpenPanel` |
+| 权限提示 | P0 | `on_permission_request` → overlay 询问 → 会话内记忆 | 三平台统一 |
+| 扩展加载（Win） | P0 | 扫描 `crx/*.crx` → 校验解包 → 加载；增删改提示重启 | 仅 Win（§3.8） |
+| 用户脚本（三平台） | P1 | 扫描 `javascript/**/*.user.js`（两层）→ 解析头 → `@match`/`@include`/`@exclude` 编译成正则 → 单个初始化脚本在页面里分发；`@run-at document-start` 立即跑，其余等 DOMContentLoaded | `GM_setValue/getValue` 走带脚本名前缀的 localStorage；脚本在页面上下文执行，无沙箱（P2） |
+| 错误页 / 缩放 / 查找 / 全屏视频 | P1 | 见 §3.6 | — |
+| 页面崩溃提示 | P1 | 检测 → "重新加载 / 关闭标签" | — |
+| 诊断包 | P1 | 日志 + 版本 + 脱敏设置 → zip，一键导出 | 见 §7.3 |
+| 主题自定义 | P1 | CSS 变量 + `theme.json`，预设 / 导入 / 导出 | 见 §3.7 |
+ 又套了一层，拼出 `[^/]+^/.*`，导致永不匹配（已加回归测试） |
 | 位置记忆 | P0 | 窗口 x/y/宽/高/最大化写进 `session.json.window`，关闭到托盘时保存 | **不用 `tauri-plugin-window-state`**：它固定写 `%APPDATA%/<identifier>`，破坏便携承诺；核对尺寸时注意非 DPI-aware 进程（如 PowerShell）读到的 `GetWindowRect` 会被系统缩放 |
 | 开机自启 | P1 | `tauri-plugin-autostart`，设置里勾选；默认关 | 勾选后写 HKCU Run 键，是本项目唯一的系统全局写入 |
 | 停靠 | P0 | 9 格状态机（半分→四角循环，下行回原状），`Alt+Shift+方向键` 全局热键；注册失败降级到窗口内快捷键 | 恢复位置存 `outer_position` + **`inner_size`**：`set_size` 改的是客户区，存外框尺寸会让窗口每次还原都变大（实测 +15×+8） |

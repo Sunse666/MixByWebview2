@@ -20,6 +20,7 @@ fn main() {
         "paths_get",
         "open_dir",
         "ext_list",
+        "script_list",
         "download_list",
         "download_open_dir",
         "shortcut",

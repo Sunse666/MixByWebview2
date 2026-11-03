@@ -212,6 +212,26 @@ async function boot() {
     empty.textContent = "none loaded";
     extensionList.append(empty);
   }
+  const scriptList = document.getElementById("scripts");
+  const scripts = await invoke("script_list");
+  if (!scripts.length) {
+    const empty = document.createElement("li");
+    empty.textContent = "none loaded";
+    scriptList.append(empty);
+  }
+  for (const script of scripts) {
+    const item = document.createElement("li");
+    const name = document.createElement("span");
+    name.className = "ext-name";
+    name.textContent = script.name;
+    name.title = script.matches.join(", ");
+    const state = document.createElement("span");
+    state.className = "ext-state";
+    state.textContent = script.run_at;
+    item.append(name, state);
+    scriptList.append(item);
+  }
+
   for (const extension of loaded) {
     const item = document.createElement("li");
     const name = document.createElement("span");

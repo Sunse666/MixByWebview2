@@ -137,6 +137,8 @@ pub struct WebviewOpts {
     pub tab_data_dir: Option<std::path::PathBuf>,
     pub ui_data_dir: Option<std::path::PathBuf>,
     pub extensions_dir: Option<std::path::PathBuf>,
+    /// Compiled userscript loader; empty when the drop folder has no scripts.
+    pub userscripts: String,
 }
 
 impl WebviewOpts {
@@ -153,6 +155,7 @@ impl WebviewOpts {
             },
             #[cfg(not(windows))]
             extensions_dir: None,
+            userscripts: String::new(),
         }
     }
 }
@@ -240,6 +243,11 @@ pub fn create(
             let _ = app.emit("tab:title", payload);
         });
 
+    let builder = if opts.userscripts.is_empty() {
+        builder
+    } else {
+        builder.initialization_script_for_all_frames(&opts.userscripts)
+    };
     let builder = apply_profile(builder, &opts.tab_data_dir);
     let builder = apply_extensions(builder, opts);
 

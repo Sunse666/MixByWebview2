@@ -11,6 +11,7 @@ mod platform;
 mod session;
 mod snap;
 mod tray;
+mod userscripts;
 mod state;
 mod tabs;
 mod theme;
@@ -38,7 +39,14 @@ fn main() {
             let settings = state::Settings::load(&dirs.settings_file);
             let theme = theme::Theme::load(&dirs.theme_file);
             let ext_infos = extensions::scan(&dirs);
-            app.manage(ipc::AppState::new(dirs.clone(), settings, theme, ext_infos));
+            let scripts = userscripts::scan(&dirs.scripts);
+            app.manage(ipc::AppState::new(
+                dirs.clone(),
+                settings,
+                theme,
+                ext_infos,
+                scripts,
+            ));
             window::bootstrap(app)?;
             Ok(())
         })
@@ -59,6 +67,7 @@ fn main() {
             ipc::overlay_open,
             ipc::overlay_close,
             ipc::ext_list,
+            ipc::script_list,
             ipc::shortcut,
             ipc::context_menu,
             ipc::snap,
