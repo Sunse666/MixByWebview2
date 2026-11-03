@@ -37,6 +37,7 @@ const SHORTCUT_FORWARDER: &str = r#"
       case "p": return "print";
       case "j": return "downloads";
       case "d": return "bookmark";
+      case "n": return "new_window";
       default: return null;
     }
   };
@@ -252,7 +253,8 @@ pub fn create(
                 title: title.clone(),
             };
             if let Some(state) = app.try_state::<crate::ipc::AppState>() {
-                if let Ok(mut core) = state.core.write() {
+                let window = crate::ipc::window_of_tab(&payload.id);
+                if let Some(mut core) = state.try_write_core(window) {
                     if let Some(tab) = core.tabs.iter_mut().find(|t| t.id == payload.id) {
                         tab.title = title;
                     }

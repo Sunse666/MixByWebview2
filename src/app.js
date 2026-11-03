@@ -179,6 +179,7 @@ async function boot() {
         case "p": action = "print"; break;
         case "j": action = "downloads"; break;
         case "d": action = "bookmark"; break;
+        case "n": action = "new_window"; break;
         default: action = null;
       }
     }

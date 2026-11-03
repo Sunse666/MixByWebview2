@@ -29,7 +29,7 @@ pub fn install(app: &AppHandle) -> tauri::Result<()> {
                 let _ = app.emit("ui:new-tab", ());
             }
             "quit" => {
-                crate::ipc::save_session(app);
+                crate::ipc::save_session(app, "w1");
                 app.exit(0);
             }
             _ => {}

@@ -81,6 +81,7 @@ fn main() {
             ipc::tab_print,
             ipc::window_fullscreen,
             ipc::app_clear_data,
+            ipc::window_new,
             ipc::history_list,
             ipc::history_clear,
             ipc::bookmark_list,

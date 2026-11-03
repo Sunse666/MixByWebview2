@@ -143,6 +143,7 @@ async function bootAppMenu() {
   const pages = {
     root: async () => {
       row("+", "New tab", "Ctrl+T", act(() => invoke("tab_new", {})));
+      row("\u25a2", "New window", "Ctrl+N", act(() => invoke("window_new")));
       row("\u25d1", "New incognito tab", "Ctrl+Shift+N", act(() => invoke("tab_new", { incognito: true })));
       row("\u2193", "Downloads", "Ctrl+J", act(() => invoke("open_dir", { which: "downloads" })));
       divider();
@@ -363,6 +364,7 @@ async function bootAppMenu() {
       header("Keyboard shortcuts");
       const keys = [
         ["Ctrl+T", "New tab"],
+        ["Ctrl+N", "New window"],
         ["Ctrl+Shift+N", "New incognito tab"],
         ["Ctrl+W", "Close tab"],
         ["Ctrl+Tab", "Next tab"],

@@ -9,11 +9,8 @@ use std::sync::RwLock;
 use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_runtime::ResizeDirection;
 
+#[derive(Default)]
 pub struct Core {
-    pub settings: Settings,
-    pub theme: Theme,
-    /// Theme as it was when the editor opened, used by theme_revert.
-    pub baseline: Theme,
     pub tabs: Vec<Tab>,
     pub selected: Option<String>,
     pub next_tab_id: usize,
@@ -22,12 +19,17 @@ pub struct Core {
 
 pub struct AppState {
     pub dirs: AppDirs,
+    /// One tab set per window, keyed by the window label.
+    pub cores: parking_lot::RwLock<std::collections::HashMap<String, Core>>,
+    pub settings: parking_lot::RwLock<Settings>,
+    pub theme: parking_lot::RwLock<Theme>,
+    pub baseline: parking_lot::RwLock<Theme>,
     pub downloads: RwLock<Vec<crate::downloads::DownloadTask>>,
     pub menu_context: RwLock<MenuContext>,
-    pub overlay: RwLock<Option<String>>,
+    /// Overlay webview label per window, so each window has its own menu.
+    pub overlay: RwLock<std::collections::HashMap<String, String>>,
     pub permissions: crate::permissions::PermissionStore,
     pub snap: std::sync::Mutex<crate::snap::SnapState>,
-    pub core: RwLock<Core>,
     pub opts: crate::tabs::WebviewOpts,
     pub extensions: Vec<ExtInfo>,
     pub history: RwLock<Vec<Visit>>,
@@ -51,6 +53,9 @@ impl AppState {
         opts.userscripts = scripts_js.clone();
         let history = crate::library::load_visits(&dirs.history_file);
         let bookmarks = crate::library::load_bookmarks(&dirs.bookmarks_file);
+        let mut cores = std::collections::HashMap::new();
+        cores.insert("w1".to_string(), Core::default());
+
         Self {
             opts,
             extensions,
@@ -58,21 +63,51 @@ impl AppState {
             bookmarks: RwLock::new(bookmarks),
             scripts,
             dirs,
+            cores: parking_lot::RwLock::new(cores),
+            settings: parking_lot::RwLock::new(settings),
+            baseline: parking_lot::RwLock::new(theme.clone()),
+            theme: parking_lot::RwLock::new(theme),
             downloads: RwLock::new(Vec::new()),
             menu_context: RwLock::new(MenuContext::default()),
-            overlay: RwLock::new(None),
+            overlay: RwLock::new(std::collections::HashMap::new()),
             permissions: crate::permissions::PermissionStore::default(),
             snap: std::sync::Mutex::new(crate::snap::SnapState::default()),
-            core: RwLock::new(Core {
-                settings,
-                baseline: theme.clone(),
-                theme,
-                tabs: Vec::new(),
-                selected: None,
-                next_tab_id: 0,
-                tick: 0,
-            }),
         }
+    }
+
+    pub fn add_window(&self, label: &str) {
+        self.cores
+            .write()
+            .entry(label.to_string())
+            .or_insert_with(Core::default);
+    }
+
+    pub fn remove_window(&self, label: &str) {
+        self.cores.write().remove(label);
+    }
+
+    /// Tab state of one window. Panics only if a window exists without a core,
+    /// which would be a bug in open/close bookkeeping.
+    pub fn try_read_core(&self, label: &str) -> Option<parking_lot::MappedRwLockReadGuard<'_, Core>> {
+        parking_lot::RwLockReadGuard::try_map(self.cores.read(), |map| map.get(label)).ok()
+    }
+
+    pub fn try_write_core(&self, label: &str) -> Option<parking_lot::MappedRwLockWriteGuard<'_, Core>> {
+        parking_lot::RwLockWriteGuard::try_map(self.cores.write(), |map| map.get_mut(label)).ok()
+    }
+
+    pub fn read_core(&self, label: &str) -> parking_lot::MappedRwLockReadGuard<'_, Core> {
+        parking_lot::RwLockReadGuard::map(self.cores.read(), |map| {
+            map.get(label)
+                .unwrap_or_else(|| panic!("window {label} has no tab state"))
+        })
+    }
+
+    pub fn write_core(&self, label: &str) -> parking_lot::MappedRwLockWriteGuard<'_, Core> {
+        parking_lot::RwLockWriteGuard::map(self.cores.write(), |map| {
+            map.get_mut(label)
+                .unwrap_or_else(|| panic!("window {label} has no tab state"))
+        })
     }
 }
 
@@ -135,9 +170,17 @@ impl From<serde_json::Error> for AppError {
     }
 }
 
-fn main_window(app: &AppHandle) -> Result<tauri::Window, AppError> {
-    app.get_window("main")
-        .ok_or_else(|| AppError::new("no_window", "main window is missing"))
+fn window_of(window: &tauri::Window) -> tauri::Window {
+    window.clone()
+}
+
+/// Webview labels carry the window they belong to: "w1-tab-3".
+pub fn tab_label(window: &str, index: usize) -> String {
+    format!("{window}-tab-{index}")
+}
+
+pub fn window_of_tab(id: &str) -> &str {
+    id.split("-tab-").next().unwrap_or("w1")
 }
 
 #[derive(Clone, Serialize)]
@@ -179,20 +222,20 @@ fn snapshot(core: &Core) -> TabList {
 }
 
 /// Tell the chrome UI to rebuild the tab strip.
-pub(crate) fn emit_tabs(app: &AppHandle) {
+pub(crate) fn emit_tabs(app: &AppHandle, label: &str) {
     let state = app.state::<AppState>();
     let list = {
-        let core = state.core.read().unwrap_or_else(|e| e.into_inner());
+        let core = state.read_core(label);
         snapshot(&core)
     };
     let _ = app.emit("tabs:changed", list);
 }
 
 /// Only the selected tab is visible; the rest keep running underneath.
-pub(crate) fn sync_visibility(app: &AppHandle) {
+pub(crate) fn sync_visibility(app: &AppHandle, label: &str) {
     let pairs: Vec<(String, Option<String>)> = {
         let state = app.state::<AppState>();
-        let core = state.core.read().unwrap_or_else(|e| e.into_inner());
+        let core = state.read_core(label);
         core.tabs
             .iter()
             .map(|tab| (tab.id.clone(), core.selected.clone()))
@@ -210,13 +253,13 @@ pub(crate) fn sync_visibility(app: &AppHandle) {
 }
 
 /// Drop the least recently used background tab once too many are alive.
-pub(crate) fn enforce_live_limit(app: &AppHandle) {
+pub(crate) fn enforce_live_limit(app: &AppHandle, label: &str) {
     loop {
         let victim = {
             let state = app.state::<AppState>();
-            let mut core = state.core.write().unwrap_or_else(|e| e.into_inner());
+            let mut core = state.write_core(label);
             let alive = core.tabs.iter().filter(|tab| tab.alive).count();
-            let limit = core.settings.max_live_tabs.max(1);
+            let limit = state.settings.read().max_live_tabs.max(1);
             if alive <= limit {
                 None
             } else {
@@ -249,8 +292,8 @@ pub(crate) fn enforce_live_limit(app: &AppHandle) {
     }
 }
 
-fn window_geometry(app: &AppHandle) -> Option<crate::session::WindowGeometry> {
-    let win = app.get_window("main")?;
+fn window_geometry(app: &AppHandle, label: &str) -> Option<crate::session::WindowGeometry> {
+    let win = app.get_window(label)?;
     let position = win.outer_position().ok()?;
     let size = win.inner_size().ok()?;
     Some(crate::session::WindowGeometry {
@@ -262,12 +305,12 @@ fn window_geometry(app: &AppHandle) -> Option<crate::session::WindowGeometry> {
     })
 }
 
-pub(crate) fn save_session(app: &AppHandle) {
+pub(crate) fn save_session(app: &AppHandle, label: &str) {
     let Some(state) = app.try_state::<AppState>() else {
         return;
     };
     let session = {
-        let core = state.core.read().unwrap_or_else(|e| e.into_inner());
+        let core = state.read_core(label);
         let selected = core
             .selected
             .as_ref()
@@ -282,7 +325,7 @@ pub(crate) fn save_session(app: &AppHandle) {
                 .map(|tab| tab.url.clone())
                 .collect(),
             selected,
-            window: window_geometry(app),
+            window: window_geometry(app, label),
         }
     };
     if let Err(err) = session.save(&state.dirs.session_file) {
@@ -292,11 +335,14 @@ pub(crate) fn save_session(app: &AppHandle) {
 
 fn spawn_tab(
     app: &AppHandle,
+    label: &str,
     id: &str,
     url: &str,
     incognito: bool,
 ) -> Result<(), AppError> {
-    let win = main_window(app)?;
+    let win = app
+        .get_window(label)
+        .ok_or_else(|| AppError::new("no_window", "window is missing"))?;
     let opts = app.state::<AppState>().opts.clone();
     let (width, height) = crate::window::logical_size(&win)?;
     crate::tabs::create(
@@ -321,12 +367,12 @@ pub struct Layout {
 }
 
 #[tauri::command]
-pub async fn layout_get(app: AppHandle, state: State<'_, AppState>) -> Result<Layout, AppError> {
-    let win = main_window(&app)?;
+pub async fn layout_get(app: AppHandle, window: tauri::Window, state: State<'_, AppState>) -> Result<Layout, AppError> {
+    let win = window_of(&window);
     let (width, height) = crate::window::logical_size(&win)?;
     let (chrome_height, selected) = {
-        let core = state.core.read().unwrap_or_else(|e| e.into_inner());
-        (core.settings.chrome_height, core.selected.clone())
+        let core = state.read_core(window.label());
+        (state.settings.read().chrome_height, core.selected.clone())
     };
     Ok(Layout {
         chrome_height,
@@ -338,8 +384,12 @@ pub async fn layout_get(app: AppHandle, state: State<'_, AppState>) -> Result<La
 }
 
 #[tauri::command]
-pub async fn window_control(app: AppHandle, action: String) -> Result<(), AppError> {
-    let win = main_window(&app)?;
+pub async fn window_control(
+    app: AppHandle,
+    window: tauri::Window,
+    action: String,
+) -> Result<(), AppError> {
+    let win = window_of(&window);
     match action.as_str() {
         "min" => win.minimize()?,
         "max" => {
@@ -356,13 +406,13 @@ pub async fn window_control(app: AppHandle, action: String) -> Result<(), AppErr
 }
 
 #[tauri::command]
-pub async fn window_drag(app: AppHandle) -> Result<(), AppError> {
-    main_window(&app)?.start_dragging()?;
+pub async fn window_drag(app: AppHandle, window: tauri::Window) -> Result<(), AppError> {
+    window.start_dragging()?;
     Ok(())
 }
 
 #[tauri::command]
-pub async fn window_resize(app: AppHandle, direction: String) -> Result<(), AppError> {
+pub async fn window_resize(app: AppHandle, direction: String, window: tauri::Window) -> Result<(), AppError> {
     let dir = match direction.as_str() {
         "n" => ResizeDirection::North,
         "s" => ResizeDirection::South,
@@ -374,20 +424,20 @@ pub async fn window_resize(app: AppHandle, direction: String) -> Result<(), AppE
         "sw" => ResizeDirection::SouthWest,
         other => return Err(AppError::new("bad_direction", other)),
     };
-    main_window(&app)?.start_resize_dragging(dir)?;
+    window.start_resize_dragging(dir)?;
     Ok(())
 }
 
 #[tauri::command]
-pub async fn tab_list(state: State<'_, AppState>) -> Result<TabList, AppError> {
-    let core = state.core.read().unwrap_or_else(|e| e.into_inner());
+pub async fn tab_list(window: tauri::Window, state: State<'_, AppState>) -> Result<TabList, AppError> {
+    let core = state.read_core(window.label());
     Ok(snapshot(&core))
 }
 
 #[tauri::command]
-pub async fn tab_select(app: AppHandle, state: State<'_, AppState>, id: String) -> Result<(), AppError> {
+pub async fn tab_select(app: AppHandle, window: tauri::Window, state: State<'_, AppState>, id: String) -> Result<(), AppError> {
     let exists = {
-        let core = state.core.read().unwrap_or_else(|e| e.into_inner());
+        let core = state.read_core(window.label());
         core.tabs.iter().any(|tab| tab.id == id)
     };
     if !exists {
@@ -395,30 +445,30 @@ pub async fn tab_select(app: AppHandle, state: State<'_, AppState>, id: String) 
     }
 
     {
-        let mut core = state.core.write().unwrap_or_else(|e| e.into_inner());
+        let mut core = state.write_core(window.label());
         core.selected = Some(id.clone());
     }
 
-    sync_visibility(&app);
+    sync_visibility(&app, window.label());
     if let Some(webview) = app.get_webview(&id) {
         let _ = webview.set_focus();
     }
-    emit_tabs(&app);
+    emit_tabs(&app, window.label());
     Ok(())
 }
 
 #[tauri::command]
 pub async fn tab_new(
     app: AppHandle,
-    state: State<'_, AppState>,
+    window: tauri::Window, state: State<'_, AppState>,
     url: Option<String>,
     incognito: Option<bool>,
 ) -> Result<String, AppError> {
     let (id, target) = {
-        let mut core = state.core.write().unwrap_or_else(|e| e.into_inner());
+        let mut core = state.write_core(window.label());
         core.next_tab_id += 1;
         let id = format!("tab-{}", core.next_tab_id);
-        let target = url.unwrap_or_else(|| core.settings.start_url.clone());
+        let target = url.unwrap_or_else(|| state.settings.read().start_url.clone());
         core.tick += 1;
         let tick = core.tick;
         core.tabs.push(Tab {
@@ -438,51 +488,51 @@ pub async fn tab_new(
         (id, target)
     };
 
-    spawn_tab(&app, &id, &target, incognito.unwrap_or(false))?;
+    spawn_tab(&app, window.label(), &id, &target, incognito.unwrap_or(false))?;
     crate::logging::info(&format!("tab created {id} -> {target}"));
-    sync_visibility(&app);
-    enforce_live_limit(&app);
-    emit_tabs(&app);
-    save_session(&app);
+    sync_visibility(&app, window.label());
+    enforce_live_limit(&app, window.label());
+    emit_tabs(&app, window.label());
+    save_session(&app, window.label());
     Ok(id)
 }
 
 #[tauri::command]
-pub async fn tab_close(app: AppHandle, state: State<'_, AppState>, id: String) -> Result<(), AppError> {
+pub async fn tab_close(app: AppHandle, window: tauri::Window, state: State<'_, AppState>, id: String) -> Result<(), AppError> {
     if let Some(webview) = app.get_webview(&id) {
         let _ = webview.close();
     }
 
     let (remaining, next_url) = {
-        let mut core = state.core.write().unwrap_or_else(|e| e.into_inner());
+        let mut core = state.write_core(window.label());
         core.tabs.retain(|tab| tab.id != id);
         if core.selected.as_deref() == Some(id.as_str()) {
             core.selected = core.tabs.last().map(|tab| tab.id.clone());
         }
-        (core.tabs.len(), core.settings.start_url.clone())
+        (core.tabs.len(), state.settings.read().start_url.clone())
     };
 
     // Closing the last tab shows a fresh one instead of quitting.
     if remaining == 0 {
-        let _ = tab_new(app, state, Some(next_url), None).await;
+        let _ = tab_new(app, window.clone(), state, Some(next_url), None).await;
         return Ok(());
     }
 
-    sync_visibility(&app);
-    emit_tabs(&app);
-    save_session(&app);
+    sync_visibility(&app, window.label());
+    emit_tabs(&app, window.label());
+    save_session(&app, window.label());
     Ok(())
 }
 
 #[tauri::command]
-pub async fn tab_navigate(app: AppHandle, state: State<'_, AppState>, url: String) -> Result<(), AppError> {
+pub async fn tab_navigate(app: AppHandle, window: tauri::Window, state: State<'_, AppState>, url: String) -> Result<(), AppError> {
     let target = crate::tabs::parse_url(&url);
-    let label = selected_label(&app);
+    let label = selected_label(&state, &window);
     if label.is_empty() {
         return Ok(());
     }
     {
-        let mut core = state.core.write().unwrap_or_else(|e| e.into_inner());
+        let mut core = state.write_core(window.label());
         if let Some(tab) = core.tabs.iter_mut().find(|tab| tab.id == label) {
             tab.url = target.to_string();
         }
@@ -494,8 +544,13 @@ pub async fn tab_navigate(app: AppHandle, state: State<'_, AppState>, url: Strin
 }
 
 #[tauri::command]
-pub async fn tab_nav(app: AppHandle, action: String) -> Result<(), AppError> {
-    let Some(webview) = app.get_webview(&selected_label(&app)) else {
+pub async fn tab_nav(
+    app: AppHandle,
+    window: tauri::Window,
+    state: State<'_, AppState>,
+    action: String,
+) -> Result<(), AppError> {
+    let Some(webview) = app.get_webview(&selected_label(&state, &window)) else {
         return Ok(());
     };
     match action.as_str() {
@@ -509,37 +564,32 @@ pub async fn tab_nav(app: AppHandle, action: String) -> Result<(), AppError> {
     Ok(())
 }
 
-fn selected_label(app: &AppHandle) -> String {
-    let state = app.state::<AppState>();
-    let core = state.core.read().unwrap_or_else(|e| e.into_inner());
-    core.selected.clone().unwrap_or_default()
+fn selected_label(state: &AppState, window: &tauri::Window) -> String {
+    state
+        .read_core(window.label())
+        .selected
+        .clone()
+        .unwrap_or_default()
 }
 
 #[tauri::command]
-pub async fn theme_get(state: State<'_, AppState>) -> Result<Theme, AppError> {
-    let theme = state
-        .core
-        .read()
-        .unwrap_or_else(|e| e.into_inner())
-        .theme
-        .clone();
-    Ok(theme)
+pub async fn theme_get(window: tauri::Window, state: State<'_, AppState>) -> Result<Theme, AppError> {
+    Ok(state.theme.read().clone())
 }
 
 #[tauri::command]
 pub async fn theme_apply(
     app: AppHandle,
-    state: State<'_, AppState>,
+    window: tauri::Window, state: State<'_, AppState>,
     theme: Theme,
     persist: bool,
 ) -> Result<Theme, AppError> {
     let theme = theme.sanitized();
 
     {
-        let mut core = state.core.write().unwrap_or_else(|e| e.into_inner());
-        core.theme = theme.clone();
+        *state.theme.write() = theme.clone();
         if persist {
-            core.baseline = theme.clone();
+            *state.baseline.write() = theme.clone();
         }
     }
 
@@ -553,11 +603,11 @@ pub async fn theme_apply(
 }
 
 #[tauri::command]
-pub async fn theme_revert(app: AppHandle, state: State<'_, AppState>) -> Result<Theme, AppError> {
+pub async fn theme_revert(app: AppHandle, window: tauri::Window, state: State<'_, AppState>) -> Result<Theme, AppError> {
     let baseline = {
-        let mut core = state.core.write().unwrap_or_else(|e| e.into_inner());
-        core.theme = core.baseline.clone();
-        core.theme.clone()
+        let value = state.baseline.read().clone();
+        *state.theme.write() = value.clone();
+        value
     };
     broadcast_theme(&app, &baseline);
     Ok(baseline)
@@ -567,15 +617,17 @@ fn broadcast_theme(app: &AppHandle, theme: &Theme) {
     let json = serde_json::to_string(theme).unwrap_or_else(|_| "{}".into());
     let script = format!("window.__mixApplyTheme && window.__mixApplyTheme({json})");
 
-    let mut labels = vec!["chrome".to_string()];
-    if let Some(overlay) = app
+    let mut labels = vec!["w1-chrome".to_string()];
+    for label in app
         .state::<AppState>()
         .overlay
         .read()
         .unwrap_or_else(|e| e.into_inner())
-        .clone()
+        .values()
+        .cloned()
+        .collect::<Vec<_>>()
     {
-        labels.push(overlay);
+        labels.push(label);
     }
 
     for label in labels {
@@ -586,12 +638,12 @@ fn broadcast_theme(app: &AppHandle, theme: &Theme) {
 }
 
 #[tauri::command]
-pub async fn download_list(state: State<'_, AppState>) -> Result<Vec<crate::downloads::DownloadTask>, AppError> {
+pub async fn download_list(window: tauri::Window, state: State<'_, AppState>) -> Result<Vec<crate::downloads::DownloadTask>, AppError> {
     Ok(state.downloads.read().unwrap_or_else(|e| e.into_inner()).clone())
 }
 
 #[tauri::command]
-pub async fn download_open_dir(state: State<'_, AppState>, id: u64) -> Result<(), AppError> {
+pub async fn download_open_dir(window: tauri::Window, state: State<'_, AppState>, id: u64) -> Result<(), AppError> {
     let path = {
         let tasks = state.downloads.read().unwrap_or_else(|e| e.into_inner());
         tasks
@@ -607,44 +659,47 @@ pub async fn download_open_dir(state: State<'_, AppState>, id: u64) -> Result<()
 }
 
 #[tauri::command]
-pub async fn shortcut(app: AppHandle, state: State<'_, AppState>, action: String) -> Result<(), AppError> {
+pub async fn shortcut(app: AppHandle, window: tauri::Window, state: State<'_, AppState>, action: String) -> Result<(), AppError> {
     crate::logging::info(&format!("shortcut {action}"));
     match action.as_str() {
         "new_tab" => {
-            tab_new(app, state, None, None).await?;
+            tab_new(app, window.clone(), state, None, None).await?;
         }
         "new_incognito" => {
-            tab_new(app, state, None, Some(true)).await?;
+            tab_new(app, window.clone(), state, None, Some(true)).await?;
+        }
+        "new_window" => {
+            window_new(app, state).await?;
         }
         "bookmark" => {
-            let _ = bookmark_toggle(app.clone(), state).await?;
+            let _ = bookmark_toggle(app.clone(), window.clone(), state).await?;
         }
         "close_tab" => {
-            let id = selected_label(&app);
+            let id = selected_label(&state, &window);
             if !id.is_empty() {
-                tab_close(app, state, id).await?;
+                tab_close(app, window.clone(), state, id).await?;
             }
         }
-        "next_tab" => cycle_tab(&app, 1).await,
-        "prev_tab" => cycle_tab(&app, -1).await,
+        "next_tab" => cycle_tab(&app, &window, 1).await,
+        "prev_tab" => cycle_tab(&app, &window, -1).await,
         "focus_url" => {
             let _ = app.emit("ui:focus-url", ());
         }
         "reload" => {
-            if let Some(webview) = app.get_webview(&selected_label(&app)) {
+            if let Some(webview) = app.get_webview(&selected_label(&state, &window)) {
                 let _ = webview.reload();
             }
         }
-        "zoom_in" => zoom_by(&app, 0.1)?,
-        "zoom_out" => zoom_by(&app, -0.1)?,
-        "zoom_reset" => set_zoom(&app, 1.0)?,
+        "zoom_in" => zoom_by(&app, window.label(), 0.1)?,
+        "zoom_out" => zoom_by(&app, window.label(), -0.1)?,
+        "zoom_reset" => set_zoom(&app, window.label(), 1.0)?,
         "print" => {
-            if let Some(webview) = app.get_webview(&selected_label(&app)) {
+            if let Some(webview) = app.get_webview(&selected_label(&state, &window)) {
                 let _ = webview.print();
             }
         }
         "fullscreen" => {
-            if let Some(win) = app.get_window("main") {
+            if let Some(win) = app.get_window(window.label()) {
                 let next = !win.is_fullscreen().unwrap_or(false);
                 let _ = win.set_fullscreen(next);
             }
@@ -656,7 +711,7 @@ pub async fn shortcut(app: AppHandle, state: State<'_, AppState>, action: String
         }
         "devtools" => {
             #[cfg(debug_assertions)]
-            if let Some(webview) = app.get_webview(&selected_label(&app)) {
+            if let Some(webview) = app.get_webview(&selected_label(&state, &window)) {
                 webview.open_devtools();
             }
         }
@@ -665,10 +720,10 @@ pub async fn shortcut(app: AppHandle, state: State<'_, AppState>, action: String
     Ok(())
 }
 
-async fn cycle_tab(app: &AppHandle, delta: isize) {
+async fn cycle_tab(app: &AppHandle, window: &tauri::Window, delta: isize) {
     let next = {
         let state = app.state::<AppState>();
-        let core = state.core.read().unwrap_or_else(|e| e.into_inner());
+        let core = state.read_core(window.label());
         if core.tabs.len() < 2 {
             return;
         }
@@ -684,32 +739,37 @@ async fn cycle_tab(app: &AppHandle, delta: isize) {
 
     if let Some(id) = next {
         let state = app.state::<AppState>();
-        let _ = tab_select(app.clone(), state, id).await;
+        let _ = tab_select(app.clone(), window.clone(), state, id).await;
     }
 }
 
-fn zoom_by(app: &AppHandle, delta: f64) -> Result<(), AppError> {
+fn zoom_by(app: &AppHandle, label: &str, delta: f64) -> Result<(), AppError> {
     let current = {
         let state = app.state::<AppState>();
-        let core = state.core.read().unwrap_or_else(|e| e.into_inner());
+        let core = state.read_core(label);
         let label = core.selected.clone();
         label
             .and_then(|id| core.tabs.iter().find(|tab| tab.id == id).map(|tab| tab.zoom))
             .unwrap_or(1.0)
     };
-    set_zoom(app, current + delta)
+    set_zoom(app, label, current + delta)
 }
 
-fn set_zoom(app: &AppHandle, level: f64) -> Result<(), AppError> {
+fn set_zoom(app: &AppHandle, label: &str, level: f64) -> Result<(), AppError> {
     let level = (level * 10.0).round() / 10.0;
     let level = level.clamp(0.5, 2.0);
-    let id = selected_label(app);
+    let id = app
+        .state::<AppState>()
+        .read_core(label)
+        .selected
+        .clone()
+        .unwrap_or_default();
     if id.is_empty() {
         return Ok(());
     }
     {
         let state = app.state::<AppState>();
-        let mut core = state.core.write().unwrap_or_else(|e| e.into_inner());
+        let mut core = state.write_core(label);
         if let Some(tab) = core.tabs.iter_mut().find(|tab| tab.id == id) {
             tab.zoom = level;
         }
@@ -725,11 +785,11 @@ fn set_zoom(app: &AppHandle, level: f64) -> Result<(), AppError> {
 #[tauri::command]
 pub async fn context_menu(
     app: AppHandle,
-    state: State<'_, AppState>,
+    window: tauri::Window, state: State<'_, AppState>,
     request: MenuRequest,
 ) -> Result<(), AppError> {
     if request.dismiss.unwrap_or(false) {
-        crate::overlay::close(&app);
+        crate::overlay::close(&app, window.label());
         return Ok(());
     }
 
@@ -748,7 +808,7 @@ pub async fn context_menu(
     }
 
     // Page coordinates are relative to the tab webview, which starts below chrome.
-    let win = main_window(&app)?;
+    let win = window_of(&window);
     let (width, height) = crate::window::logical_size(&win)?;
     let menu_w = 232.0;
     let menu_h = 260.0;
@@ -762,7 +822,7 @@ pub async fn context_menu(
         context.image.is_some(),
         context.selection.is_some()
     ));
-    if let Err(err) = crate::overlay::open_at(&app, "context_menu", x, y, menu_w, menu_h) {
+    if let Err(err) = crate::overlay::open_at(&app, &window, "context_menu", x, y, menu_w, menu_h) {
         crate::logging::warn(&format!("context menu overlay failed: {err}"));
         return Err(AppError::new("overlay", err));
     }
@@ -770,7 +830,7 @@ pub async fn context_menu(
 }
 
 #[tauri::command]
-pub async fn menu_context_get(state: State<'_, AppState>) -> Result<MenuContext, AppError> {
+pub async fn menu_context_get(window: tauri::Window, state: State<'_, AppState>) -> Result<MenuContext, AppError> {
     Ok(state.menu_context.read().unwrap_or_else(|e| e.into_inner()).clone())
 }
 
@@ -778,6 +838,7 @@ pub async fn menu_context_get(state: State<'_, AppState>) -> Result<MenuContext,
 #[tauri::command]
 pub async fn permission_request(
     app: AppHandle,
+    window: tauri::Window,
     origin: String,
     kind: String,
 ) -> Result<bool, AppError> {
@@ -787,7 +848,7 @@ pub async fn permission_request(
     }
 
     let (id, receiver) = crate::permissions::open_prompt(&app);
-    let win = main_window(&app)?;
+    let win = window_of(&window);
     let (width, _) = crate::window::logical_size(&win)?;
     let prompt_w = 380.0;
     let prompt_h = 150.0;
@@ -801,6 +862,7 @@ pub async fn permission_request(
 
     crate::overlay::open_url(
         &app,
+        &window,
         &url,
         x,
         crate::window::CHROME_H + 48.0,
@@ -819,50 +881,49 @@ pub async fn permission_request(
     .unwrap_or(false);
 
     crate::permissions::remember(&app, &key, allow);
-    crate::overlay::close(&app);
+    crate::overlay::close(&app, window.label());
     crate::logging::info(&format!("permission {key} -> {allow}"));
     Ok(allow)
 }
 
 #[tauri::command]
-pub async fn permission_reply(app: AppHandle, id: u64, allow: bool) -> Result<(), AppError> {
+pub async fn permission_reply(
+    app: AppHandle,
+    window: tauri::Window,
+    id: u64,
+    allow: bool,
+) -> Result<(), AppError> {
     if !crate::permissions::answer(&app, id, allow) {
         crate::logging::warn(&format!("permission reply for unknown prompt {id}"));
     }
-    crate::overlay::close(&app);
+    crate::overlay::close(&app, window.label());
     Ok(())
 }
 
 #[tauri::command]
-pub async fn settings_get(state: State<'_, AppState>) -> Result<Settings, AppError> {
-    let settings = state
-        .core
-        .read()
-        .unwrap_or_else(|e| e.into_inner())
-        .settings
-        .clone();
-    Ok(settings)
+pub async fn settings_get(window: tauri::Window, state: State<'_, AppState>) -> Result<Settings, AppError> {
+    Ok(state.settings.read().clone())
 }
 
 #[tauri::command]
 pub async fn settings_set(
-    state: State<'_, AppState>,
+    window: tauri::Window, state: State<'_, AppState>,
     patch: SettingsPatch,
 ) -> Result<Settings, AppError> {
     let settings = {
-        let mut core = state.core.write().unwrap_or_else(|e| e.into_inner());
+        let mut guard = state.settings.write();
         if let Some(value) = patch.restore_session {
-            core.settings.restore_session = value;
+            guard.restore_session = value;
         }
         if let Some(value) = patch.start_url {
             if !value.trim().is_empty() {
-                core.settings.start_url = value;
+                guard.start_url = value;
             }
         }
         if let Some(value) = patch.max_live_tabs {
-            core.settings.max_live_tabs = value.clamp(1, 64);
+            guard.max_live_tabs = value.clamp(1, 64);
         }
-        core.settings.clone()
+        guard.clone()
     };
 
     settings.save(&state.dirs.settings_file)?;
@@ -911,7 +972,7 @@ pub async fn snap(app: AppHandle, direction: String) -> Result<(), AppError> {
 }
 
 #[tauri::command]
-pub async fn ext_list(state: State<'_, AppState>) -> Result<Vec<ExtInfo>, AppError> {
+pub async fn ext_list(window: tauri::Window, state: State<'_, AppState>) -> Result<Vec<ExtInfo>, AppError> {
     Ok(state.extensions.clone())
 }
 
@@ -924,8 +985,8 @@ pub struct AppInfo {
 }
 
 #[tauri::command]
-pub async fn zoom_get(state: State<'_, AppState>) -> Result<f64, AppError> {
-    let core = state.core.read().unwrap_or_else(|e| e.into_inner());
+pub async fn zoom_get(window: tauri::Window, state: State<'_, AppState>) -> Result<f64, AppError> {
+    let core = state.read_core(window.label());
     let zoom = core
         .selected
         .as_ref()
@@ -936,31 +997,39 @@ pub async fn zoom_get(state: State<'_, AppState>) -> Result<f64, AppError> {
 }
 
 #[tauri::command]
-pub async fn zoom_step(app: AppHandle, delta: f64) -> Result<f64, AppError> {
+pub async fn zoom_step(app: AppHandle, delta: f64, window: tauri::Window, state: State<'_, AppState>) -> Result<f64, AppError> {
     let current = {
         let state = app.state::<AppState>();
-        let core = state.core.read().unwrap_or_else(|e| e.into_inner());
+        let core = state.read_core(window.label());
         core.selected
             .as_ref()
             .and_then(|id| core.tabs.iter().find(|tab| &tab.id == id))
             .map(|tab| tab.zoom)
             .unwrap_or(1.0)
     };
-    set_zoom(&app, current + delta)?;
+    set_zoom(&app, window.label(), current + delta)?;
     Ok(((current + delta) * 10.0).round() / 10.0)
 }
 
 #[tauri::command]
-pub async fn tab_print(app: AppHandle) -> Result<(), AppError> {
-    if let Some(webview) = app.get_webview(&selected_label(&app)) {
+pub async fn tab_print(
+    app: AppHandle,
+    window: tauri::Window,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    if let Some(webview) = app.get_webview(&selected_label(&state, &window)) {
         webview.print()?;
     }
     Ok(())
 }
 
 #[tauri::command]
-pub async fn window_fullscreen(app: AppHandle, enabled: Option<bool>) -> Result<bool, AppError> {
-    let win = main_window(&app)?;
+pub async fn window_fullscreen(
+    app: AppHandle,
+    window: tauri::Window,
+    enabled: Option<bool>,
+) -> Result<bool, AppError> {
+    let win = window_of(&window);
     let next = enabled.unwrap_or(!win.is_fullscreen()?);
     win.set_fullscreen(next)?;
     Ok(next)
@@ -968,10 +1037,10 @@ pub async fn window_fullscreen(app: AppHandle, enabled: Option<bool>) -> Result<
 
 /// Wipes cookies, storage and caches for every webview we own.
 #[tauri::command]
-pub async fn app_clear_data(app: AppHandle) -> Result<(), AppError> {
+pub async fn app_clear_data(app: AppHandle, window: tauri::Window, state: State<'_, AppState>) -> Result<(), AppError> {
     let labels: Vec<String> = {
         let state = app.state::<AppState>();
-        let core = state.core.read().unwrap_or_else(|e| e.into_inner());
+        let core = state.read_core(window.label());
         core.tabs.iter().map(|tab| tab.id.clone()).collect()
     };
 
@@ -980,7 +1049,7 @@ pub async fn app_clear_data(app: AppHandle) -> Result<(), AppError> {
             let _ = webview.clear_all_browsing_data();
         }
     }
-    for label in ["chrome"] {
+    for label in ["w1-chrome"] {
         if let Some(webview) = app.get_webview(label) {
             let _ = webview.clear_all_browsing_data();
         }
@@ -1007,14 +1076,14 @@ pub(crate) fn record_visit(app: &AppHandle, url: &str, title: &str) {
 }
 
 #[tauri::command]
-pub async fn history_list(state: State<'_, AppState>, limit: Option<usize>) -> Result<Vec<Visit>, AppError> {
+pub async fn history_list(window: tauri::Window, state: State<'_, AppState>, limit: Option<usize>) -> Result<Vec<Visit>, AppError> {
     let visits = state.history.read().unwrap_or_else(|e| e.into_inner());
     let take = limit.unwrap_or(500).min(visits.len());
     Ok(visits.iter().take(take).cloned().collect())
 }
 
 #[tauri::command]
-pub async fn history_clear(state: State<'_, AppState>) -> Result<(), AppError> {
+pub async fn history_clear(window: tauri::Window, state: State<'_, AppState>) -> Result<(), AppError> {
     {
         let mut visits = state.history.write().unwrap_or_else(|e| e.into_inner());
         visits.clear();
@@ -1025,15 +1094,15 @@ pub async fn history_clear(state: State<'_, AppState>) -> Result<(), AppError> {
 }
 
 #[tauri::command]
-pub async fn bookmark_list(state: State<'_, AppState>) -> Result<Vec<Bookmark>, AppError> {
+pub async fn bookmark_list(window: tauri::Window, state: State<'_, AppState>) -> Result<Vec<Bookmark>, AppError> {
     Ok(state.bookmarks.read().unwrap_or_else(|e| e.into_inner()).clone())
 }
 
 /// Toggles the selected tab and reports whether it is bookmarked now.
 #[tauri::command]
-pub async fn bookmark_toggle(app: AppHandle, state: State<'_, AppState>) -> Result<bool, AppError> {
+pub async fn bookmark_toggle(app: AppHandle, window: tauri::Window, state: State<'_, AppState>) -> Result<bool, AppError> {
     let (url, title) = {
-        let core = state.core.read().unwrap_or_else(|e| e.into_inner());
+        let core = state.read_core(window.label());
         match core
             .selected
             .as_ref()
@@ -1058,7 +1127,7 @@ pub async fn bookmark_toggle(app: AppHandle, state: State<'_, AppState>) -> Resu
 #[tauri::command]
 pub async fn bookmark_remove(
     app: AppHandle,
-    state: State<'_, AppState>,
+    window: tauri::Window, state: State<'_, AppState>,
     url: String,
 ) -> Result<(), AppError> {
     let snapshot = {
@@ -1090,8 +1159,8 @@ pub async fn app_info() -> Result<AppInfo, AppError> {
 
 /// Quits for real: the window close button only hides to the tray.
 #[tauri::command]
-pub async fn app_quit(app: AppHandle) -> Result<(), AppError> {
-    save_session(&app);
+pub async fn app_quit(app: AppHandle, window: tauri::Window) -> Result<(), AppError> {
+    save_session(&app, window.label());
     crate::logging::info("quit from the app menu");
     app.exit(0);
     Ok(())
@@ -1105,18 +1174,41 @@ pub async fn ui_log(message: String) -> Result<(), AppError> {
 }
 
 #[tauri::command]
-pub async fn script_list(state: State<'_, AppState>) -> Result<Vec<crate::userscripts::ScriptInfo>, AppError> {
+pub async fn script_list(window: tauri::Window, state: State<'_, AppState>) -> Result<Vec<crate::userscripts::ScriptInfo>, AppError> {
     Ok(state.scripts.clone())
 }
 
+/// Opens another window with its own tab strip.
 #[tauri::command]
-pub async fn overlay_open(app: AppHandle, kind: String) -> Result<(), AppError> {
-    crate::overlay::open(&app, &kind).map_err(|e| AppError::new("overlay", e))
+pub async fn window_new(app: AppHandle, state: State<'_, AppState>) -> Result<String, AppError> {
+    let taken: Vec<String> = state.cores.read().keys().cloned().collect();
+    let mut index = 2;
+    let label = loop {
+        let candidate = format!("w{index}");
+        if !taken.contains(&candidate) {
+            break candidate;
+        }
+        index += 1;
+    };
+
+    let url = state.settings.read().start_url.clone();
+    crate::window::open_window(&app, &label, vec![url], 0, None)?;
+    crate::logging::info(&format!("window {label} opened"));
+    Ok(label)
 }
 
 #[tauri::command]
-pub async fn overlay_close(app: AppHandle) -> Result<(), AppError> {
-    crate::overlay::close(&app);
+pub async fn overlay_open(
+    app: AppHandle,
+    window: tauri::Window,
+    kind: String,
+) -> Result<(), AppError> {
+    crate::overlay::open(&app, &window, &kind).map_err(|e| AppError::new("overlay", e))
+}
+
+#[tauri::command]
+pub async fn overlay_close(app: AppHandle, window: tauri::Window) -> Result<(), AppError> {
+    crate::overlay::close(&app, window.label());
     Ok(())
 }
 
@@ -1132,7 +1224,7 @@ pub struct Paths {
 }
 
 #[tauri::command]
-pub async fn paths_get(state: State<'_, AppState>) -> Result<Paths, AppError> {
+pub async fn paths_get(window: tauri::Window, state: State<'_, AppState>) -> Result<Paths, AppError> {
     let dirs = &state.dirs;
     Ok(Paths {
         root: dirs.root.display().to_string(),
@@ -1146,7 +1238,7 @@ pub async fn paths_get(state: State<'_, AppState>) -> Result<Paths, AppError> {
 }
 
 #[tauri::command]
-pub async fn open_dir(state: State<'_, AppState>, which: String) -> Result<(), AppError> {
+pub async fn open_dir(window: tauri::Window, state: State<'_, AppState>, which: String) -> Result<(), AppError> {
     let dirs = &state.dirs;
     let path = match which.as_str() {
         "userdata" => &dirs.user_data,

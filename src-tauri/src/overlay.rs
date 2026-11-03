@@ -16,8 +16,8 @@ const DEFAULT: (f64, f64) = (420.0, 320.0);
 fn overlay_builder(app: &AppHandle, label: &str, page: &str) -> WebviewBuilder<tauri::Wry> {
     let color = {
         let state = app.state::<crate::ipc::AppState>();
-        let core = state.core.read().unwrap_or_else(|e| e.into_inner());
-        parse_color(&core.theme.colors.chrome)
+        let theme = state.theme.read().clone();
+        parse_color(&theme.colors.chrome)
     };
 
     let builder = WebviewBuilder::new(label, WebviewUrl::App(page.into()))
@@ -52,11 +52,8 @@ fn parse_color(hex: &str) -> tauri::window::Color {
 
 /// The overlay is recreated on every open so it stays above tabs created later:
 /// child webviews stack in creation order and there is no bring-to-front call.
-pub fn open(app: &AppHandle, kind: &str) -> Result<(), String> {
-    let win = app
-        .get_window("main")
-        .ok_or_else(|| "main window missing".to_string())?;
-    let (win_w, win_h) = logical_size(&win).map_err(|e| e.to_string())?;
+pub fn open(app: &AppHandle, win: &tauri::Window, kind: &str) -> Result<(), String> {
+    let (win_w, win_h) = logical_size(win).map_err(|e| e.to_string())?;
 
     // The page can ride along in the hash ("app_menu&page=extensions").
     let base = kind.split('&').next().unwrap_or(kind);
@@ -80,22 +77,20 @@ pub fn open(app: &AppHandle, kind: &str) -> Result<(), String> {
         win.scale_factor().unwrap_or(0.0)
     ));
 
-    open_at(app, kind, x, y, ow, oh)
+    open_at(app, win, kind, x, y, ow, oh)
 }
 
 /// Open a page with the caller-built hash, e.g. "permission&id=1&origin=...".
 pub fn open_url(
     app: &AppHandle,
+    win: &tauri::Window,
     page: &str,
     x: f64,
     y: f64,
     width: f64,
     height: f64,
 ) -> Result<(), String> {
-    let win = app
-        .get_window("main")
-        .ok_or_else(|| "main window missing".to_string())?;
-    close(app);
+    close(app, win.label());
 
     let opts = {
         let state = app.state::<crate::ipc::AppState>();
@@ -106,13 +101,13 @@ pub fn open_url(
     let builder = overlay_builder(app, &label, page);
     let builder = crate::tabs::apply_profile(builder, &opts.ui_data_dir);
 
-    let webview = place(&win, builder, x, y, width, height)?;
+    let webview = place(win, builder, x, y, width, height)?;
 
     let _ = webview.set_focus();
     {
         let state = app.state::<crate::ipc::AppState>();
-        let mut slot = state.overlay.write().unwrap_or_else(|e| e.into_inner());
-        *slot = Some(label.clone());
+        let mut slots = state.overlay.write().unwrap_or_else(|e| e.into_inner());
+        slots.insert(win.label().to_string(), label.clone());
     }
     crate::logging::info(&format!("overlay open {page}"));
     Ok(())
@@ -141,16 +136,14 @@ fn place(
 /// Place the overlay at an exact spot; used by the context menu.
 pub fn open_at(
     app: &AppHandle,
+    win: &tauri::Window,
     kind: &str,
     x: f64,
     y: f64,
     width: f64,
     height: f64,
 ) -> Result<(), String> {
-    let win = app
-        .get_window("main")
-        .ok_or_else(|| "main window missing".to_string())?;
-    close(app);
+    close(app, win.label());
 
     let opts = {
         let state = app.state::<crate::ipc::AppState>();
@@ -164,23 +157,23 @@ pub fn open_at(
     let builder = overlay_builder(app, &label, &page);
     let builder = crate::tabs::apply_profile(builder, &opts.ui_data_dir);
 
-    let webview = place(&win, builder, x, y, width, height)?;
+    let webview = place(win, builder, x, y, width, height)?;
 
     let _ = webview.set_focus();
     {
         let state = app.state::<crate::ipc::AppState>();
-        let mut slot = state.overlay.write().unwrap_or_else(|e| e.into_inner());
-        *slot = Some(label.clone());
+        let mut slots = state.overlay.write().unwrap_or_else(|e| e.into_inner());
+        slots.insert(win.label().to_string(), label.clone());
     }
     crate::logging::info(&format!("overlay open {kind} at {x:.0},{y:.0}"));
     Ok(())
 }
 
-pub fn close(app: &AppHandle) {
+pub fn close(app: &AppHandle, window_label: &str) {
     let label = {
         let state = app.state::<crate::ipc::AppState>();
-        let mut slot = state.overlay.write().unwrap_or_else(|e| e.into_inner());
-        slot.take()
+        let mut slots = state.overlay.write().unwrap_or_else(|e| e.into_inner());
+        slots.remove(window_label)
     };
 
     if let Some(label) = label {
