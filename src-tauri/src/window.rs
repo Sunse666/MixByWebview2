@@ -38,21 +38,33 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
     };
 
     let restored = if restore {
-        crate::session::Session::load(&session_file).filter(|session| !session.tabs.is_empty())
+        crate::session::Session::load(&session_file)
     } else {
         None
     };
 
-    let geometry = restored.as_ref().and_then(|session| session.window.clone());
-    let (urls, selected_index) = match restored {
+    match restored {
         Some(session) => {
-            let index = session.selected.min(session.tabs.len() - 1);
-            (session.tabs, index)
+            for (index, window) in session.windows.iter().enumerate() {
+                let label = if index == 0 {
+                    PRIMARY.to_string()
+                } else {
+                    format!("w{}", index + 1)
+                };
+                let selected = window.selected.min(window.tabs.len().saturating_sub(1));
+                open_window(
+                    app.handle(),
+                    &label,
+                    window.tabs.clone(),
+                    selected,
+                    window.window.clone(),
+                )?;
+            }
         }
-        None => (vec![start_url], 0),
-    };
-
-    open_window(app.handle(), PRIMARY, urls, selected_index, geometry)?;
+        None => {
+            open_window(app.handle(), PRIMARY, vec![start_url], 0, None)?;
+        }
+    }
 
     crate::snap::install_hotkeys(app.handle());
     crate::tray::install(&app.handle().clone())?;
@@ -208,7 +220,7 @@ pub fn open_window(
         }
         // The primary window hides to the tray; extra windows just close.
         WindowEvent::CloseRequested { api, .. } => {
-            crate::ipc::save_session(&handle, &owner);
+            crate::ipc::save_sessions(&handle);
             if owner == PRIMARY {
                 api.prevent_close();
                 if let Some(win) = handle.get_window(PRIMARY) {
@@ -233,6 +245,8 @@ pub fn open_window(
 
     win.show()?;
     win.set_focus()?;
+    // Persist right away so a window opened now survives a kill or a crash.
+    crate::ipc::save_sessions(app);
     Ok(win)
 }
 

@@ -305,28 +305,36 @@ fn window_geometry(app: &AppHandle, label: &str) -> Option<crate::session::Windo
     })
 }
 
-pub(crate) fn save_session(app: &AppHandle, label: &str) {
-    let Some(state) = app.try_state::<AppState>() else {
-        return;
-    };
-    let session = {
-        let core = state.read_core(label);
+/// Writes every window (tabs, selected index, geometry) to session.json.
+pub(crate) fn save_sessions(app: &AppHandle) {
+    let state = app.state::<AppState>();
+
+    let mut windows: Vec<crate::session::WindowSession> = Vec::new();
+    for (label, core) in state.cores.read().iter() {
+        let tabs: Vec<String> = core
+            .tabs
+            .iter()
+            .filter(|tab| !tab.incognito)
+            .map(|tab| tab.url.clone())
+            .collect();
+        if tabs.is_empty() {
+            continue;
+        }
         let selected = core
             .selected
             .as_ref()
             .and_then(|id| core.tabs.iter().position(|tab| &tab.id == id))
             .unwrap_or(0);
-        crate::session::Session {
-            schema_version: crate::session::SCHEMA,
-            tabs: core
-                .tabs
-                .iter()
-                .filter(|tab| !tab.incognito)
-                .map(|tab| tab.url.clone())
-                .collect(),
+        windows.push(crate::session::WindowSession {
+            tabs,
             selected,
             window: window_geometry(app, label),
-        }
+        });
+    }
+
+    let session = crate::session::Session {
+        schema_version: crate::session::SCHEMA,
+        windows,
     };
     if let Err(err) = session.save(&state.dirs.session_file) {
         crate::logging::warn(&format!("session save failed: {err}"));
@@ -493,7 +501,7 @@ pub async fn tab_new(
     sync_visibility(&app, window.label());
     enforce_live_limit(&app, window.label());
     emit_tabs(&app, window.label());
-    save_session(&app, window.label());
+    save_sessions(&app);
     Ok(id)
 }
 
@@ -520,7 +528,7 @@ pub async fn tab_close(app: AppHandle, window: tauri::Window, state: State<'_, A
 
     sync_visibility(&app, window.label());
     emit_tabs(&app, window.label());
-    save_session(&app, window.label());
+    save_sessions(&app);
     Ok(())
 }
 
@@ -1160,7 +1168,7 @@ pub async fn app_info() -> Result<AppInfo, AppError> {
 /// Quits for real: the window close button only hides to the tray.
 #[tauri::command]
 pub async fn app_quit(app: AppHandle, window: tauri::Window) -> Result<(), AppError> {
-    save_session(&app, window.label());
+    save_sessions(&app);
     crate::logging::info("quit from the app menu");
     app.exit(0);
     Ok(())
