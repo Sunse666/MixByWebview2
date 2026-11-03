@@ -97,6 +97,7 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
                 url: url.clone(),
                 title: "New tab".into(),
                 zoom: 1.0,
+                incognito: false,
                 alive: true,
                 last_active: index as u64,
             })
@@ -118,7 +119,7 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
 
     for (index, url) in urls.iter().enumerate() {
         let id = format!("tab-{}", index + 1);
-        tabs::create(&win, &id, url, width, height - CHROME_H, &opts)?;
+        tabs::create(&win, &id, url, width, height - CHROME_H, &opts, false)?;
     }
 
     let handle = app.handle().clone();

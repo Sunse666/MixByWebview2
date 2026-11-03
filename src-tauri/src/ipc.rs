@@ -139,6 +139,7 @@ pub struct TabMeta {
     url: String,
     title: String,
     alive: bool,
+    incognito: bool,
 }
 
 #[derive(Clone, Serialize)]
@@ -163,6 +164,7 @@ fn snapshot(core: &Core) -> TabList {
                 url: tab.url.clone(),
                 title: tab.title.clone(),
                 alive: tab.alive,
+                incognito: tab.incognito,
             })
             .collect(),
         selected: core.selected.clone(),
@@ -266,7 +268,12 @@ pub(crate) fn save_session(app: &AppHandle) {
             .unwrap_or(0);
         crate::session::Session {
             schema_version: crate::session::SCHEMA,
-            tabs: core.tabs.iter().map(|tab| tab.url.clone()).collect(),
+            tabs: core
+                .tabs
+                .iter()
+                .filter(|tab| !tab.incognito)
+                .map(|tab| tab.url.clone())
+                .collect(),
             selected,
             window: window_geometry(app),
         }
@@ -276,7 +283,12 @@ pub(crate) fn save_session(app: &AppHandle) {
     }
 }
 
-fn spawn_tab(app: &AppHandle, id: &str, url: &str) -> Result<(), AppError> {
+fn spawn_tab(
+    app: &AppHandle,
+    id: &str,
+    url: &str,
+    incognito: bool,
+) -> Result<(), AppError> {
     let win = main_window(app)?;
     let opts = app.state::<AppState>().opts.clone();
     let (width, height) = crate::window::logical_size(&win)?;
@@ -287,6 +299,7 @@ fn spawn_tab(app: &AppHandle, id: &str, url: &str) -> Result<(), AppError> {
         width,
         (height - crate::window::CHROME_H).max(1.0),
         &opts,
+        incognito,
     )?;
     Ok(())
 }
@@ -392,6 +405,7 @@ pub async fn tab_new(
     app: AppHandle,
     state: State<'_, AppState>,
     url: Option<String>,
+    incognito: Option<bool>,
 ) -> Result<String, AppError> {
     let (id, target) = {
         let mut core = state.core.write().unwrap_or_else(|e| e.into_inner());
@@ -403,8 +417,13 @@ pub async fn tab_new(
         core.tabs.push(Tab {
             id: id.clone(),
             url: target.clone(),
-            title: "New tab".into(),
+            title: if incognito.unwrap_or(false) {
+                "Incognito".into()
+            } else {
+                "New tab".into()
+            },
             zoom: 1.0,
+            incognito: incognito.unwrap_or(false),
             alive: true,
             last_active: tick,
         });
@@ -412,7 +431,7 @@ pub async fn tab_new(
         (id, target)
     };
 
-    spawn_tab(&app, &id, &target)?;
+    spawn_tab(&app, &id, &target, incognito.unwrap_or(false))?;
     crate::logging::info(&format!("tab created {id} -> {target}"));
     sync_visibility(&app);
     enforce_live_limit(&app);
@@ -438,7 +457,7 @@ pub async fn tab_close(app: AppHandle, state: State<'_, AppState>, id: String) -
 
     // Closing the last tab shows a fresh one instead of quitting.
     if remaining == 0 {
-        let _ = tab_new(app, state, Some(next_url)).await;
+        let _ = tab_new(app, state, Some(next_url), None).await;
         return Ok(());
     }
 
@@ -585,7 +604,10 @@ pub async fn shortcut(app: AppHandle, state: State<'_, AppState>, action: String
     crate::logging::info(&format!("shortcut {action}"));
     match action.as_str() {
         "new_tab" => {
-            tab_new(app, state, None).await?;
+            tab_new(app, state, None, None).await?;
+        }
+        "new_incognito" => {
+            tab_new(app, state, None, Some(true)).await?;
         }
         "close_tab" => {
             let id = selected_label(&app);

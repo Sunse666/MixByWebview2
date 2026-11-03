@@ -25,7 +25,7 @@ const SHORTCUT_FORWARDER: &str = r#"
     var ctrl = event.ctrlKey || event.metaKey;
     if (!ctrl) return null;
     switch (event.key) {
-      case "t": return event.shiftKey ? null : "new_tab";
+      case "t": return event.shiftKey ? "new_incognito" : "new_tab";
       case "w": return "close_tab";
       case "l": return "focus_url";
       case "r": return "reload";
@@ -189,6 +189,8 @@ pub struct Tab {
     pub url: String,
     pub title: String,
     pub zoom: f64,
+    /// Incognito tabs never touch the shared profile and are not restored.
+    pub incognito: bool,
     /// False means the webview was dropped to save memory; selecting the tab
     /// recreates it from url.
     pub alive: bool,
@@ -222,11 +224,16 @@ pub fn create(
     width: f64,
     height: f64,
     opts: &WebviewOpts,
+    incognito: bool,
 ) -> tauri::Result<Webview> {
     let app = win.app_handle().clone();
     let builder = WebviewBuilder::new(id, WebviewUrl::External(parse_url(url)))
         // WebView2 keeps ctrl+wheel zoom off unless asked (M0 E2).
         .zoom_hotkeys_enabled(true)
+        // Form autofill stands in for a password vault: WebView2 does not expose one.
+        .general_autofill_enabled(true)
+        // Incognito tabs get their own store and never reach the shared profile.
+        .incognito(incognito)
         .on_download(crate::downloads::handle)
         // target=_blank and window.open land here. Creating a webview on this
         // thread would deadlock, so the chrome ui opens the tab for us.

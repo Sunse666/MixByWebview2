@@ -54,6 +54,7 @@ function renderTabs() {
     const classes = ["tab"];
     if (tab.id === selected) classes.push("active");
     if (!tab.alive) classes.push("suspended");
+    if (tab.incognito) classes.push("incognito");
     el.className = classes.join(" ");
     el.title = tab.url;
 
@@ -166,7 +167,7 @@ async function boot() {
     else if (event.key === "F12") action = "devtools";
     else if (event.ctrlKey || event.metaKey) {
       switch (event.key) {
-        case "t": action = "new_tab"; break;
+        case "t": action = event.shiftKey ? "new_incognito" : "new_tab"; break;
         case "w": action = "close_tab"; break;
         case "l": action = "focus_url"; break;
         case "r": action = "reload"; break;

@@ -89,6 +89,11 @@ button {
 
 .tab.suspended .tab-title { opacity: 0.45; font-style: italic; }
 
+.tab.incognito {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+  background: color-mix(in srgb, var(--panel) 60%, #4a4f8a 40%);
+}
+
 .tab.active {
   opacity: 1;
   border-color: var(--border);
