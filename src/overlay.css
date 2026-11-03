@@ -121,3 +121,31 @@ footer { margin-top: auto; display: flex; justify-content: flex-end; gap: 8px; }
 }
 
 .toggle input { accent-color: var(--accent); }
+.ext-title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-weight: 600;
+}
+
+.ext-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+.ext-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 3px 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+}
+
+.ext-list li:last-child { border-bottom: 0; }
+
+.ext-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ext-state { opacity: 0.7; flex: 0 0 auto; }
+.ext-state.error { color: #ff6b6b; opacity: 1; }

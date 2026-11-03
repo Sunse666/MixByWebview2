@@ -223,6 +223,8 @@ pub fn create(
         .on_download(crate::downloads::handle)
         .initialization_script(SHORTCUT_FORWARDER)
         .on_document_title_changed(|webview, title| {
+            #[cfg(debug_assertions)]
+            crate::logging::info(&format!("tab title: {title}"));
             let app = webview.app_handle().clone();
             let payload = TitlePayload {
                 id: webview.label().to_string(),

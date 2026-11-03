@@ -34,9 +34,20 @@ pub fn scan(dirs: &AppDirs) -> Vec<ExtInfo> {
     let mut found = Vec::new();
     for entry in entries.flatten() {
         let source = entry.path();
-        if source.extension().and_then(|ext| ext.to_str()) != Some("crx") {
+        let is_crx = source.extension().and_then(|ext| ext.to_str()) == Some("crx");
+        let is_unpacked = source.is_dir() && source.join("manifest.json").is_file();
+
+        if !is_crx && !is_unpacked {
+            // Say something: a silently ignored folder looks like a broken feature.
+            if source.is_dir() {
+                crate::logging::warn(&format!(
+                    "extension folder {} has no manifest.json, ignored",
+                    source.display()
+                ));
+            }
             continue;
         }
+
         let label = source
             .file_stem()
             .and_then(|stem| stem.to_str())
@@ -49,7 +60,13 @@ pub fn scan(dirs: &AppDirs) -> Vec<ExtInfo> {
             continue;
         }
 
-        match install(&source, &target) {
+        let outcome = if is_crx {
+            install_crx(&source, &target)
+        } else {
+            install_dir(&source, &target)
+        };
+
+        match outcome {
             Ok((manifest, status, reason)) => {
                 crate::logging::info(&format!(
                     "extension {label}: {} v{} ({status})",
@@ -82,7 +99,82 @@ pub fn scan(dirs: &AppDirs) -> Vec<ExtInfo> {
     found
 }
 
-fn install(source: &Path, target: &Path) -> Result<(Manifest, String, String), String> {
+/// Unpacked folders are used as-is: copy only when the source is newer, so the
+/// user can keep editing their own copy.
+fn install_dir(source: &Path, target: &Path) -> Result<(Manifest, String, String), String> {
+    let manifest = read_manifest(source)?;
+    if manifest.manifest_version == 3 {
+        if !is_fresh(source, target) {
+            copy_tree(source, target)?;
+        }
+        Ok((manifest, "loaded".into(), String::new()))
+    } else {
+        let reason = format!(
+            "Manifest V{} is not supported by WebView2; convert it to a userscript",
+            manifest.manifest_version
+        );
+        Ok((manifest, "skipped".into(), reason))
+    }
+}
+
+fn is_fresh(source: &Path, target: &Path) -> bool {
+    let source_stamp = std::fs::metadata(source.join("manifest.json"))
+        .and_then(|meta| meta.modified())
+        .ok();
+    let target_stamp = std::fs::metadata(target.join("manifest.json"))
+        .and_then(|meta| meta.modified())
+        .ok();
+    match (source_stamp, target_stamp) {
+        (Some(source), Some(target)) => target >= source,
+        _ => false,
+    }
+}
+
+fn copy_tree(source: &Path, target: &Path) -> Result<(), String> {
+    if target.exists() {
+        std::fs::remove_dir_all(target).map_err(|err| format!("cannot reset target: {err}"))?;
+    }
+    let mut budget = Budget {
+        files: 0,
+        bytes: 0,
+    };
+    copy_dir(source, target, &mut budget, 0)
+}
+
+struct Budget {
+    files: usize,
+    bytes: u64,
+}
+
+const MAX_FILES: usize = 10_000;
+const MAX_BYTES: u64 = 512 * 1024 * 1024;
+
+fn copy_dir(from: &Path, to: &Path, budget: &mut Budget, depth: usize) -> Result<(), String> {
+    if depth > 16 {
+        return Err("extension folder is nested too deeply".into());
+    }
+    std::fs::create_dir_all(to).map_err(|err| format!("mkdir failed: {err}"))?;
+
+    for entry in std::fs::read_dir(from).map_err(|err| format!("read_dir failed: {err}"))?.flatten() {
+        let path = entry.path();
+        let name = entry.file_name();
+        let destination = to.join(&name);
+        if path.is_dir() {
+            copy_dir(&path, &destination, budget, depth + 1)?;
+        } else {
+            budget.files += 1;
+            let size = entry.metadata().map(|meta| meta.len()).unwrap_or(0);
+            budget.bytes = budget.bytes.saturating_add(size);
+            if budget.files > MAX_FILES || budget.bytes > MAX_BYTES {
+                return Err("extension folder is too large".into());
+            }
+            std::fs::copy(&path, &destination).map_err(|err| format!("copy failed: {err}"))?;
+        }
+    }
+    Ok(())
+}
+
+fn install_crx(source: &Path, target: &Path) -> Result<(Manifest, String, String), String> {
     let bytes = std::fs::read(source).map_err(|err| format!("cannot read file: {err}"))?;
     let parsed = crx::parse(&bytes)?;
 

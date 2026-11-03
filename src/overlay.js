@@ -204,6 +204,29 @@ async function boot() {
   render(current);
 
   autostartBox.checked = await invoke("autostart_get");
+
+  const extensionList = document.getElementById("extensions");
+  const loaded = await invoke("ext_list");
+  if (!loaded.length) {
+    const empty = document.createElement("li");
+    empty.textContent = "none loaded";
+    extensionList.append(empty);
+  }
+  for (const extension of loaded) {
+    const item = document.createElement("li");
+    const name = document.createElement("span");
+    name.className = "ext-name";
+    name.textContent = extension.version
+      ? `${extension.name} v${extension.version}`
+      : extension.name;
+    name.title = extension.reason || extension.dir;
+    const state = document.createElement("span");
+    state.className = extension.status === "error" ? "ext-state error" : "ext-state";
+    state.textContent = extension.status;
+    item.append(name, state);
+    extensionList.append(item);
+  }
+
   const settings = await invoke("settings_get");
   restoreBox.checked = !!settings.restore_session;
 
