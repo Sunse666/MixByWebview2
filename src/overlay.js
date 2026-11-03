@@ -182,6 +182,12 @@ async function bootAppMenu() {
   row("\u2699", "Userscripts folder", "", act(() => invoke("open_dir", { which: "scripts" })));
   row("\u2261", "Data folder", "", act(() => invoke("open_dir", { which: "userdata" })));
   row("\u26a0", "Logs", "", act(() => invoke("open_dir", { which: "logs" })));
+  row("\u2691", "Export diagnostics", "", async () => {
+    const path = await invoke("diag_export");
+    report(`diagnostics saved to ${path}`);
+    await invoke("open_dir", { which: "diag" });
+    await close();
+  });
 
   appMenu.append(document.createElement("hr"));
 

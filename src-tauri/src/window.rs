@@ -168,6 +168,18 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
         });
     }
 
+    #[cfg(debug_assertions)]
+    if std::env::var("MIX_DIAG_ON_START").is_ok() {
+        let handle = app.handle().clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(2500));
+            match crate::diag::export(&handle) {
+                Ok(path) => crate::logging::info(&format!("debug diag: {}", path.display())),
+                Err(err) => crate::logging::warn(&format!("debug diag failed: {err}")),
+            }
+        });
+    }
+
     crate::logging::info("main window ready");
     Ok(())
 }

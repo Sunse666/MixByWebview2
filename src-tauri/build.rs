@@ -37,6 +37,7 @@ fn main() {
         "tab_print",
         "window_fullscreen",
         "app_clear_data",
+        "diag_export",
         "app_info",
         "app_quit",
         "download_list",

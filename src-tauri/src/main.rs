@@ -1,5 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod diag;
 mod downloads;
 mod extensions;
 mod ipc;
@@ -79,6 +80,7 @@ fn main() {
             ipc::tab_print,
             ipc::window_fullscreen,
             ipc::app_clear_data,
+            ipc::diag_export,
             ipc::app_info,
             ipc::app_quit,
             ipc::shortcut,

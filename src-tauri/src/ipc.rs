@@ -957,6 +957,13 @@ pub async fn app_clear_data(app: AppHandle) -> Result<(), AppError> {
 }
 
 #[tauri::command]
+pub async fn diag_export(app: AppHandle) -> Result<String, AppError> {
+    let path = crate::diag::export(&app).map_err(|err| AppError::new("diag", err))?;
+    crate::logging::info(&format!("diagnostics written: {}", path.display()));
+    Ok(path.display().to_string())
+}
+
+#[tauri::command]
 pub async fn app_info() -> Result<AppInfo, AppError> {
     Ok(AppInfo {
         version: env!("CARGO_PKG_VERSION"),
@@ -1031,6 +1038,7 @@ pub async fn open_dir(state: State<'_, AppState>, which: String) -> Result<(), A
         "scripts" => &dirs.scripts,
         "logs" => &dirs.logs,
         "downloads" => &dirs.downloads,
+        "diag" => &dirs.diag,
         other => return Err(AppError::new("bad_dir", other)),
     };
     reveal(path)?;
