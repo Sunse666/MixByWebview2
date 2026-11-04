@@ -241,6 +241,8 @@ pub fn create(
     let builder = WebviewBuilder::new(id, WebviewUrl::External(parse_url(url)))
         // WebView2 keeps ctrl+wheel zoom off unless asked (M0 E2).
         .zoom_hotkeys_enabled(true)
+        // Without this wry leaves AreDevToolsEnabled off and open_devtools is a no-op.
+        .devtools(true)
         // Form autofill stands in for a password vault: WebView2 does not expose one.
         .general_autofill_enabled(true)
         // Incognito tabs get their own store and never reach the shared profile.

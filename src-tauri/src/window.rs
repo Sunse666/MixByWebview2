@@ -120,7 +120,8 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
         });
     }
 
-    #[cfg(debug_assertions)]
+    // Support hook: MIX_DEVTOOLS=1 opens devtools on the selected tab. Kept in
+    // release builds so a broken F12 can be told apart from a broken shortcut.
     if std::env::var("MIX_DEVTOOLS").is_ok() {
         let handle = app.handle().clone();
         std::thread::spawn(move || {
@@ -212,7 +213,8 @@ pub fn open_window(
         WebviewBuilder::new(
             format!("{label}-chrome"),
             WebviewUrl::App("index.html".into()),
-        ),
+        )
+        .devtools(true),
         &opts.ui_data_dir,
     );
 

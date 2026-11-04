@@ -22,6 +22,7 @@ fn overlay_builder(app: &AppHandle, label: &str, page: &str) -> WebviewBuilder<t
 
     let builder = WebviewBuilder::new(label, WebviewUrl::App(page.into()))
         .background_color(color)
+        .devtools(true)
         .focused(true);
 
     #[cfg(any(target_os = "macos", target_os = "linux"))]
