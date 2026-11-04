@@ -33,8 +33,10 @@ const SHORTCUT_FORWARDER: &str = r#"
     if (event.key === "F12") return "devtools";
     var ctrl = event.ctrlKey || event.metaKey;
     if (!ctrl) return null;
-    switch (event.key) {
-      case "t": return event.shiftKey ? "new_incognito" : "new_tab";
+    // Shift turns "t" into "T"; the switch is keyed on the lower-case letter.
+    var key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
+    switch (key) {
+      case "t": return event.shiftKey ? "reopen_tab" : "new_tab";
       case "w": return "close_tab";
       case "l": return "focus_url";
       case "r": return "reload";
@@ -46,7 +48,7 @@ const SHORTCUT_FORWARDER: &str = r#"
       case "p": return "print";
       case "j": return "downloads";
       case "d": return "bookmark";
-      case "n": return "new_window";
+      case "n": return event.shiftKey ? "new_incognito" : "new_window";
       default: return null;
     }
   };
@@ -238,6 +240,7 @@ pub fn create(
     incognito: bool,
 ) -> tauri::Result<Webview> {
     let app = win.app_handle().clone();
+    let owner = crate::ipc::window_of_tab(id).to_string();
     let builder = WebviewBuilder::new(id, WebviewUrl::External(parse_url(url)))
         // WebView2 keeps ctrl+wheel zoom off unless asked (M0 E2).
         .zoom_hotkeys_enabled(true)
@@ -251,7 +254,8 @@ pub fn create(
         // target=_blank and window.open land here. Creating a webview on this
         // thread would deadlock, so the chrome ui opens the tab for us.
         .on_new_window(move |url, _features| {
-            let _ = app.emit("ui:open-url", url.to_string());
+            // Only the window that owns this tab should open the new one.
+            let _ = app.emit_to(owner.clone(), "ui:open-url", url.to_string());
             tauri::webview::NewWindowResponse::Deny
         })
         .initialization_script(SHORTCUT_FORWARDER)
@@ -271,7 +275,19 @@ pub fn create(
                     }
                 }
             }
-            let _ = app.emit("tab:title", payload);
+            let owner = crate::ipc::window_of_tab(&payload.id).to_string();
+
+            // The window title follows the selected tab, like any browser.
+            let selected = app
+                .try_state::<crate::ipc::AppState>()
+                .and_then(|state| state.try_read_core(&owner).and_then(|core| core.selected.clone()));
+            if selected.as_deref() == Some(payload.id.as_str()) {
+                if let Some(win) = app.get_window(&owner) {
+                    let _ = win.set_title(&format!("{} - Mix", payload.title));
+                }
+            }
+
+            let _ = app.emit_to(owner, "tab:title", payload);
         });
 
     let builder = if opts.userscripts.is_empty() {

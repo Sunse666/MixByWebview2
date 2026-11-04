@@ -36,7 +36,7 @@ pub struct SnapState {
 const DEBOUNCE: Duration = Duration::from_millis(160);
 
 pub fn cycle(app: &AppHandle, direction: Direction) -> Result<(), String> {
-    let Some(win) = app.get_window("main") else {
+    let Some(win) = crate::ipc::focused_window(app) else {
         return Err("no main window".into());
     };
 

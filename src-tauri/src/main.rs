@@ -60,7 +60,6 @@ fn main() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            ipc::layout_get,
             ipc::window_control,
             ipc::window_drag,
             ipc::window_resize,
@@ -89,6 +88,7 @@ fn main() {
             ipc::suggest_feed,
             ipc::suggest_refresh,
             ipc::overlay_toggle,
+            ipc::tab_reopen,
             ipc::window_new,
             ipc::history_list,
             ipc::history_clear,
@@ -110,7 +110,6 @@ fn main() {
             ipc::menu_context_get,
             ipc::download_list,
             ipc::download_open_dir,
-            ipc::paths_get,
             ipc::open_dir,
         ])
         .run(tauri::generate_context!())

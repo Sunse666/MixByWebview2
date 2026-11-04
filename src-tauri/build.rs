@@ -12,7 +12,6 @@ fn main() {
     // Declaring the commands here turns them into ACL permissions, which lets
     // remote pages be granted a single command (see capabilities/remote.json).
     let commands: &'static [&'static str] = &[
-        "layout_get",
         "window_control",
         "window_drag",
         "window_resize",
@@ -27,7 +26,6 @@ fn main() {
         "theme_revert",
         "overlay_open",
         "overlay_close",
-        "paths_get",
         "open_dir",
         "ext_list",
         "script_list",
@@ -43,6 +41,7 @@ fn main() {
         "suggest_feed",
         "suggest_refresh",
         "overlay_toggle",
+        "tab_reopen",
         "window_new",
         "history_list",
         "history_clear",

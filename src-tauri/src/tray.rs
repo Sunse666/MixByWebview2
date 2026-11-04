@@ -25,8 +25,12 @@ pub fn install(app: &AppHandle) -> tauri::Result<()> {
             "new-tab" => {
                 crate::window::show_or_focus(app);
                 // Creating a webview from this thread would deadlock on Windows,
-                // so the chrome UI opens the tab for us.
-                let _ = app.emit("ui:new-tab", ());
+                // so the chrome UI opens the tab for us. Only the focused window
+                // should react.
+                let target = crate::ipc::focused_window(app)
+                    .map(|win| win.label().to_string())
+                    .unwrap_or_else(|| crate::window::PRIMARY.to_string());
+                let _ = app.emit_to(target, "ui:new-tab", ());
             }
             "quit" => {
                 crate::ipc::save_sessions(&app);

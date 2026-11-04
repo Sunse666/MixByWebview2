@@ -10,7 +10,6 @@
   ],
   "permissions": [
     "core:default",
-    "allow-layout-get",
     "allow-window-control",
     "allow-window-drag",
     "allow-window-resize",
@@ -25,7 +24,6 @@
     "allow-theme-revert",
     "allow-overlay-open",
     "allow-overlay-close",
-    "allow-paths-get",
     "allow-open-dir",
     "allow-ext-list",
     "allow-script-list",
@@ -41,6 +39,7 @@
     "allow-suggest-feed",
     "allow-suggest-refresh",
     "allow-overlay-toggle",
+    "allow-tab-reopen",
     "allow-window-new",
     "allow-history-list",
     "allow-history-clear",

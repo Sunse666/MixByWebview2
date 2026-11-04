@@ -161,6 +161,10 @@ async function bootAppMenu() {
       row("+", "New tab", "Ctrl+T", act(() => invoke("tab_new", {})));
       row("\u25a2", "New window", "Ctrl+N", act(() => invoke("window_new")));
       row("\u25d1", "New incognito tab", "Ctrl+Shift+N", act(() => invoke("tab_new", { incognito: true })));
+      row("\u21ba", "Reopen closed tab", "Ctrl+Shift+T", async () => {
+        await invoke("tab_reopen");
+        await close();
+      });
       row("\u2193", "Downloads", "Ctrl+J", act(() => invoke("open_dir", { which: "downloads" })));
       divider();
 
@@ -397,6 +401,7 @@ async function bootAppMenu() {
         ["Ctrl+T", "New tab"],
         ["Ctrl+N", "New window"],
         ["Ctrl+Shift+N", "New incognito tab"],
+        ["Ctrl+Shift+T", "Reopen closed tab"],
         ["Ctrl+W", "Close tab"],
         ["Ctrl+Tab", "Next tab"],
         ["Ctrl+Shift+Tab", "Previous tab"],
@@ -405,6 +410,7 @@ async function bootAppMenu() {
         ["Ctrl+P", "Print"],
         ["Ctrl+J", "Open downloads"],
         ["Ctrl+D", "Bookmark this page"],
+        ["Middle click", "Close tab"],
         ["Ctrl+\u00b1", "Zoom in / out"],
         ["Ctrl+0", "Reset zoom"],
         ["F11", "Full screen"],

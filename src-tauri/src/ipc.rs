@@ -35,6 +35,8 @@ pub struct AppState {
     pub history: RwLock<Vec<Visit>>,
     pub suggest_text: parking_lot::RwLock<String>,
     pub suggest_width: parking_lot::RwLock<f64>,
+    /// Recently closed tabs, newest last, so Ctrl+Shift+T can bring them back.
+    pub closed_tabs: RwLock<Vec<(String, String)>>,
     pub bookmarks: RwLock<Vec<Bookmark>>,
     pub scripts: Vec<crate::userscripts::ScriptInfo>,
 }
@@ -64,6 +66,7 @@ impl AppState {
             history: RwLock::new(history),
             suggest_text: parking_lot::RwLock::new(String::new()),
             suggest_width: parking_lot::RwLock::new(420.0),
+            closed_tabs: RwLock::new(Vec::new()),
             bookmarks: RwLock::new(bookmarks),
             scripts,
             dirs,
@@ -174,6 +177,14 @@ impl From<serde_json::Error> for AppError {
     }
 }
 
+/// The window the user is working in; falls back to the primary one.
+pub fn focused_window(app: &AppHandle) -> Option<tauri::Window> {
+    app.windows()
+        .into_values()
+        .find(|win| win.is_focused().unwrap_or(false))
+        .or_else(|| app.get_window("w1"))
+}
+
 fn window_of(window: &tauri::Window) -> tauri::Window {
     window.clone()
 }
@@ -232,7 +243,7 @@ pub(crate) fn emit_tabs(app: &AppHandle, label: &str) {
         let core = state.read_core(label);
         snapshot(&core)
     };
-    let _ = app.emit("tabs:changed", list);
+    let _ = app.emit_to(label, "tabs:changed", list);
 }
 
 /// Only the selected tab is visible; the rest keep running underneath.
@@ -289,7 +300,7 @@ pub(crate) fn enforce_live_limit(app: &AppHandle, label: &str) {
                     let _ = webview.close();
                 }
                 crate::logging::info(&format!("suspended {id}"));
-                let _ = app.emit("tab:suspended", &id);
+                let _ = app.emit_to(crate::ipc::window_of_tab(&id), "tab:suspended", &id);
             }
             None => return,
         }
@@ -351,7 +362,7 @@ fn spawn_tab(
     id: &str,
     url: &str,
     incognito: bool,
-) -> Result<(), AppError> {
+) -> Result<tauri::Webview, AppError> {
     let win = app
         .get_window(label)
         .ok_or_else(|| AppError::new("no_window", "window is missing"))?;
@@ -365,9 +376,10 @@ fn spawn_tab(
         (height - crate::window::CHROME_H).max(1.0),
         &opts,
         incognito,
-    )?;
-    Ok(())
+    )
+    .map_err(AppError::from)
 }
+
 
 #[derive(Serialize)]
 pub struct Layout {
@@ -378,22 +390,7 @@ pub struct Layout {
     selected: Option<String>,
 }
 
-#[tauri::command]
-pub async fn layout_get(_app: AppHandle, window: tauri::Window, state: State<'_, AppState>) -> Result<Layout, AppError> {
-    let win = window_of(&window);
-    let (width, height) = crate::window::logical_size(&win)?;
-    let (chrome_height, selected) = {
-        let core = state.read_core(window.label());
-        (state.settings.read().chrome_height, core.selected.clone())
-    };
-    Ok(Layout {
-        chrome_height,
-        width,
-        height,
-        scale: win.scale_factor()?,
-        selected,
-    })
-}
+
 
 #[tauri::command]
 pub async fn window_control(
@@ -479,7 +476,8 @@ pub async fn tab_new(
     let (id, target) = {
         let mut core = state.write_core(window.label());
         core.next_tab_id += 1;
-        let id = format!("tab-{}", core.next_tab_id);
+        // Labels carry the window so per-window lookups keep working.
+    let id = tab_label(window.label(), core.next_tab_id);
         let target = url.unwrap_or_else(|| state.settings.read().start_url.clone());
         core.tick += 1;
         let tick = core.tick;
@@ -500,7 +498,8 @@ pub async fn tab_new(
         (id, target)
     };
 
-    spawn_tab(&app, window.label(), &id, &target, incognito.unwrap_or(false))?;
+    let created = spawn_tab(&app, window.label(), &id, &target, incognito.unwrap_or(false))?;
+    let _ = created.set_focus();
     crate::logging::info(&format!("tab created {id} -> {target}"));
     sync_visibility(&app, window.label());
     enforce_live_limit(&app, window.label());
@@ -517,6 +516,16 @@ pub async fn tab_close(app: AppHandle, window: tauri::Window, state: State<'_, A
 
     let (remaining, next_url) = {
         let mut core = state.write_core(window.label());
+        if let Some(index) = core.tabs.iter().position(|tab| tab.id == id) {
+            let closed = core.tabs[index].clone();
+            if !closed.incognito {
+                let mut history = state.closed_tabs.write().unwrap_or_else(|e| e.into_inner());
+                history.push((closed.url, closed.title));
+                if history.len() > 20 {
+                    history.remove(0);
+                }
+            }
+        }
         core.tabs.retain(|tab| tab.id != id);
         if core.selected.as_deref() == Some(id.as_str()) {
             core.selected = core.tabs.last().map(|tab| tab.id.clone());
@@ -685,6 +694,9 @@ pub async fn shortcut(app: AppHandle, window: tauri::Window, state: State<'_, Ap
         "dismiss" => {
             crate::overlay::close(&app, window.label());
         }
+        "reopen_tab" => {
+            let _ = tab_reopen(app, window, state).await?;
+        }
         "new_window" => {
             window_new(app, state).await?;
         }
@@ -700,7 +712,7 @@ pub async fn shortcut(app: AppHandle, window: tauri::Window, state: State<'_, Ap
         "next_tab" => cycle_tab(&app, &window, 1).await,
         "prev_tab" => cycle_tab(&app, &window, -1).await,
         "focus_url" => {
-            let _ = app.emit("ui:focus-url", ());
+            let _ = app.emit_to(window.label(), "ui:focus-url", ());
         }
         "reload" => {
             if let Some(webview) = app.get_webview(&selected_label(&state, &window)) {
@@ -1378,6 +1390,25 @@ pub async fn script_list(_window: tauri::Window, state: State<'_, AppState>) -> 
 }
 
 /// Opens another window with its own tab strip.
+/// Reopens the most recently closed tab.
+#[tauri::command]
+pub async fn tab_reopen(
+    app: AppHandle,
+    window: tauri::Window,
+    state: State<'_, AppState>,
+) -> Result<bool, AppError> {
+    let Some((url, _title)) = state
+        .closed_tabs
+        .write()
+        .unwrap_or_else(|e| e.into_inner())
+        .pop()
+    else {
+        return Ok(false);
+    };
+    tab_new(app, window, state, Some(url), None).await?;
+    Ok(true)
+}
+
 #[tauri::command]
 pub async fn window_new(app: AppHandle, state: State<'_, AppState>) -> Result<String, AppError> {
     let taken: Vec<String> = state.cores.read().keys().cloned().collect();
@@ -1443,19 +1474,7 @@ pub struct Paths {
     fell_back: bool,
 }
 
-#[tauri::command]
-pub async fn paths_get(_window: tauri::Window, state: State<'_, AppState>) -> Result<Paths, AppError> {
-    let dirs = &state.dirs;
-    Ok(Paths {
-        root: dirs.root.display().to_string(),
-        user_data: dirs.user_data.display().to_string(),
-        crx: dirs.crx.display().to_string(),
-        scripts: dirs.scripts.display().to_string(),
-        logs: dirs.logs.display().to_string(),
-        downloads: dirs.downloads.display().to_string(),
-        fell_back: dirs.fell_back,
-    })
-}
+
 
 #[tauri::command]
 pub async fn open_dir(_window: tauri::Window, state: State<'_, AppState>, which: String) -> Result<(), AppError> {

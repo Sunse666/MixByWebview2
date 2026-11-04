@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-tab-reopen"
+description = "Enables the tab_reopen command without any pre-configured scope."
+commands.allow = ["tab_reopen"]
+
+[[permission]]
+identifier = "deny-tab-reopen"
+description = "Denies the tab_reopen command without any pre-configured scope."
+commands.deny = ["tab_reopen"]

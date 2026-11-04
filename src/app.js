@@ -174,8 +174,10 @@ async function boot() {
     else if (event.key === "F11") action = "fullscreen";
     else if (event.key === "F12") action = "devtools";
     else if (event.ctrlKey || event.metaKey) {
-      switch (event.key) {
-        case "t": action = event.shiftKey ? "new_incognito" : "new_tab"; break;
+      // Shift turns "t" into "T"; the map below is keyed on the letter.
+      const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
+      switch (key) {
+        case "t": action = event.shiftKey ? "reopen_tab" : "new_tab"; break;
         case "w": action = "close_tab"; break;
         case "l": action = "focus_url"; break;
         case "r": action = "reload"; break;
@@ -187,7 +189,7 @@ async function boot() {
         case "p": action = "print"; break;
         case "j": action = "downloads"; break;
         case "d": action = "bookmark"; break;
-        case "n": action = "new_window"; break;
+        case "n": action = event.shiftKey ? "new_incognito" : "new_window"; break;
         default: action = null;
       }
     }
@@ -248,6 +250,14 @@ async function boot() {
   });
 
   document.getElementById("theme-btn").addEventListener("click", () => invoke("overlay_toggle", { kind: "app_menu" }));
+  // Middle click closes a tab, like every other browser.
+  document
+    .getElementById("tabs")
+    .addEventListener("auxclick", (event) => {
+      if (event.button !== 1) return;
+      const pill = event.target.closest(".tab");
+      if (pill && pill.dataset.id) invoke("tab_close", { id: pill.dataset.id });
+    });
   document.getElementById("tab-new").addEventListener("click", () => invoke("tab_new", {}));
 
   // The address bar is not focused on purpose: it would open the suggestion

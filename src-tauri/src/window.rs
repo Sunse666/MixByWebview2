@@ -24,7 +24,7 @@ pub fn set_bounds(webview: &Webview, x: f64, y: f64, w: f64, h: f64) -> tauri::R
     })
 }
 
-const PRIMARY: &str = "w1";
+pub const PRIMARY: &str = "w1";
 
 pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
     let (start_url, restore, session_file) = {
