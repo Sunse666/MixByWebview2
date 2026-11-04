@@ -33,6 +33,8 @@ pub struct AppState {
     pub opts: crate::tabs::WebviewOpts,
     pub extensions: Vec<ExtInfo>,
     pub history: RwLock<Vec<Visit>>,
+    pub suggest_text: parking_lot::RwLock<String>,
+    pub suggest_width: parking_lot::RwLock<f64>,
     pub bookmarks: RwLock<Vec<Bookmark>>,
     pub scripts: Vec<crate::userscripts::ScriptInfo>,
 }
@@ -60,6 +62,8 @@ impl AppState {
             opts,
             extensions,
             history: RwLock::new(history),
+            suggest_text: parking_lot::RwLock::new(String::new()),
+            suggest_width: parking_lot::RwLock::new(420.0),
             bookmarks: RwLock::new(bookmarks),
             scripts,
             dirs,
@@ -1035,6 +1039,143 @@ pub async fn zoom_step(app: AppHandle, delta: f64, window: tauri::Window, _state
     };
     set_zoom(&app, window.label(), current + delta)?;
     Ok(((current + delta) * 10.0).round() / 10.0)
+}
+
+#[derive(Serialize)]
+pub struct Suggestion {
+    pub url: String,
+    pub title: String,
+    pub kind: String,
+}
+
+/// History first, then bookmarks, deduped by url and ranked by how well the
+/// text matches the start of the url or the title.
+fn collect_suggestions(state: &AppState, text: &str, limit: usize) -> Vec<Suggestion> {
+    let needle = text.trim().to_lowercase();
+    let mut found: Vec<Suggestion> = Vec::new();
+
+    let history = state.history.read().unwrap_or_else(|e| e.into_inner()).clone();
+    for visit in history {
+        found.push(Suggestion {
+            url: visit.url,
+            title: visit.title,
+            kind: "history".into(),
+        });
+    }
+    for bookmark in state.bookmarks.read().unwrap_or_else(|e| e.into_inner()).iter() {
+        found.push(Suggestion {
+            url: bookmark.url.clone(),
+            title: bookmark.title.clone(),
+            kind: "bookmark".into(),
+        });
+    }
+
+    let mut seen: Vec<String> = Vec::new();
+    found.retain(|item| {
+        if seen.contains(&item.url) {
+            return false;
+        }
+        seen.push(item.url.clone());
+        true
+    });
+
+    if !needle.is_empty() {
+        found.retain(|item| {
+            let url = item.url.to_lowercase();
+            let title = item.title.to_lowercase();
+            url.contains(&needle) || title.contains(&needle)
+        });
+        found.sort_by_key(|item| {
+            let url = item.url.to_lowercase();
+            let title = item.title.to_lowercase();
+            if url.contains(&needle) { 0 } else if title.contains(&needle) { 1 } else { 2 }
+        });
+    }
+
+    found.truncate(limit);
+    found
+}
+
+/// Opens the dropdown under the address bar.
+#[tauri::command]
+pub async fn suggest_open(
+    app: AppHandle,
+    window: tauri::Window,
+    x: f64,
+    width: f64,
+) -> Result<(), AppError> {
+    if app
+        .state::<AppState>()
+        .overlay
+        .read()
+        .unwrap_or_else(|e| e.into_inner())
+        .contains_key(window.label())
+    {
+        return Ok(());
+    }
+    *app.state::<AppState>().suggest_width.write() = width;
+    crate::overlay::open_at(
+        &app,
+        &window,
+        "suggest",
+        x,
+        crate::window::CHROME_H + 2.0,
+        width,
+        48.0,
+    )
+    .map_err(|e| AppError::new("overlay", e))
+}
+
+/// Recomputes the dropdown and pushes it into the overlay page.
+#[tauri::command]
+pub async fn suggest_feed(
+    app: AppHandle,
+    window: tauri::Window,
+    state: State<'_, AppState>,
+    text: String,
+) -> Result<usize, AppError> {
+    *state.suggest_text.write() = text.clone();
+    Ok(push_suggestions(&app, window.label(), &state))
+}
+
+/// Re-sends the current suggestions to a page that just finished loading.
+#[tauri::command]
+pub async fn suggest_refresh(
+    app: AppHandle,
+    window: tauri::Window,
+    state: State<'_, AppState>,
+) -> Result<usize, AppError> {
+    Ok(push_suggestions(&app, window.label(), &state))
+}
+
+fn push_suggestions(app: &AppHandle, window_label: &str, state: &AppState) -> usize {
+    let text = state.suggest_text.read().clone();
+    let items = collect_suggestions(state, &text, 8);
+    let count = items.len();
+
+    let label = app
+        .state::<AppState>()
+        .overlay
+        .read()
+        .unwrap_or_else(|e| e.into_inner())
+        .get(window_label)
+        .cloned();
+
+    let Some(label) = label else {
+        return 0;
+    };
+    let Some(webview) = app.get_webview(&label) else {
+        return 0;
+    };
+
+    let json = serde_json::to_string(&items).unwrap_or_else(|_| "[]".into());
+    let rows = count as f64;
+    // 34px per row plus 6px padding top and bottom; no scrollbar wanted.
+    let height = if rows == 0.0 { 40.0 } else { rows * 34.0 + 14.0 };
+    let width = *state.suggest_width.read();
+    let _ = webview.set_size(tauri::LogicalSize::new(width, height));
+    let _ = webview.eval(&format!("window.__mixSuggest && window.__mixSuggest({json})"));
+    count
 }
 
 #[tauri::command]

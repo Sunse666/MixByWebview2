@@ -128,6 +128,8 @@ async function boot() {
   await listen("ui:focus-url", () => {
     urlInput.focus();
     urlInput.select();
+    // Focus events inside an unfocused webview are unreliable, so feed directly.
+    if (typeof feedSuggest === "function") feedSuggest(urlInput.value);
   });
   renderDownloads(await invoke("download_list"));
 
@@ -193,16 +195,46 @@ async function boot() {
     invoke("shortcut", { action });
   }, true);
 
+  // Address bar autocomplete: the dropdown is a separate overlay webview,
+  // because the chrome strip is only 68px tall and would clip it.
+  var suggestOpen = false;
+  var feedSuggest = (text) => {
+    if (!suggestOpen) {
+      suggestOpen = true;
+      const box = urlInput.getBoundingClientRect();
+      invoke("suggest_open", { x: box.left, width: box.width })
+        .then(() => invoke("suggest_feed", { text }))
+        .catch((error) => {
+          suggestOpen = false;
+          report(`suggest open failed: ${error}`);
+        });
+      return;
+    }
+    invoke("suggest_feed", { text }).catch(() => {});
+  };
+  const closeSuggest = () => {
+    if (!suggestOpen) return;
+    suggestOpen = false;
+    invoke("overlay_close").catch(() => {});
+  };
+
+  urlInput.addEventListener("focus", () => feedSuggest(urlInput.value));
+  urlInput.addEventListener("input", () => feedSuggest(urlInput.value));
+  urlInput.addEventListener("blur", () => closeSuggest());
+
   urlInput.addEventListener("keydown", (event) => {
     if (event.key === "Enter") {
       invoke("tab_navigate", { url: urlInput.value });
+      closeSuggest();
       urlInput.blur();
     }
     if (event.key === "Escape") {
+      closeSuggest();
       syncUrl();
       urlInput.blur();
     }
   });
+
 
   downloadPill.addEventListener("click", () => {
     const id = Number(downloadPill.dataset.id);
@@ -212,7 +244,8 @@ async function boot() {
   document.getElementById("theme-btn").addEventListener("click", () => invoke("overlay_toggle", { kind: "app_menu" }));
   document.getElementById("tab-new").addEventListener("click", () => invoke("tab_new", {}));
 
-  urlInput.focus();
+  // The address bar is not focused on purpose: it would open the suggestion
+  // dropdown over the page on every launch. Ctrl+L focuses it.
 }
 
 boot().catch((error) => {

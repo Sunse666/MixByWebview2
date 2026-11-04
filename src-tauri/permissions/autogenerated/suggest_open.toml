@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-suggest-open"
+description = "Enables the suggest_open command without any pre-configured scope."
+commands.allow = ["suggest_open"]
+
+[[permission]]
+identifier = "deny-suggest-open"
+description = "Denies the suggest_open command without any pre-configured scope."
+commands.deny = ["suggest_open"]

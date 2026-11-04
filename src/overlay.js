@@ -408,6 +408,49 @@ async function bootAppMenu() {
 
   await render(params.get("page") || "root");
 }
+async function bootSuggest() {
+  menu.hidden = false;
+  appMenu.hidden = true;
+  themePanel.hidden = true;
+  applyTheme(await invoke("theme_get"));
+
+  window.__mixSuggest = (items) => {
+    while (menu.firstChild) menu.removeChild(menu.firstChild);
+    if (!items.length) {
+      const note = document.createElement("div");
+      note.className = "menu-note";
+      note.textContent = "No matches";
+      menu.append(note);
+      return;
+    }
+    for (const item of items) {
+      const row = document.createElement("button");
+      row.className = "row";
+      const icon = document.createElement("span");
+      icon.className = "ico";
+      icon.textContent = item.kind === "bookmark" ? "\u2606" : "\u21ba";
+      const label = document.createElement("span");
+      label.className = "label";
+      label.textContent = item.title || item.url;
+      const host = document.createElement("span");
+      host.className = "hint";
+      try {
+        host.textContent = new URL(item.url).host;
+      } catch {
+        host.textContent = "";
+      }
+      row.append(icon, label, host);
+      row.addEventListener("click", async () => {
+        await invoke("tab_navigate", { url: item.url });
+        await invoke("overlay_close");
+      });
+      menu.append(row);
+    }
+  };
+
+  await invoke("suggest_refresh").catch(() => {});
+}
+
 async function bootMenu() {
   menu.hidden = false;
   appMenu.hidden = true;
@@ -515,6 +558,10 @@ async function boot() {
   }
   if (kind === "context_menu") {
     await bootMenu();
+    return;
+  }
+  if (kind === "suggest") {
+    await bootSuggest();
     return;
   }
   if (kind === "permission") {
