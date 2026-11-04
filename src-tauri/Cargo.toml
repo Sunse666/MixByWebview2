@@ -32,3 +32,10 @@ codegen-units = 1
 lto = true
 opt-level = "s"
 strip = true
+
+# Gate on the lints rustc can enforce locally; clippy is not installed for the
+# gnu toolchain, so this is the practical net for dead parameters and imports.
+[lints.rust]
+unused_variables = "deny"
+unused_imports = "deny"
+unused_mut = "deny"

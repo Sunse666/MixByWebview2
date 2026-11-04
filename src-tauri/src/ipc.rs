@@ -375,7 +375,7 @@ pub struct Layout {
 }
 
 #[tauri::command]
-pub async fn layout_get(app: AppHandle, window: tauri::Window, state: State<'_, AppState>) -> Result<Layout, AppError> {
+pub async fn layout_get(_app: AppHandle, window: tauri::Window, state: State<'_, AppState>) -> Result<Layout, AppError> {
     let win = window_of(&window);
     let (width, height) = crate::window::logical_size(&win)?;
     let (chrome_height, selected) = {
@@ -393,7 +393,7 @@ pub async fn layout_get(app: AppHandle, window: tauri::Window, state: State<'_, 
 
 #[tauri::command]
 pub async fn window_control(
-    app: AppHandle,
+    _app: AppHandle,
     window: tauri::Window,
     action: String,
 ) -> Result<(), AppError> {
@@ -414,13 +414,13 @@ pub async fn window_control(
 }
 
 #[tauri::command]
-pub async fn window_drag(app: AppHandle, window: tauri::Window) -> Result<(), AppError> {
+pub async fn window_drag(_app: AppHandle, window: tauri::Window) -> Result<(), AppError> {
     window.start_dragging()?;
     Ok(())
 }
 
 #[tauri::command]
-pub async fn window_resize(app: AppHandle, direction: String, window: tauri::Window) -> Result<(), AppError> {
+pub async fn window_resize(_app: AppHandle, direction: String, window: tauri::Window) -> Result<(), AppError> {
     let dir = match direction.as_str() {
         "n" => ResizeDirection::North,
         "s" => ResizeDirection::South,
@@ -581,14 +581,14 @@ fn selected_label(state: &AppState, window: &tauri::Window) -> String {
 }
 
 #[tauri::command]
-pub async fn theme_get(window: tauri::Window, state: State<'_, AppState>) -> Result<Theme, AppError> {
+pub async fn theme_get(_window: tauri::Window, state: State<'_, AppState>) -> Result<Theme, AppError> {
     Ok(state.theme.read().clone())
 }
 
 #[tauri::command]
 pub async fn theme_apply(
     app: AppHandle,
-    window: tauri::Window, state: State<'_, AppState>,
+    _window: tauri::Window, state: State<'_, AppState>,
     theme: Theme,
     persist: bool,
 ) -> Result<Theme, AppError> {
@@ -611,7 +611,7 @@ pub async fn theme_apply(
 }
 
 #[tauri::command]
-pub async fn theme_revert(app: AppHandle, window: tauri::Window, state: State<'_, AppState>) -> Result<Theme, AppError> {
+pub async fn theme_revert(app: AppHandle, _window: tauri::Window, state: State<'_, AppState>) -> Result<Theme, AppError> {
     let baseline = {
         let value = state.baseline.read().clone();
         *state.theme.write() = value.clone();
@@ -646,12 +646,12 @@ fn broadcast_theme(app: &AppHandle, theme: &Theme) {
 }
 
 #[tauri::command]
-pub async fn download_list(window: tauri::Window, state: State<'_, AppState>) -> Result<Vec<crate::downloads::DownloadTask>, AppError> {
+pub async fn download_list(_window: tauri::Window, state: State<'_, AppState>) -> Result<Vec<crate::downloads::DownloadTask>, AppError> {
     Ok(state.downloads.read().unwrap_or_else(|e| e.into_inner()).clone())
 }
 
 #[tauri::command]
-pub async fn download_open_dir(window: tauri::Window, state: State<'_, AppState>, id: u64) -> Result<(), AppError> {
+pub async fn download_open_dir(_window: tauri::Window, state: State<'_, AppState>, id: u64) -> Result<(), AppError> {
     let path = {
         let tasks = state.downloads.read().unwrap_or_else(|e| e.into_inner());
         tasks
@@ -838,7 +838,7 @@ pub async fn context_menu(
 }
 
 #[tauri::command]
-pub async fn menu_context_get(window: tauri::Window, state: State<'_, AppState>) -> Result<MenuContext, AppError> {
+pub async fn menu_context_get(_window: tauri::Window, state: State<'_, AppState>) -> Result<MenuContext, AppError> {
     Ok(state.menu_context.read().unwrap_or_else(|e| e.into_inner()).clone())
 }
 
@@ -909,13 +909,13 @@ pub async fn permission_reply(
 }
 
 #[tauri::command]
-pub async fn settings_get(window: tauri::Window, state: State<'_, AppState>) -> Result<Settings, AppError> {
+pub async fn settings_get(_window: tauri::Window, state: State<'_, AppState>) -> Result<Settings, AppError> {
     Ok(state.settings.read().clone())
 }
 
 #[tauri::command]
 pub async fn settings_set(
-    window: tauri::Window, state: State<'_, AppState>,
+    _window: tauri::Window, state: State<'_, AppState>,
     patch: SettingsPatch,
 ) -> Result<Settings, AppError> {
     let settings = {
@@ -980,7 +980,7 @@ pub async fn snap(app: AppHandle, direction: String) -> Result<(), AppError> {
 }
 
 #[tauri::command]
-pub async fn ext_list(window: tauri::Window, state: State<'_, AppState>) -> Result<Vec<ExtInfo>, AppError> {
+pub async fn ext_list(_window: tauri::Window, state: State<'_, AppState>) -> Result<Vec<ExtInfo>, AppError> {
     Ok(state.extensions.clone())
 }
 
@@ -1005,7 +1005,7 @@ pub async fn zoom_get(window: tauri::Window, state: State<'_, AppState>) -> Resu
 }
 
 #[tauri::command]
-pub async fn zoom_step(app: AppHandle, delta: f64, window: tauri::Window, state: State<'_, AppState>) -> Result<f64, AppError> {
+pub async fn zoom_step(app: AppHandle, delta: f64, window: tauri::Window, _state: State<'_, AppState>) -> Result<f64, AppError> {
     let current = {
         let state = app.state::<AppState>();
         let core = state.read_core(window.label());
@@ -1033,7 +1033,7 @@ pub async fn tab_print(
 
 #[tauri::command]
 pub async fn window_fullscreen(
-    app: AppHandle,
+    _app: AppHandle,
     window: tauri::Window,
     enabled: Option<bool>,
 ) -> Result<bool, AppError> {
@@ -1045,7 +1045,7 @@ pub async fn window_fullscreen(
 
 /// Wipes cookies, storage and caches for every webview we own.
 #[tauri::command]
-pub async fn app_clear_data(app: AppHandle, window: tauri::Window, state: State<'_, AppState>) -> Result<(), AppError> {
+pub async fn app_clear_data(app: AppHandle, window: tauri::Window, _state: State<'_, AppState>) -> Result<(), AppError> {
     let labels: Vec<String> = {
         let state = app.state::<AppState>();
         let core = state.read_core(window.label());
@@ -1084,14 +1084,14 @@ pub(crate) fn record_visit(app: &AppHandle, url: &str, title: &str) {
 }
 
 #[tauri::command]
-pub async fn history_list(window: tauri::Window, state: State<'_, AppState>, limit: Option<usize>) -> Result<Vec<Visit>, AppError> {
+pub async fn history_list(_window: tauri::Window, state: State<'_, AppState>, limit: Option<usize>) -> Result<Vec<Visit>, AppError> {
     let visits = state.history.read().unwrap_or_else(|e| e.into_inner());
     let take = limit.unwrap_or(500).min(visits.len());
     Ok(visits.iter().take(take).cloned().collect())
 }
 
 #[tauri::command]
-pub async fn history_clear(window: tauri::Window, state: State<'_, AppState>) -> Result<(), AppError> {
+pub async fn history_clear(_window: tauri::Window, state: State<'_, AppState>) -> Result<(), AppError> {
     {
         let mut visits = state.history.write().unwrap_or_else(|e| e.into_inner());
         visits.clear();
@@ -1102,7 +1102,7 @@ pub async fn history_clear(window: tauri::Window, state: State<'_, AppState>) ->
 }
 
 #[tauri::command]
-pub async fn bookmark_list(window: tauri::Window, state: State<'_, AppState>) -> Result<Vec<Bookmark>, AppError> {
+pub async fn bookmark_list(_window: tauri::Window, state: State<'_, AppState>) -> Result<Vec<Bookmark>, AppError> {
     Ok(state.bookmarks.read().unwrap_or_else(|e| e.into_inner()).clone())
 }
 
@@ -1135,7 +1135,7 @@ pub async fn bookmark_toggle(app: AppHandle, window: tauri::Window, state: State
 #[tauri::command]
 pub async fn bookmark_remove(
     app: AppHandle,
-    window: tauri::Window, state: State<'_, AppState>,
+    _window: tauri::Window, state: State<'_, AppState>,
     url: String,
 ) -> Result<(), AppError> {
     let snapshot = {
@@ -1167,7 +1167,7 @@ pub async fn app_info() -> Result<AppInfo, AppError> {
 
 /// Quits for real: the window close button only hides to the tray.
 #[tauri::command]
-pub async fn app_quit(app: AppHandle, window: tauri::Window) -> Result<(), AppError> {
+pub async fn app_quit(app: AppHandle, _window: tauri::Window) -> Result<(), AppError> {
     save_sessions(&app);
     crate::logging::info("quit from the app menu");
     app.exit(0);
@@ -1182,7 +1182,7 @@ pub async fn ui_log(message: String) -> Result<(), AppError> {
 }
 
 #[tauri::command]
-pub async fn script_list(window: tauri::Window, state: State<'_, AppState>) -> Result<Vec<crate::userscripts::ScriptInfo>, AppError> {
+pub async fn script_list(_window: tauri::Window, state: State<'_, AppState>) -> Result<Vec<crate::userscripts::ScriptInfo>, AppError> {
     Ok(state.scripts.clone())
 }
 
@@ -1232,7 +1232,7 @@ pub struct Paths {
 }
 
 #[tauri::command]
-pub async fn paths_get(window: tauri::Window, state: State<'_, AppState>) -> Result<Paths, AppError> {
+pub async fn paths_get(_window: tauri::Window, state: State<'_, AppState>) -> Result<Paths, AppError> {
     let dirs = &state.dirs;
     Ok(Paths {
         root: dirs.root.display().to_string(),
@@ -1246,7 +1246,7 @@ pub async fn paths_get(window: tauri::Window, state: State<'_, AppState>) -> Res
 }
 
 #[tauri::command]
-pub async fn open_dir(window: tauri::Window, state: State<'_, AppState>, which: String) -> Result<(), AppError> {
+pub async fn open_dir(_window: tauri::Window, state: State<'_, AppState>, which: String) -> Result<(), AppError> {
     let dirs = &state.dirs;
     let path = match which.as_str() {
         "userdata" => &dirs.user_data,
