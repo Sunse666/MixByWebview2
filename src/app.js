@@ -133,31 +133,39 @@ function renderTabs() {
   tabStrip.replaceChildren(...nodes);
 }
 
-// Tabs whose text was replaced by the translator, so a second click restores it.
-const translatedTabs = new Set();
+// Whether the current tab shows translated text; the backend is the source of
+// truth so navigation cannot leave a stale "translated" state behind.
+let translateOn = false;
+
+async function runTranslate() {
+  await invoke("translate_page_inplace").catch(() => {});
+  for (let attempt = 0; attempt < 40; attempt++) {
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    const [count, error] = await invoke("translate_status").catch(() => [0, null]);
+    if (error) return false;
+    if (count > 0) return true;
+  }
+  return false;
+}
 
 async function toggleTranslate() {
-  const id = selected;
-  if (!id) return;
+  if (!selected) return;
 
-  if (translatedTabs.has(id)) {
+  const already = await invoke("translate_state").catch(() => false);
+  if (already) {
     await invoke("translate_restore").catch(() => {});
-    translatedTabs.delete(id);
+    translateOn = false;
     renderToolbar(currentExtensions);
     return;
   }
 
-  await invoke("translate_page_inplace").catch(() => {});
-  // The page reports back through the backend; poll until it settles.
-  for (let attempt = 0; attempt < 60; attempt++) {
-    await new Promise((resolve) => setTimeout(resolve, 400));
-    const [count, error] = await invoke("translate_status").catch(() => [0, null]);
-    if (error) break;
-    if (count > 0) {
-      translatedTabs.add(id);
-      break;
-    }
+  translateOn = await runTranslate();
+  // Pages that render late have nothing to collect yet; one retry covers it.
+  if (!translateOn) {
+    await new Promise((resolve) => setTimeout(resolve, 700));
+    translateOn = await runTranslate();
   }
+  translateOn = await invoke("translate_state").catch(() => translateOn);
   renderToolbar(currentExtensions);
 }
 
@@ -193,7 +201,7 @@ async function renderToolbar(extensions) {
     button.className = spec.where === "inside" ? "url-action" : "tool-btn";
     button.title = spec.label;
     if (id === "translate") {
-      const on = translatedTabs.has(active ? active.id : "");
+      const on = translateOn;
       button.textContent = spec.glyph;
       button.title = on ? "Show original" : spec.label;
       button.classList.toggle("is-on", Boolean(on));
@@ -331,7 +339,13 @@ async function boot() {
   // Listeners first: the backend may emit while this page is still starting.
   await listen("tabs:changed", (event) => {
     setTabs(event.payload);
-    invoke("ext_list").then((list) => renderToolbar(list)).catch(() => {});
+    invoke("translate_state")
+      .then((on) => {
+        translateOn = Boolean(on);
+        return invoke("ext_list");
+      })
+      .then((list) => renderToolbar(list))
+      .catch(() => {});
   });
   await listen("bookmarks:changed", async () => {
     renderBookmarks(await invoke("bookmark_list"));

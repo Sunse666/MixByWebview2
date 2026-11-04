@@ -40,6 +40,7 @@
     "allow-download-url",
     "allow-find-in-page",
     "allow-translate-page-inplace",
+    "allow-translate-state",
     "allow-translate-status",
     "allow-translate-restore",
     "allow-translate-done",

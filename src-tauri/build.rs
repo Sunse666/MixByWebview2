@@ -44,6 +44,7 @@ fn main() {
         "download_url",
         "find_in_page",
         "translate_page_inplace",
+        "translate_state",
         "translate_status",
         "translate_restore",
         "translate_done",

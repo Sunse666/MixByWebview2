@@ -125,18 +125,25 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
         let handle = app.handle().clone();
         std::thread::spawn(move || {
             std::thread::sleep(std::time::Duration::from_millis(3000));
-            let target = handle.clone();
-            let _ = handle.run_on_main_thread(move || {
-                let Some(win) = target.get_window(PRIMARY) else {
-                    return;
-                };
-                let state = target.state::<AppState>();
-                let call = crate::ipc::translate_page_inplace(target.clone(), win, state);
-                match tauri::async_runtime::block_on(call) {
-                    Ok(()) => crate::logging::info("debug translate: started"),
-                    Err(err) => crate::logging::warn(&format!("debug translate failed: {}", err.message)),
-                }
-            });
+            let repeats: u32 = std::env::var("MIX_TRANSLATE")
+                .ok()
+                .and_then(|value| value.parse().ok())
+                .unwrap_or(1);
+            for round in 0..repeats {
+                std::thread::sleep(std::time::Duration::from_millis(if round == 0 { 0 } else { 5000 }));
+                let target = handle.clone();
+                let _ = handle.run_on_main_thread(move || {
+                    let Some(win) = target.get_window(PRIMARY) else {
+                        return;
+                    };
+                    let state = target.state::<AppState>();
+                    let call = crate::ipc::translate_page_inplace(target.clone(), win, state);
+                    match tauri::async_runtime::block_on(call) {
+                        Ok(()) => crate::logging::info("debug translate: started"),
+                        Err(err) => crate::logging::warn(&format!("debug translate failed: {}", err.message)),
+                    }
+                });
+            }
         });
     }
 

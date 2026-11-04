@@ -50,6 +50,8 @@ pub struct AppState {
     pub reachability: crate::net::Reachability,
     /// Result of the last in-page translation, polled by the bubble.
     pub translate_result: parking_lot::RwLock<(usize, Option<String>)>,
+    /// Tabs whose text is currently replaced by the translator.
+    pub translated_tabs: parking_lot::RwLock<std::collections::HashSet<String>>,
     /// Tab id -> the url whose error page is already showing.
     pub error_shown: RwLock<std::collections::HashMap<String, String>>,
     pub bookmarks: RwLock<Vec<Bookmark>>,
@@ -88,6 +90,7 @@ impl AppState {
             pending: RwLock::new(std::collections::HashMap::new()),
             reachability: crate::net::Reachability::default(),
             translate_result: parking_lot::RwLock::new((0, None)),
+            translated_tabs: parking_lot::RwLock::new(std::collections::HashSet::new()),
             error_shown: RwLock::new(std::collections::HashMap::new()),
             bookmarks: RwLock::new(bookmarks),
             scripts,
@@ -1766,7 +1769,18 @@ pub async fn translate_restore(
     if let Some(webview) = app.get_webview(&id) {
         let _ = webview.eval("window.__mixStopTranslate && window.__mixStopTranslate()");
     }
+    state.translated_tabs.write().remove(&id);
     Ok(())
+}
+
+/// Whether the selected tab currently shows translated text.
+#[tauri::command]
+pub async fn translate_state(
+    window: tauri::Window,
+    state: State<'_, AppState>,
+) -> Result<bool, AppError> {
+    let id = selected_label(&state, &window);
+    Ok(state.translated_tabs.read().contains(&id))
 }
 
 /// The page reports how many nodes it replaced, and Chrome shows a hint.
@@ -1777,8 +1791,15 @@ pub async fn translate_done(
     count: usize,
     error: Option<String>,
 ) -> Result<(), AppError> {
+    let tab = webview.label().to_string();
     if let Some(state) = app.try_state::<AppState>() {
         *state.translate_result.write() = (count, error.clone());
+        let mut tabs = state.translated_tabs.write();
+        if error.is_none() && count > 0 {
+            tabs.insert(tab.clone());
+        } else if error.is_some() {
+            tabs.remove(&tab);
+        }
     }
     let owner = window_of_tab(webview.label()).to_string();
     if let Some(message) = &error {

@@ -40,6 +40,8 @@ const SHORTCUT_FORWARDER: &str = r#"
 // In-place page translation: the page owns the DOM, Rust owns the network.
 (function () {
   var nodes = [];
+  // Nodes already handled in this page, so a second pass only picks up new text.
+  var done = new WeakSet();
 
   var collect = function () {
     nodes = [];
@@ -61,26 +63,28 @@ const SHORTCUT_FORWARDER: &str = r#"
     while (walker.nextNode()) {
       var node = walker.currentNode;
       var text = node.nodeValue;
+      if (done.has(node)) continue;
       if (seen.has(text)) continue;
-      if (total + text.length > 3000) break;
+      if (total + text.length > 6000) break;
       seen.add(text);
       total += text.length;
       nodes.push({ node: node, original: text });
-      if (nodes.length >= 120) break;
+      if (nodes.length >= 400) break;
     }
     return nodes.map(function (item) { return item.original; });
   };
 
   var apply = function (translated) {
-    var done = 0;
+    var applied = 0;
     for (var i = 0; i < nodes.length; i++) {
       var replacement = translated[i];
       if (!replacement) continue;
       if (replacement === nodes[i].original) continue;
       nodes[i].node.nodeValue = replacement;
-      done++;
+      done.add(nodes[i].node);
+      applied++;
     }
-    return done;
+    return applied;
   };
 
   var restore = function () {
@@ -90,25 +94,43 @@ const SHORTCUT_FORWARDER: &str = r#"
     nodes = [];
   };
 
+  // Several passes: pages that render late keep producing new text.
   window.__mixStartTranslate = function () {
-    var texts = collect();
-    if (!texts.length) {
-      window.__TAURI_INTERNALS__.invoke("translate_done", { count: 0, error: "no text found" });
-      return;
-    }
-    window.__TAURI_INTERNALS__
-      .invoke("translate_texts", { texts: texts })
-      .then(function (translated) {
-        var done = apply(translated || []);
-        window.__TAURI_INTERNALS__.invoke("translate_done", { count: done });
-      })
-      .catch(function (err) {
-        window.__TAURI_INTERNALS__.invoke("translate_done", { count: 0, error: String(err) });
-      });
+    var total = 0;
+    var rounds = 0;
+
+    var step = function () {
+      var texts = collect();
+      if (!texts.length || rounds >= 4) {
+        window.__TAURI_INTERNALS__.invoke("translate_done", {
+          count: total,
+          error: total === 0 ? "no translatable text" : null,
+        });
+        return;
+      }
+      rounds++;
+      window.__TAURI_INTERNALS__
+        .invoke("translate_texts", { texts: texts })
+        .then(function (translated) {
+          var applied = apply(translated || []);
+          total += applied;
+          if (applied === 0) {
+            window.__TAURI_INTERNALS__.invoke("translate_done", { count: total, error: null });
+            return;
+          }
+          setTimeout(step, 50);
+        })
+        .catch(function (err) {
+          window.__TAURI_INTERNALS__.invoke("translate_done", { count: total, error: String(err) });
+        });
+    };
+
+    step();
   };
 
   window.__mixStopTranslate = function () {
     restore();
+    done = new WeakSet();
     window.__TAURI_INTERNALS__.invoke("translate_done", { count: 0 });
   };
 

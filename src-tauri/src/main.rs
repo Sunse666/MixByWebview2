@@ -94,6 +94,7 @@ fn main() {
             ipc::download_url,
             ipc::find_in_page,
             ipc::translate_page_inplace,
+            ipc::translate_state,
             ipc::translate_status,
             ipc::translate_restore,
             ipc::translate_done,
