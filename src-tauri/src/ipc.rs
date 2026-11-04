@@ -1714,9 +1714,45 @@ pub async fn tab_scroll(
 }
 
 /// The page reports a browser error page; replace it with ours.
-/// Opens the current page in a reading translator. There is no in-place
-/// translation API in WebView2, so this hands the url to a web service.
-/// Saves a remote file into the downloads folder. Used by "Save image as".
+/// Page translation goes through a web proxy: WebView2 has no translate API.
+/// Bing's proxy is unreachable from this network, Baidu's works and needs no key.
+#[tauri::command]
+pub async fn translate_page(
+    app: AppHandle,
+    window: tauri::Window,
+    state: State<'_, AppState>,
+    target: Option<String>,
+) -> Result<String, AppError> {
+    let text = match target {
+        Some(value) => value,
+        None => {
+            let id = selected_label(&state, &window);
+            state
+                .try_read_core(window.label())
+                .and_then(|core| core.tabs.iter().find(|tab| tab.id == id).map(|tab| tab.url.clone()))
+                .unwrap_or_default()
+        }
+    };
+    let text = text.trim().to_string();
+    if text.is_empty() {
+        return Err(AppError::new("bad_url", "nothing to translate"));
+    }
+
+    let encoded = crate::permissions::encode(&text);
+    let proxy = if text.starts_with("http://") || text.starts_with("https://") {
+        // Whole page: Baidu renders the translated document in place.
+        format!(
+            "https://fanyi.baidu.com/transpage?query={encoded}&source=url&ie=utf8&from=auto&to=zh&render=1"
+        )
+    } else {
+        // Plain text: the translator page with the text prefilled.
+        format!("https://fanyi.baidu.com/mtpe-individual/multimodal?query={encoded}&lang=auto2zh")
+    };
+
+    let page = tab_new(app, window, state, Some(proxy.clone()), None).await?;
+    crate::logging::info(&format!("translate {text} as {page}"));
+    Ok(proxy)
+}
 #[tauri::command]
 pub async fn download_url(
     app: AppHandle,
@@ -1779,35 +1815,6 @@ pub async fn find_in_page(
     Ok(())
 }
 
-#[tauri::command]
-pub async fn translate_page(
-    app: AppHandle,
-    window: tauri::Window,
-    state: State<'_, AppState>,
-    target: Option<String>,
-) -> Result<String, AppError> {
-    let url = match target {
-        Some(value) => value,
-        None => {
-            let id = selected_label(&state, &window);
-            state
-                .try_read_core(window.label())
-                .and_then(|core| core.tabs.iter().find(|tab| tab.id == id).map(|tab| tab.url.clone()))
-                .unwrap_or_default()
-        }
-    };
-    if !url.starts_with("http") {
-        return Err(AppError::new("bad_url", "only web pages can be translated"));
-    }
-
-    let proxy = format!(
-        "https://www.translatetheweb.com/?a={}&from=&to=zh-CN",
-        crate::permissions::encode(&url)
-    );
-    let page = tab_new(app, window, state, Some(proxy.clone()), None).await?;
-    crate::logging::info(&format!("translate {url} as {page}"));
-    Ok(proxy)
-}
 
 #[tauri::command]
 pub async fn page_failed(

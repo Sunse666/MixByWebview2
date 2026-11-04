@@ -120,6 +120,26 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
         });
     }
 
+    // Support hook: MIX_TRANSLATE=1 runs the translator on the current page.
+    if std::env::var("MIX_TRANSLATE").is_ok() {
+        let handle = app.handle().clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(3000));
+            let target = handle.clone();
+            let _ = handle.run_on_main_thread(move || {
+                let Some(win) = target.get_window(PRIMARY) else {
+                    return;
+                };
+                let state = target.state::<AppState>();
+                let call = crate::ipc::translate_page(target.clone(), win, state, None);
+                match tauri::async_runtime::block_on(call) {
+                    Ok(url) => crate::logging::info(&format!("debug translate: {url}")),
+                    Err(err) => crate::logging::warn(&format!("debug translate failed: {}", err.message)),
+                }
+            });
+        });
+    }
+
     // Support hook: MIX_TOGGLE_EXT=1 hides the first extension after startup, so
     // the live settings path can be checked without a click.
     if std::env::var("MIX_TOGGLE_EXT").is_ok() {

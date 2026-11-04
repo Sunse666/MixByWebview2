@@ -782,8 +782,14 @@ async function bootMenu() {
   item("\u21bb", "Reload", "Ctrl+R", () => invoke("tab_nav", { action: "reload" }));
   divider();
   item("\u2399", "Print", "Ctrl+P", () => invoke("tab_print"));
+  if (context.selection) {
+    item("\u4e16", "Translate selection", "", async () => {
+      await invoke("translate_page", { target: context.selection }).catch((error) => report(String(error)));
+      await invoke("overlay_close");
+    });
+  }
   item("\u4e16", "Translate page", "", async () => {
-    await invoke("translate_page", { target: context.link || null }).catch((error) => report(String(error)));
+    await invoke("translate_page", { target: null }).catch((error) => report(String(error)));
     await invoke("overlay_close");
   });
   item("\u2691", "Inspect", "", () => invoke("shortcut", { action: "devtools" }));
