@@ -44,6 +44,25 @@ impl Default for Settings {
 }
 
 impl Settings {
+    /// Keeps older profiles in step with changes to the default toolbar.
+    fn migrate(mut self) -> Self {
+        // The magnifier slot became the zoom control; "find" still exists but is
+        // no longer part of the default strip.
+        if !self.toolbar.iter().any(|id| id == "zoom") {
+            for id in self.toolbar.iter_mut() {
+                if id == "find" {
+                    *id = "zoom".to_string();
+                }
+            }
+        }
+        // An empty list means "nothing enabled", but it also happens when a
+        // profile predates the field, where falling back to the default is right.
+        if self.toolbar.is_empty() {
+            self.toolbar = Settings::default().toolbar;
+        }
+        self
+    }
+
     pub fn save(&self, path: &Path) -> std::io::Result<()> {
         let json = serde_json::to_string_pretty(self)?;
         std::fs::write(path, json)
@@ -60,7 +79,7 @@ impl Settings {
                     return Self::default();
                 }
                 value.schema_version = SCHEMA;
-                value
+                value.migrate()
             }
             Err(err) => {
                 crate::logging::warn(&format!("settings.json unreadable ({err}); keeping a backup"));
@@ -68,5 +87,45 @@ impl Settings {
                 Self::default()
             }
         }
+    }
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn write(dir: &str, body: &str) -> std::path::PathBuf {
+        let path = std::env::temp_dir().join(dir);
+        std::fs::create_dir_all(&path).unwrap();
+        let file = path.join("settings.json");
+        std::fs::write(&file, body).unwrap();
+        file
+    }
+
+    #[test]
+    fn an_old_toolbar_gains_the_zoom_button() {
+        let file = write(
+            "mix-settings-migrate",
+            r#"{"schema_version":1,"toolbar":["downloads","translate","find","bookmark","extensions"]}"#,
+        );
+        let settings = Settings::load(&file);
+        assert!(settings.toolbar.iter().any(|id| id == "zoom"));
+        assert!(!settings.toolbar.iter().any(|id| id == "find"));
+    }
+
+    #[test]
+    fn a_missing_toolbar_falls_back_to_the_default() {
+        let file = write("mix-settings-empty", r#"{"schema_version":1}"#);
+        let settings = Settings::load(&file);
+        assert_eq!(settings.toolbar, Settings::default().toolbar);
+    }
+
+    #[test]
+    fn an_explicit_choice_is_kept() {
+        let file = write(
+            "mix-settings-keep",
+            r#"{"schema_version":1,"toolbar":["zoom","bookmark"]}"#,
+        );
+        let settings = Settings::load(&file);
+        assert_eq!(settings.toolbar, vec!["zoom".to_string(), "bookmark".to_string()]);
     }
 }
