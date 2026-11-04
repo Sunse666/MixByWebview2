@@ -674,7 +674,7 @@ pub async fn tab_nav(
     Ok(())
 }
 
-fn selected_label(state: &AppState, window: &tauri::Window) -> String {
+pub(crate) fn selected_label(state: &AppState, window: &tauri::Window) -> String {
     state
         .read_core(window.label())
         .selected

@@ -40,38 +40,63 @@ const SHORTCUT_FORWARDER: &str = r#"
 // In-place page translation: the page owns the DOM, Rust owns the network.
 (function () {
   var nodes = [];
-  // Nodes already handled in this page, so a second pass only picks up new text.
+  // Nodes already handled, so later passes only pick up new text.
   var done = new WeakSet();
+  var observer = null;
+  var running = false;
+  var timer = null;
+
+  // Same origin frames share the document tree with us; cross origin ones throw.
+  var documents = function () {
+    var list = [document];
+    var frames = document.querySelectorAll("iframe, frame");
+    for (var i = 0; i < frames.length; i++) {
+      try {
+        var doc = frames[i].contentDocument;
+        if (doc && doc.body) list.push(doc);
+      } catch (error) {
+        /* cross origin */
+      }
+    }
+    return list;
+  };
 
   var collect = function () {
     nodes = [];
-    var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
-      acceptNode: function (node) {
-        var text = node.nodeValue || "";
-        if (text.trim().length < 2) return NodeFilter.FILTER_REJECT;
-        var parent = node.parentElement;
-        if (!parent) return NodeFilter.FILTER_REJECT;
-        if (/^(SCRIPT|STYLE|NOSCRIPT|TEXTAREA|CODE|PRE|KBD|SAMP)$/.test(parent.tagName)) {
-          return NodeFilter.FILTER_REJECT;
-        }
-        return NodeFilter.FILTER_ACCEPT;
-      },
-    });
-
     var seen = new Set();
     var total = 0;
-    while (walker.nextNode()) {
-      var node = walker.currentNode;
-      var text = node.nodeValue;
-      if (done.has(node)) continue;
-      if (seen.has(text)) continue;
-      if (total + text.length > 6000) break;
-      seen.add(text);
-      total += text.length;
-      nodes.push({ node: node, original: text });
-      if (nodes.length >= 400) break;
+    var docs = documents();
+
+    for (var d = 0; d < docs.length; d++) {
+      var walker = docs[d].createTreeWalker(docs[d].body, NodeFilter.SHOW_TEXT, {
+        acceptNode: function (node) {
+          var text = node.nodeValue || "";
+          if (text.trim().length < 2) return NodeFilter.FILTER_REJECT;
+          var parent = node.parentElement;
+          if (!parent) return NodeFilter.FILTER_REJECT;
+          if (/^(SCRIPT|STYLE|NOSCRIPT|TEXTAREA|CODE|PRE|KBD|SAMP)$/.test(parent.tagName)) {
+            return NodeFilter.FILTER_REJECT;
+          }
+          return NodeFilter.FILTER_ACCEPT;
+        },
+      });
+
+      while (walker.nextNode()) {
+        var node = walker.currentNode;
+        var text = node.nodeValue;
+        if (done.has(node)) continue;
+        if (seen.has(text)) continue;
+        if (total + text.length > 6000) break;
+        seen.add(text);
+        total += text.length;
+        nodes.push({ node: node, original: text });
+        if (nodes.length >= 400) break;
+      }
     }
-    return nodes.map(function (item) { return item.original; });
+
+    return nodes.map(function (item) {
+      return item.original;
+    });
   };
 
   var apply = function (translated) {
@@ -92,45 +117,71 @@ const SHORTCUT_FORWARDER: &str = r#"
       nodes[i].node.nodeValue = nodes[i].original;
     }
     nodes = [];
+    done = new WeakSet();
   };
 
-  // Several passes: pages that render late keep producing new text.
-  window.__mixStartTranslate = function () {
-    var total = 0;
-    var rounds = 0;
+  var rounds = function (total) {
+    var texts = collect();
+    if (!texts.length) {
+      window.__TAURI_INTERNALS__.invoke("translate_done", {
+        count: total,
+        error: total === 0 ? "no translatable text" : null,
+      });
+      running = false;
+      return;
+    }
 
-    var step = function () {
-      var texts = collect();
-      if (!texts.length || rounds >= 4) {
-        window.__TAURI_INTERNALS__.invoke("translate_done", {
-          count: total,
-          error: total === 0 ? "no translatable text" : null,
-        });
-        return;
-      }
-      rounds++;
-      window.__TAURI_INTERNALS__
-        .invoke("translate_texts", { texts: texts })
-        .then(function (translated) {
-          var applied = apply(translated || []);
-          total += applied;
-          if (applied === 0) {
-            window.__TAURI_INTERNALS__.invoke("translate_done", { count: total, error: null });
-            return;
-          }
-          setTimeout(step, 50);
-        })
-        .catch(function (err) {
-          window.__TAURI_INTERNALS__.invoke("translate_done", { count: total, error: String(err) });
-        });
+    window.__TAURI_INTERNALS__
+      .invoke("translate_texts", { texts: texts })
+      .then(function (translated) {
+        var applied = apply(translated || []);
+        total += applied;
+        if (applied === 0) {
+          window.__TAURI_INTERNALS__.invoke("translate_done", { count: total, error: null });
+          running = false;
+          return;
+        }
+        setTimeout(function () {
+          rounds(total);
+        }, 50);
+      })
+      .catch(function (err) {
+        window.__TAURI_INTERNALS__.invoke("translate_done", { count: total, error: String(err) });
+        running = false;
+      });
+  };
+
+  // New content (infinite scroll, SPA updates) is picked up after it settles.
+  var watch = function () {
+    if (observer) return;
+    var notify = function () {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(function () {
+        if (!running) window.__mixStartTranslate();
+      }, 900);
     };
+    observer = new MutationObserver(notify);
+    var docs = documents();
+    for (var i = 0; i < docs.length; i++) {
+      observer.observe(docs[i].body, { childList: true, subtree: true });
+    }
+  };
 
-    step();
+  window.__mixStartTranslate = function () {
+    if (running) return;
+    running = true;
+    rounds(0);
+    watch();
   };
 
   window.__mixStopTranslate = function () {
+    if (observer) {
+      observer.disconnect();
+      observer = null;
+    }
+    if (timer) clearTimeout(timer);
+    running = false;
     restore();
-    done = new WeakSet();
     window.__TAURI_INTERNALS__.invoke("translate_done", { count: 0 });
   };
 

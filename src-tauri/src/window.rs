@@ -152,6 +152,28 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
         crate::translate::warm().await;
     });
 
+    // Support hook: MIX_DOM_PUSH=1 appends a paragraph later, so the observer that
+    // picks up dynamic content can be exercised without a real feed.
+    if std::env::var("MIX_DOM_PUSH").is_ok() {
+        let handle = app.handle().clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(9000));
+            let target = handle.clone();
+            let _ = handle.run_on_main_thread(move || {
+                let state = target.state::<AppState>();
+                let Some(win) = target.get_window(PRIMARY) else {
+                    return;
+                };
+                let label = crate::ipc::selected_label(&state, &win);
+                if let Some(webview) = target.get_webview(&label) {
+                    let _ = webview.eval(
+                        "(function(){var p=document.createElement('p');p.textContent='A paragraph injected by the test hook.';document.body.appendChild(p);})()",
+                    );
+                }
+            });
+        });
+    }
+
     // Support hook: MIX_TOGGLE_EXT=1 hides the first extension after startup, so
     // the live settings path can be checked without a click.
     if std::env::var("MIX_TOGGLE_EXT").is_ok() {
