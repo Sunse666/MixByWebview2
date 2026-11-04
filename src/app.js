@@ -134,26 +134,35 @@ function renderTabs() {
 }
 
 const TOOLBAR_ITEMS = {
-  downloads: { glyph: "\u2193", label: "Downloads", run: () => invoke("open_dir", { which: "downloads" }) },
-  translate: { glyph: "\u6587", label: "Translate this page", run: () => invoke("translate_page", { target: null }) },
-  find: { glyph: "\u2315", label: "Find in page", run: () => invoke("overlay_toggle", { kind: "find" }) },
-  bookmark: { glyph: "\u2606", label: "Bookmark this page", run: () => invoke("bookmark_toggle") },
-  extensions: { glyph: "\u25a4", label: "Extensions", run: () => invoke("overlay_open", { kind: "app_menu&page=extensions" }) },
+  translate: { glyph: "\u6587", label: "Translate this page", where: "inside", run: () => invoke("translate_page", { target: null }) },
+  find: { glyph: "\u2315", label: "Find in page", where: "inside", run: () => invoke("overlay_toggle", { kind: "find" }) },
+  bookmark: { glyph: "\u2606", label: "Bookmark this page", where: "inside", run: () => invoke("bookmark_toggle") },
+  extensions: { glyph: "\u25a4", label: "Extensions", where: "outside", run: () => invoke("overlay_open", { kind: "app_menu&page=extensions" }) },
+  downloads: { glyph: "\u2193", label: "Downloads", where: "outside", run: () => invoke("open_dir", { which: "downloads" }) },
 };
 
-function renderToolbar(extensions) {
-  const holder = document.getElementById("extensions-bar");
-  const buttons = [];
+async function renderToolbar(extensions) {
+  const saved = new Set((await invoke("bookmark_list")).map((item) => item.url));
+  const active = tabs.find((tab) => tab.id === selected);
+  const bookmarked = active ? saved.has(active.url) : false;
 
-  for (const id of settings.toolbar || []) {
+  const inside = document.getElementById("url-actions");
+  const outside = document.getElementById("toolbar");
+  const inner = [];
+  const outer = [];
+
+  // Order follows Chrome: extensions puzzle first, downloads last.
+  const order = ["translate", "find", "bookmark", "extensions", "downloads"];
+  for (const id of order) {
+    if (!(settings.toolbar || []).includes(id)) continue;
     const spec = TOOLBAR_ITEMS[id];
     if (!spec) continue;
     const button = document.createElement("button");
-    button.className = "tool-btn";
+    button.className = spec.where === "inside" ? "url-action" : "tool-btn";
     button.title = spec.label;
-    button.textContent = spec.glyph;
+    button.textContent = id === "bookmark" && bookmarked ? "\u2605" : spec.glyph;
     button.addEventListener("click", () => spec.run().catch(() => {}));
-    buttons.push(button);
+    (spec.where === "inside" ? inner : outer).push(button);
   }
 
   const hidden = new Set(settings.hidden_extensions || []);
@@ -169,11 +178,15 @@ function renderToolbar(extensions) {
     button.addEventListener("click", () =>
       invoke("overlay_open", { kind: `ext_info&name=${encodeURIComponent(ext.name)}` }),
     );
-    buttons.push(button);
+    // Extension icons sit between the puzzle and the download button.
+    const at = outer.findIndex((node) => node.title === TOOLBAR_ITEMS.downloads.label);
+    if (at >= 0) outer.splice(at, 0, button);
+    else outer.push(button);
   }
 
-  holder.hidden = buttons.length === 0;
-  holder.replaceChildren(...buttons);
+  inside.replaceChildren(...inner);
+  outside.hidden = outer.length === 0;
+  outside.replaceChildren(...outer);
 }
 
 
@@ -269,9 +282,13 @@ async function boot() {
   settings = await invoke("settings_get");
 
   // Listeners first: the backend may emit while this page is still starting.
-  await listen("tabs:changed", (event) => setTabs(event.payload));
+  await listen("tabs:changed", (event) => {
+    setTabs(event.payload);
+    invoke("ext_list").then((list) => renderToolbar(list)).catch(() => {});
+  });
   await listen("bookmarks:changed", async () => {
     renderBookmarks(await invoke("bookmark_list"));
+    renderToolbar(await invoke("ext_list"));
   });
   await listen("ext:changed", async () => renderToolbar(await invoke("ext_list")));
   await listen("settings:changed", async () => {

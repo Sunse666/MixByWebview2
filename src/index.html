@@ -25,11 +25,16 @@
       <button class="icon" data-nav="forward" title="Forward">&gt;</button>
       <button class="icon" data-nav="reload" title="Reload">R</button>
     </div>
-    <img id="url-icon" alt="" hidden />
-    <input id="url" spellcheck="false" placeholder="Search or enter address" />
+
+    <div id="url-wrap">
+      <img id="url-icon" alt="" hidden />
+      <input id="url" spellcheck="false" placeholder="Search or enter address" />
+      <div id="url-actions" class="url-actions"></div>
+    </div>
+
     <button class="pill" id="download" title="Open downloads folder" hidden></button>
-    <div id="extensions-bar" class="extensions" hidden></div>
-    <button class="icon" id="theme-btn" title="Theme">=</button>
+    <div id="toolbar" class="toolbar"></div>
+    <button class="icon" id="theme-btn" title="Menu">=</button>
   </div>
 
   <div id="bookmarks" class="bookmarks" hidden></div>
