@@ -46,6 +46,8 @@ pub struct AppState {
     /// Origin of the bundled pages, e.g. http://tauri.localhost/
     pub app_base: parking_lot::RwLock<String>,
     pub pending: RwLock<std::collections::HashMap<String, String>>,
+    /// Cached "can we reach this host" answers, so navigation is not slowed down.
+    pub reachability: crate::net::Reachability,
     /// Tab id -> the url whose error page is already showing.
     pub error_shown: RwLock<std::collections::HashMap<String, String>>,
     pub bookmarks: RwLock<Vec<Bookmark>>,
@@ -82,6 +84,7 @@ impl AppState {
             url_edit: RwLock::new(std::collections::HashMap::new()),
             app_base: parking_lot::RwLock::new(String::new()),
             pending: RwLock::new(std::collections::HashMap::new()),
+            reachability: crate::net::Reachability::default(),
             error_shown: RwLock::new(std::collections::HashMap::new()),
             bookmarks: RwLock::new(bookmarks),
             scripts,
@@ -604,6 +607,17 @@ pub async fn tab_close(app: AppHandle, window: tauri::Window, state: State<'_, A
 
 #[tauri::command]
 pub async fn tab_navigate(app: AppHandle, window: tauri::Window, state: State<'_, AppState>, url: String) -> Result<(), AppError> {
+    // A dead host would land on WebView2's own error page, which we cannot
+    // replace, so answer it ourselves before navigating.
+    if url.starts_with("http") && !state.reachability.check(&url) {
+        let id = selected_label(&state, &window);
+        if !id.is_empty() {
+            crate::logging::info(&format!("unreachable: {url}"));
+            show_error_page(&app, &id, url.trim());
+        }
+        return Ok(());
+    }
+
     let Some(target) = crate::tabs::parse_url(&url) else {
         crate::logging::warn(&format!("rejected address: {url}"));
         let id = selected_label(&state, &window);
@@ -1687,6 +1701,77 @@ pub async fn tab_scroll(
 }
 
 /// The page reports a browser error page; replace it with ours.
+/// Opens the current page in a reading translator. There is no in-place
+/// translation API in WebView2, so this hands the url to a web service.
+/// Saves a remote file into the downloads folder. Used by "Save image as".
+#[tauri::command]
+pub async fn download_url(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    url: String,
+    file_name: Option<String>,
+) -> Result<String, AppError> {
+    if !url.starts_with("http://") && !url.starts_with("https://") {
+        return Err(AppError::new("bad_url", "only http(s) files can be saved"));
+    }
+
+    let response = reqwest::get(&url)
+        .await
+        .map_err(|err| AppError::new("net", err.to_string()))?;
+    if !response.status().is_success() {
+        return Err(AppError::new(
+            "net",
+            format!("server answered {}", response.status()),
+        ));
+    }
+
+    let bytes = response
+        .bytes()
+        .await
+        .map_err(|err| AppError::new("net", err.to_string()))?;
+    // 128 MB is plenty for an image and keeps a stray click from filling the disk.
+    if bytes.len() > 128 * 1024 * 1024 {
+        return Err(AppError::new("too_big", "file is larger than 128 MB"));
+    }
+
+    let suggested = file_name.unwrap_or_default();
+    let target = crate::downloads::target_for(&state.dirs.downloads, &url, &suggested);
+    std::fs::write(&target, &bytes)?;
+    crate::downloads::record_done(&app, &url, &target);
+    crate::logging::info(&format!("saved {}", target.display()));
+    Ok(target.display().to_string())
+}
+
+#[tauri::command]
+pub async fn translate_page(
+    app: AppHandle,
+    window: tauri::Window,
+    state: State<'_, AppState>,
+    target: Option<String>,
+) -> Result<String, AppError> {
+    let url = match target {
+        Some(value) => value,
+        None => {
+            let id = selected_label(&state, &window);
+            state
+                .try_read_core(window.label())
+                .and_then(|core| core.tabs.iter().find(|tab| tab.id == id).map(|tab| tab.url.clone()))
+                .unwrap_or_default()
+        }
+    };
+    if !url.starts_with("http") {
+        return Err(AppError::new("bad_url", "only web pages can be translated"));
+    }
+
+    let proxy = format!(
+        "https://www.translatetheweb.com/?a={}&from=&to=zh-CN",
+        crate::permissions::encode(&url)
+    );
+    let page = tab_new(app, window, state, Some(proxy.clone()), None).await?;
+    crate::logging::info(&format!("translate {url} as {page}"));
+    Ok(proxy)
+}
+
 #[tauri::command]
 pub async fn page_failed(
     app: AppHandle,

@@ -8,6 +8,7 @@ mod downloads;
 mod extensions;
 mod ipc;
 mod library;
+mod net;
 mod logging;
 mod overlay;
 mod paths;
@@ -89,6 +90,8 @@ fn main() {
             ipc::suggest_feed,
             ipc::suggest_refresh,
             ipc::overlay_toggle,
+            ipc::download_url,
+            ipc::translate_page,
             ipc::page_failed,
             ipc::tab_scroll,
             ipc::url_type,

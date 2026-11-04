@@ -51,6 +51,13 @@ pub fn handle(webview: Webview, event: DownloadEvent<'_>) -> bool {
     }
 }
 
+/// Records a file that we wrote ourselves (image save), so it shows up in the
+/// same list as the webview downloads.
+pub fn record_done(app: &tauri::AppHandle, url: &str, path: &Path) {
+    record(app, Some(url), Some(path), "started");
+    record(app, Some(url), Some(path), "finished");
+}
+
 fn record(app: &tauri::AppHandle, url: Option<&str>, path: Option<&Path>, state: &str) {
     let Some(guard) = app.try_state::<AppState>() else {
         return;

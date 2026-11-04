@@ -41,6 +41,8 @@ fn main() {
         "suggest_feed",
         "suggest_refresh",
         "overlay_toggle",
+        "download_url",
+        "translate_page",
         "page_failed",
         "tab_scroll",
         "url_type",

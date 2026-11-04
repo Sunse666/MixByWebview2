@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-translate-page"
+description = "Enables the translate_page command without any pre-configured scope."
+commands.allow = ["translate_page"]
+
+[[permission]]
+identifier = "deny-translate-page"
+description = "Denies the translate_page command without any pre-configured scope."
+commands.deny = ["translate_page"]

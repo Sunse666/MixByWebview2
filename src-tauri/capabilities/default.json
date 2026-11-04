@@ -37,6 +37,8 @@
     "allow-suggest-feed",
     "allow-suggest-refresh",
     "allow-overlay-toggle",
+    "allow-download-url",
+    "allow-translate-page",
     "allow-page-failed",
     "allow-tab-scroll",
     "allow-url-type",

@@ -120,6 +120,47 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
         });
     }
 
+    // Support hook: MIX_SAVE_URL=<url> saves that file, so the download path
+    // can be checked without a right click.
+    if let Ok(url) = std::env::var("MIX_SAVE_URL") {
+        let handle = app.handle().clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(2500));
+            let target = handle.clone();
+            let _ = handle.run_on_main_thread(move || {
+                let state = target.state::<AppState>();
+                let call = crate::ipc::download_url(target.clone(), state, url, None);
+                match tauri::async_runtime::block_on(call) {
+                    Ok(path) => crate::logging::info(&format!("debug save: {path}")),
+                    Err(err) => crate::logging::warn(&format!("debug save failed: {}", err.message)),
+                }
+            });
+        });
+    }
+
+    // Support hook: MIX_NAV=1 navigates the first tab to a dead host, so the
+    // "unreachable" path can be checked without typing.
+    if std::env::var("MIX_NAV").is_ok() {
+        let handle = app.handle().clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(2500));
+            let target = handle.clone();
+            let _ = handle.run_on_main_thread(move || {
+                let Some(win) = target.get_window(PRIMARY) else {
+                    return;
+                };
+                let state = target.state::<AppState>();
+                let call = crate::ipc::tab_navigate(
+                    target.clone(),
+                    win,
+                    state,
+                    "https://nonexistent-host-mix-test.invalid".to_string(),
+                );
+                let _ = tauri::async_runtime::block_on(call);
+            });
+        });
+    }
+
     // Support hook: MIX_ERROR_PAGE=1 shows the error page so it can be reviewed.
     if std::env::var("MIX_ERROR_PAGE").is_ok() {
         let handle = app.handle().clone();

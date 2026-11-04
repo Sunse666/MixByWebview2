@@ -201,6 +201,10 @@ async function bootAppMenu() {
       row("\u25a3", "Full screen", "F11", act(() => invoke("window_fullscreen", { enabled: null })));
       divider();
       row("\u2399", "Print", "Ctrl+P", act(() => invoke("tab_print")));
+      row("\u4e16", "Translate this page", "", async () => {
+        await invoke("translate_page", { target: null }).catch((error) => report(String(error)));
+        await close();
+      });
       row("\u2717", "Clear browsing data", "Ctrl+Shift+Del", async () => {
         await invoke("app_clear_data");
         await close();
@@ -544,6 +548,15 @@ async function bootMenu() {
   if (context.image) {
     item("\u25a3", "Open image in new tab", "", () => invoke("tab_new", { url: context.image }));
     item("\u2398", "Copy image address", "", () => copy(context.image));
+    item("\u2b07", "Save image as...", "", async () => {
+      const name = (context.image.split("/").pop() || "image").split("?")[0];
+      try {
+        await invoke("download_url", { url: context.image, fileName: name });
+      } catch (error) {
+        report("save image failed: " + error);
+      }
+      await invoke("overlay_close");
+    });
     divider();
   }
   if (context.selection) {
@@ -562,6 +575,10 @@ async function bootMenu() {
   item("\u21bb", "Reload", "Ctrl+R", () => invoke("tab_nav", { action: "reload" }));
   divider();
   item("\u2399", "Print", "Ctrl+P", () => invoke("tab_print"));
+  item("\u4e16", "Translate page", "", async () => {
+    await invoke("translate_page", { target: context.link || null }).catch((error) => report(String(error)));
+    await invoke("overlay_close");
+  });
   item("\u2691", "Inspect", "", () => invoke("shortcut", { action: "devtools" }));
 
   // Dismiss when the pointer lands anywhere in the panel but not on a row.
