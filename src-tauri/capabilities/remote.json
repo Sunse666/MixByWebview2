@@ -3,9 +3,7 @@
   "identifier": "remote",
   "description": "Remote pages may forward shortcuts, report context menus and ask permissions",
   "local": false,
-  "windows": [
-    "main"
-  ],
+  "windows": ["*"],
   "webviews": [
     "*"
   ],
@@ -20,6 +18,7 @@
   },
   "permissions": [
     "allow-shortcut",
+    "allow-tab-icon",
     "allow-context-menu",
     "allow-permission-request",
     "allow-snap"

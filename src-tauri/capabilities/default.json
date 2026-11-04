@@ -2,9 +2,7 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Mix app pages: chrome UI and overlay",
-  "windows": [
-    "main"
-  ],
+  "windows": ["*"],
   "webviews": [
     "*"
   ],
@@ -39,6 +37,7 @@
     "allow-suggest-feed",
     "allow-suggest-refresh",
     "allow-overlay-toggle",
+    "allow-tab-icon",
     "allow-tab-reopen",
     "allow-window-new",
     "allow-history-list",

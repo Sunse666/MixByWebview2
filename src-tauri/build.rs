@@ -41,6 +41,7 @@ fn main() {
         "suggest_feed",
         "suggest_refresh",
         "overlay_toggle",
+        "tab_icon",
         "tab_reopen",
         "window_new",
         "history_list",

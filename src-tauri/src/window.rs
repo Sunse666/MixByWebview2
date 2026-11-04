@@ -206,6 +206,8 @@ pub fn open_window(
                 title: "New tab".into(),
                 zoom: 1.0,
                 incognito: false,
+                icon: None,
+                loading: false,
                 alive: true,
                 last_active: index as u64,
             })

@@ -19,6 +19,25 @@ const SHORTCUT_FORWARDER: &str = r#"
   }, true);
 
 (function () {
+  // Report the page favicon once the document is parsed.
+  var sendIcon = function () {
+    try {
+      var link = document.querySelector('link[rel~="icon"]');
+      var href = link && link.href ? link.href : "";
+      if (!href && location.protocol.startsWith("http")) {
+        href = location.origin + "/favicon.ico";
+      }
+      if (!href) return;
+      window.__TAURI_INTERNALS__.invoke("tab_icon", { url: href }).catch(function () {});
+    } catch (error) {
+      /* ignore */
+    }
+  };
+  document.addEventListener("DOMContentLoaded", sendIcon);
+  setTimeout(sendIcon, 1500);
+})();
+
+(function () {
   if (window.__mixKeys) return;
   window.__mixKeys = true;
 
@@ -204,6 +223,9 @@ pub struct Tab {
     pub zoom: f64,
     /// Incognito tabs never touch the shared profile and are not restored.
     pub incognito: bool,
+    /// Favicon url reported by the page, if any.
+    pub icon: Option<String>,
+    pub loading: bool,
     /// False means the webview was dropped to save memory; selecting the tab
     /// recreates it from url.
     pub alive: bool,
@@ -216,18 +238,23 @@ pub struct TitlePayload {
     pub title: String,
 }
 
-pub fn parse_url(input: &str) -> Url {
+/// Returns None when the text cannot be turned into a web address, so the UI can
+/// say so instead of silently loading a blank page.
+pub fn parse_url(input: &str) -> Option<Url> {
     let trimmed = input.trim();
     if trimmed.is_empty() {
-        return "about:blank".parse().expect("static url");
+        return "about:blank".parse().ok();
     }
     if let Ok(url) = trimmed.parse::<Url>() {
-        return url;
+        return Some(url);
     }
-    match format!("https://{trimmed}").parse::<Url>() {
-        Ok(url) => url,
-        Err(_) => "about:blank".parse().expect("static url"),
+    // A bare host like "example.com" is a common way to type an address.
+    if !trimmed.contains(char::is_whitespace) && trimmed.contains('.') {
+        if let Ok(url) = format!("https://{trimmed}").parse::<Url>() {
+            return Some(url);
+        }
     }
+    None
 }
 
 pub fn create(
@@ -241,7 +268,8 @@ pub fn create(
 ) -> tauri::Result<Webview> {
     let app = win.app_handle().clone();
     let owner = crate::ipc::window_of_tab(id).to_string();
-    let builder = WebviewBuilder::new(id, WebviewUrl::External(parse_url(url)))
+    let target = parse_url(url).unwrap_or_else(|| "about:blank".parse().expect("static url"));
+    let builder = WebviewBuilder::new(id, WebviewUrl::External(target))
         // WebView2 keeps ctrl+wheel zoom off unless asked (M0 E2).
         .zoom_hotkeys_enabled(true)
         // Without this wry leaves AreDevToolsEnabled off and open_devtools is a no-op.
@@ -259,6 +287,18 @@ pub fn create(
             tauri::webview::NewWindowResponse::Deny
         })
         .initialization_script(SHORTCUT_FORWARDER)
+        // Page load events drive the tab spinner.
+        .on_page_load(|webview, payload| {
+            let app = webview.app_handle().clone();
+            let id = webview.label().to_string();
+            let loading = matches!(payload.event(), tauri::webview::PageLoadEvent::Started);
+            let owner = crate::ipc::window_of_tab(&id).to_string();
+            let _ = app.emit_to(
+                owner,
+                "tab:loading",
+                crate::ipc::LoadingPayload { id, loading },
+            );
+        })
         .on_document_title_changed(|webview, title| {
             #[cfg(debug_assertions)]
             crate::logging::info(&format!("tab title: {title}"));

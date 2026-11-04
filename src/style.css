@@ -178,6 +178,11 @@ button {
 
 #url:focus { border-color: var(--accent); }
 
+#url.invalid {
+  border-color: #ff6b6b;
+  background: color-mix(in srgb, #ff6b6b 12%, var(--url-bg));
+}
+
 .pill {
   max-width: 200px;
   height: 24px;
@@ -200,3 +205,30 @@ button {
 .resize.right-top { top: 0; right: 0; width: 8px; height: 20px; cursor: nesw-resize; }
 .resize.left { top: 20px; left: 0; width: 4px; bottom: 0; cursor: ew-resize; }
 .resize.right { top: 20px; right: 0; width: 4px; bottom: 0; cursor: ew-resize; }
+.tab-icon {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
+  border-radius: 3px;
+  object-fit: contain;
+}
+
+.tab-icon.spinner {
+  border: 1.5px solid color-mix(in srgb, var(--text) 30%, transparent);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: mix-spin 0.7s linear infinite;
+}
+
+@keyframes mix-spin {
+  to { transform: rotate(360deg); }
+}
+
+#url-icon {
+  width: 14px;
+  height: 14px;
+  margin: 0 6px 0 12px;
+  flex: 0 0 14px;
+  border-radius: 3px;
+  object-fit: contain;
+}

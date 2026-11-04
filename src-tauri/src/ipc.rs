@@ -205,6 +205,20 @@ pub struct TabMeta {
     title: String,
     alive: bool,
     incognito: bool,
+    icon: Option<String>,
+    loading: bool,
+}
+
+#[derive(Clone, Serialize)]
+pub struct LoadingPayload {
+    pub id: String,
+    pub loading: bool,
+}
+
+#[derive(Clone, Serialize)]
+pub struct IconPayload {
+    pub id: String,
+    pub icon: Option<String>,
 }
 
 #[derive(Clone, Serialize)]
@@ -230,6 +244,8 @@ fn snapshot(core: &Core) -> TabList {
                 title: tab.title.clone(),
                 alive: tab.alive,
                 incognito: tab.incognito,
+                icon: tab.icon.clone(),
+                loading: tab.loading,
             })
             .collect(),
         selected: core.selected.clone(),
@@ -470,7 +486,15 @@ pub async fn tab_new(
         core.next_tab_id += 1;
         // Labels carry the window so per-window lookups keep working.
     let id = tab_label(window.label(), core.next_tab_id);
-        let target = url.unwrap_or_else(|| state.settings.read().start_url.clone());
+        let target = match url {
+        Some(input) => {
+            if crate::tabs::parse_url(&input).is_none() {
+                return Err(AppError::new("bad_url", format!("not a web address: {input}")));
+            }
+            input
+        }
+        None => state.settings.read().start_url.clone(),
+    };
         core.tick += 1;
         let tick = core.tick;
         core.tabs.push(Tab {
@@ -483,6 +507,8 @@ pub async fn tab_new(
             },
             zoom: 1.0,
             incognito: incognito.unwrap_or(false),
+            icon: None,
+            loading: false,
             alive: true,
             last_active: tick,
         });
@@ -539,7 +565,10 @@ pub async fn tab_close(app: AppHandle, window: tauri::Window, state: State<'_, A
 
 #[tauri::command]
 pub async fn tab_navigate(app: AppHandle, window: tauri::Window, state: State<'_, AppState>, url: String) -> Result<(), AppError> {
-    let target = crate::tabs::parse_url(&url);
+    let Some(target) = crate::tabs::parse_url(&url) else {
+        crate::logging::warn(&format!("rejected address: {url}"));
+        return Err(AppError::new("bad_url", format!("not a web address: {url}")));
+    };
     let label = selected_label(&state, &window);
     if label.is_empty() {
         return Ok(());
@@ -704,6 +733,12 @@ pub async fn shortcut(app: AppHandle, window: tauri::Window, state: State<'_, Ap
         "next_tab" => cycle_tab(&app, &window, 1).await,
         "prev_tab" => cycle_tab(&app, &window, -1).await,
         "focus_url" => {
+            // The chrome webview needs OS focus, otherwise the keys keep going
+            // to the page while the address bar looks focused.
+            let _ = window.set_focus();
+            if let Some(chrome) = app.get_webview(&format!("{}-chrome", window.label())) {
+                let _ = chrome.set_focus();
+            }
             let _ = app.emit_to(window.label(), "ui:focus-url", ());
         }
         "reload" => {
@@ -1383,6 +1418,29 @@ pub async fn script_list(_window: tauri::Window, state: State<'_, AppState>) -> 
 
 /// Opens another window with its own tab strip.
 /// Reopens the most recently closed tab.
+/// Pages report their favicon here so the tab strip can show it.
+#[tauri::command]
+pub async fn tab_icon(
+    app: AppHandle,
+    webview: tauri::Webview,
+    state: State<'_, AppState>,
+    url: String,
+) -> Result<(), AppError> {
+    let id = webview.label().to_string();
+    let icon = url.trim().to_string();
+    if icon.is_empty() || !icon.starts_with("http") {
+        return Ok(());
+    }
+
+    let owner = window_of_tab(&id).to_string();
+    if let Some(mut core) = state.try_write_core(&owner) {
+        if let Some(tab) = core.tabs.iter_mut().find(|tab| tab.id == id) {
+            tab.icon = Some(icon.clone());
+        }
+    }
+    let _ = app.emit_to(owner, "tab:icon", IconPayload { id, icon: Some(icon) });
+    Ok(())
+}
 #[tauri::command]
 pub async fn tab_reopen(
     app: AppHandle,

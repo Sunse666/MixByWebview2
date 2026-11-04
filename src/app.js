@@ -65,6 +65,16 @@ function renderTabs() {
     el.title = tab.url;
 
     const label = document.createElement("span");
+    const icon = document.createElement(tab.loading ? "span" : tab.icon ? "img" : "span");
+    icon.className = tab.loading ? "tab-icon spinner" : "tab-icon";
+    if (!tab.loading && tab.icon) {
+      icon.src = tab.icon;
+      icon.alt = "";
+      icon.addEventListener("error", () => icon.remove());
+    } else if (!tab.loading) {
+      icon.textContent = "";
+    }
+
     label.className = "tab-title";
     label.textContent = tab.title || "New tab";
 
@@ -78,7 +88,7 @@ function renderTabs() {
       invoke("tab_close", { id: tab.id });
     });
 
-    el.append(label, close);
+    el.append(icon, label, close);
     el.addEventListener("mousedown", (event) => {
       if (event.target.closest("button")) return;
       invoke("tab_select", { id: tab.id });
@@ -86,6 +96,17 @@ function renderTabs() {
     return el;
   });
   tabStrip.replaceChildren(...nodes);
+}
+
+function syncAddressIcon(active) {
+  const holder = document.getElementById("url-icon");
+  if (!holder) return;
+  if (active && active.icon) {
+    holder.src = active.icon;
+    holder.hidden = false;
+  } else {
+    holder.hidden = true;
+  }
 }
 
 function syncUrl() {
@@ -101,6 +122,7 @@ function setTabs(payload) {
   renderTabs();
   const active = tabs.find((tab) => tab.id === selected);
   if (active) document.title = active.title || "Mix";
+  syncAddressIcon(active);
   syncUrl();
 }
 
@@ -111,6 +133,19 @@ async function boot() {
 
   // Listeners first: the backend may emit while this page is still starting.
   await listen("tabs:changed", (event) => setTabs(event.payload));
+  await listen("tab:loading", (event) => {
+    const tab = tabs.find((item) => item.id === event.payload.id);
+    if (!tab) return;
+    tab.loading = event.payload.loading;
+    renderTabs();
+  });
+  await listen("tab:icon", (event) => {
+    const tab = tabs.find((item) => item.id === event.payload.id);
+    if (!tab) return;
+    tab.icon = event.payload.icon;
+    renderTabs();
+    syncAddressIcon(tabs.find((item) => item.id === selected));
+  });
   await listen("tab:title", (event) => {
     const tab = tabs.find((item) => item.id === event.payload.id);
     if (!tab) return;
@@ -230,9 +265,20 @@ async function boot() {
   urlInput.addEventListener("input", () => feedSuggest(urlInput.value));
   urlInput.addEventListener("blur", () => closeSuggest());
 
+  let badUrlTimer = null;
+  const flagBadUrl = () => {
+    urlInput.classList.add("invalid");
+    urlInput.title = "Not a web address";
+    if (badUrlTimer) clearTimeout(badUrlTimer);
+    badUrlTimer = setTimeout(() => {
+      urlInput.classList.remove("invalid");
+      urlInput.title = "";
+    }, 1600);
+  };
+
   urlInput.addEventListener("keydown", (event) => {
     if (event.key === "Enter") {
-      invoke("tab_navigate", { url: urlInput.value });
+      invoke("tab_navigate", { url: urlInput.value }).catch(flagBadUrl);
       closeSuggest();
       urlInput.blur();
     }

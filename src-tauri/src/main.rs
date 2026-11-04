@@ -88,6 +88,7 @@ fn main() {
             ipc::suggest_feed,
             ipc::suggest_refresh,
             ipc::overlay_toggle,
+            ipc::tab_icon,
             ipc::tab_reopen,
             ipc::window_new,
             ipc::history_list,
