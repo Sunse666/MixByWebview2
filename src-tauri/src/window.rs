@@ -120,6 +120,40 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
         });
     }
 
+    // Support hook: MIX_TOGGLE_EXT=1 hides the first extension after startup, so
+    // the live settings path can be checked without a click.
+    if std::env::var("MIX_TOGGLE_EXT").is_ok() {
+        let handle = app.handle().clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(4000));
+            let target = handle.clone();
+            let _ = handle.run_on_main_thread(move || {
+                let name = {
+                    let state = target.state::<AppState>();
+                    state
+                        .extensions
+                        .iter()
+                        .find(|ext| ext.status == "loaded")
+                        .map(|ext| ext.name.clone())
+                };
+                let Some(name) = name else {
+                    return;
+                };
+                crate::logging::info(&format!("debug: hiding {name}"));
+                let Some(win) = target.get_window(PRIMARY) else {
+                    return;
+                };
+                let state = target.state::<AppState>();
+                let patch = crate::ipc::SettingsPatch {
+                    hidden_extensions: Some(vec![name]),
+                    ..Default::default()
+                };
+                let call = crate::ipc::settings_set(win, state, patch);
+                let _ = tauri::async_runtime::block_on(call);
+            });
+        });
+    }
+
     // Support hook: MIX_SAVE_URL=<url> saves that file, so the download path
     // can be checked without a right click.
     if let Ok(url) = std::env::var("MIX_SAVE_URL") {

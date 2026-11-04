@@ -256,6 +256,14 @@ function setTabs(payload) {
 
 const report = (message) => invoke("ui_log", { message }).catch(() => {});
 
+// Rust calls this after saving settings: the event bus does not reach child
+// webviews reliably, so the refresh is pushed in explicitly.
+window.__mixSettingsChanged = async () => {
+  settings = await invoke("settings_get");
+  renderToolbar(await invoke("ext_list"));
+  renderBookmarks(await invoke("bookmark_list"));
+};
+
 async function boot() {
   applyTheme(await invoke("theme_get"));
   settings = await invoke("settings_get");
@@ -270,6 +278,7 @@ async function boot() {
     settings = await invoke("settings_get");
     renderBookmarks(await invoke("bookmark_list"));
     renderToolbar(await invoke("ext_list"));
+
   });
   await listen("tab:loading", (event) => {
     const tab = tabs.find((item) => item.id === event.payload.id);

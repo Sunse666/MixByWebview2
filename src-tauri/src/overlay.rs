@@ -1,4 +1,4 @@
-use tauri::{webview::WebviewBuilder, AppHandle, Manager, WebviewUrl};
+use tauri::{webview::WebviewBuilder, AppHandle, Emitter, Manager, WebviewUrl};
 
 use crate::window::logical_size;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -207,5 +207,11 @@ pub fn close(app: &AppHandle, window_label: &str) {
         if let Some(chrome) = app.get_webview(&format!("{window_label}-chrome")) {
             let _ = chrome.set_focus();
         }
+        // Whatever was changed behind the panel shows up now.
+        let _ = app.emit_to(
+            format!("{window_label}-chrome"),
+            "settings:changed",
+            (),
+        );
     }
 }
