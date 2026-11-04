@@ -16,12 +16,26 @@ pub struct ExtInfo {
     /// loaded | skipped | error
     pub status: String,
     pub reason: String,
+    pub description: String,
+    /// data: url of the toolbar icon, empty when the manifest has none.
+    pub icon: String,
+    /// Relative path of the action popup, empty when there is none.
+    pub popup: String,
+    pub permissions: Vec<String>,
 }
 
+#[derive(Default)]
 struct Manifest {
     name: String,
     version: String,
     manifest_version: u32,
+    description: String,
+    icons: std::collections::HashMap<String, String>,
+    icons_fallback: Option<String>,
+    action_icon: Option<String>,
+    action_icon_map: std::collections::HashMap<String, String>,
+    action_popup: String,
+    permissions: Vec<String>,
 }
 
 /// Unpack every crx in the drop folder. Unpacked copies are a cache: they are
@@ -72,6 +86,12 @@ pub fn scan(dirs: &AppDirs) -> Vec<ExtInfo> {
                     "extension {label}: {} v{} ({status})",
                     manifest.name, manifest.version
                 ));
+                let icon = resolve_icon(&target, &manifest);
+                crate::logging::info(&format!(
+                    "extension {label}: toolbar icon {} bytes, popup {:?}",
+                    icon.len(),
+                    manifest.action_popup
+                ));
                 found.push(ExtInfo {
                     name: manifest.name,
                     version: manifest.version,
@@ -80,6 +100,10 @@ pub fn scan(dirs: &AppDirs) -> Vec<ExtInfo> {
                     source: label,
                     status,
                     reason,
+                    description: manifest.description,
+                    icon,
+                    popup: manifest.action_popup,
+                    permissions: manifest.permissions,
                 });
             }
             Err(err) => {
@@ -92,6 +116,10 @@ pub fn scan(dirs: &AppDirs) -> Vec<ExtInfo> {
                     source: label,
                     status: "error".into(),
                     reason: err,
+                    description: String::new(),
+                    icon: String::new(),
+                    popup: String::new(),
+                    permissions: Vec::new(),
                 });
             }
         }
@@ -215,6 +243,49 @@ fn read_manifest(dir: &Path) -> Result<Manifest, String> {
         .and_then(|value| value.as_str())
         .unwrap_or_default()
         .to_string();
+    // MV3 uses "action", MV2 used "browser_action"; both may carry an icon.
+    let action = json.get("action").or_else(|| json.get("browser_action"));
+    let mut action_icon = None;
+    let mut action_icon_map = std::collections::HashMap::new();
+    let mut action_popup = String::new();
+    if let Some(action) = action {
+        action_popup = action
+            .get("default_popup")
+            .and_then(|value| value.as_str())
+            .unwrap_or_default()
+            .to_string();
+        match action.get("default_icon") {
+            Some(serde_json::Value::String(path)) => action_icon = Some(path.clone()),
+            Some(serde_json::Value::Object(map)) => {
+                for (size, path) in map {
+                    if let Some(path) = path.as_str() {
+                        action_icon_map.insert(size.clone(), path.to_string());
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    let mut icons = std::collections::HashMap::new();
+    if let Some(map) = json.get("icons").and_then(|value| value.as_object()) {
+        for (size, path) in map {
+            if let Some(path) = path.as_str() {
+                icons.insert(size.clone(), path.to_string());
+            }
+        }
+    }
+
+    let permissions = json
+        .get("permissions")
+        .and_then(|value| value.as_array())
+        .map(|list| {
+            list.iter()
+                .filter_map(|item| item.as_str().map(str::to_string))
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+
     if name.is_empty() || name.starts_with("__MSG_") {
         name = dir
             .file_name()
@@ -233,7 +304,84 @@ fn read_manifest(dir: &Path) -> Result<Manifest, String> {
         name,
         version,
         manifest_version,
+        description: json
+            .get("description")
+            .and_then(|value| value.as_str())
+            .filter(|text| !text.starts_with("__MSG_"))
+            .unwrap_or_default()
+            .to_string(),
+        icons,
+        icons_fallback: None,
+        action_icon,
+        action_icon_map,
+        action_popup,
+        permissions,
     })
+}
+
+/// Picks the biggest declared icon and inlines it as a data url.
+fn resolve_icon(dir: &Path, manifest: &Manifest) -> String {
+    let candidates: Vec<&String> = manifest
+        .action_icon_map
+        .values()
+        .chain(manifest.icons.values())
+        .collect();
+    let relative = manifest
+        .action_icon
+        .as_ref()
+        .or_else(|| candidates.first().copied());
+
+    if let Some(relative) = relative {
+        if let Some(url) = icon_data_url(dir, relative) {
+            return url;
+        }
+    }
+    // Extensions often only ship icons/icon-16.png.
+    for guess in ["icons/icon-32.png", "icons/icon-16.png", "icon.png"] {
+        if let Some(url) = icon_data_url(dir, guess) {
+            return url;
+        }
+    }
+    String::new()
+}
+
+fn icon_data_url(dir: &Path, relative: &str) -> Option<String> {
+    let path = dir.join(relative.trim_start_matches('/'));
+    let bytes = std::fs::read(&path).ok()?;
+    if bytes.len() > 256 * 1024 {
+        return None;
+    }
+    let mime = match path.extension().and_then(|ext| ext.to_str()) {
+        Some("svg") => "image/svg+xml",
+        Some("jpg") | Some("jpeg") => "image/jpeg",
+        Some("webp") => "image/webp",
+        _ => "image/png",
+    };
+    Some(format!("data:{mime};base64,{}", base64(&bytes)))
+}
+
+fn base64(bytes: &[u8]) -> String {
+    const TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
+    for chunk in bytes.chunks(3) {
+        let b0 = chunk[0] as u32;
+        let b1 = *chunk.get(1).unwrap_or(&0) as u32;
+        let b2 = *chunk.get(2).unwrap_or(&0) as u32;
+        let triple = (b0 << 16) | (b1 << 8) | b2;
+        out.push(TABLE[((triple >> 18) & 0x3F) as usize] as char);
+        out.push(TABLE[((triple >> 12) & 0x3F) as usize] as char);
+        out.push(if chunk.len() > 1 {
+            TABLE[((triple >> 6) & 0x3F) as usize] as char
+        } else {
+            '='
+        });
+        out.push(if chunk.len() > 2 {
+            TABLE[(triple & 0x3F) as usize] as char
+        } else {
+            '='
+        });
+    }
+    out
 }
 
 /// Folder name for an unpacked extension: alphanumerics, dash and underscore only,

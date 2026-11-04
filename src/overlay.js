@@ -503,6 +503,72 @@ async function bootSuggest() {
   await invoke("suggest_refresh").catch(() => {});
 }
 
+async function bootExtInfo() {
+  appMenu.hidden = false;
+  themePanel.hidden = true;
+  menu.hidden = true;
+  applyTheme(await invoke("theme_get"));
+
+  const wanted = params.get("name") || "";
+  const list = await invoke("ext_list");
+  const ext = list.find((item) => item.name === wanted) || list[0];
+  if (!ext) return;
+
+  const head = document.createElement("div");
+  head.className = "menu-header";
+  if (ext.icon) {
+    const img = document.createElement("img");
+    img.src = ext.icon;
+    img.alt = "";
+    img.className = "ext-badge";
+    head.append(img);
+  }
+  const title = document.createElement("span");
+  title.textContent = ext.version ? `${ext.name} ${ext.version}` : ext.name;
+  head.append(title);
+  appMenu.append(head);
+
+  const note = (text) => {
+    if (!text) return;
+    const line = document.createElement("div");
+    line.className = "menu-note";
+    line.textContent = text;
+    appMenu.append(line);
+  };
+  note(ext.description || "");
+  note(ext.popup ? `Popup: ${ext.popup}` : "No toolbar popup");
+  if (ext.permissions && ext.permissions.length) {
+    note(`Permissions: ${ext.permissions.slice(0, 8).join(", ")}`);
+  }
+
+  const divider = () =>
+    appMenu.append(Object.assign(document.createElement("div"), { className: "divider" }));
+  divider();
+
+  const action = (glyph, label, run) => {
+    const button = document.createElement("button");
+    button.className = "row";
+    const icon = document.createElement("span");
+    icon.className = "ico";
+    icon.textContent = glyph;
+    const text = document.createElement("span");
+    text.className = "label";
+    text.textContent = label;
+    button.append(icon, text, document.createElement("span"));
+    button.addEventListener("click", run);
+    appMenu.append(button);
+  };
+
+  action("\u25a4", "Open extension folder", async () => {
+    await invoke("open_dir", { which: "extensions" });
+    await close();
+  });
+  action("\u21ba", "Reload extensions", async () => {
+    report("Extensions reload on restart");
+    await close();
+  });
+}
+
 async function bootMenu() {
   menu.hidden = false;
   appMenu.hidden = true;
@@ -623,6 +689,10 @@ async function boot() {
   }
   if (kind === "context_menu") {
     await bootMenu();
+    return;
+  }
+  if (kind === "ext_info") {
+    await bootExtInfo();
     return;
   }
   if (kind === "suggest") {

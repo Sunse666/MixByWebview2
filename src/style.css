@@ -283,3 +283,29 @@ button {
   font-size: 11px;
   opacity: 0.5;
 }
+
+.extensions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 4px;
+}
+
+.ext-btn {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+}
+
+.ext-btn:hover { background: var(--hover); }
+
+.ext-btn img {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+}
