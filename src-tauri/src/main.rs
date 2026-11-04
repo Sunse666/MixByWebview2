@@ -3,6 +3,7 @@
 // assets: frontend files are embedded at compile time, so editing src/*.js
 // only takes effect after the crate is rebuilt.
 mod diag;
+mod zoom;
 mod downloads;
 mod extensions;
 mod ipc;

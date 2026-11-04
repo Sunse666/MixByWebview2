@@ -292,6 +292,29 @@ pub fn create(
             let app = webview.app_handle().clone();
             let id = webview.label().to_string();
             let loading = matches!(payload.event(), tauri::webview::PageLoadEvent::Started);
+
+            // Zoom is remembered per site, so it has to be reapplied on every load.
+            if loading {
+                if let Some(state) = app.try_state::<crate::ipc::AppState>() {
+                    let level = state.zoom.read().level_for(payload.url().as_str());
+                    if (level - 1.0).abs() > f64::EPSILON {
+                        let _ = webview.set_zoom(level);
+                        crate::logging::info(&format!(
+                            "zoom {level:.1} for {}",
+                            payload.url()
+                        ));
+                        if let Ok(mut core) = state
+                            .try_write_core(crate::ipc::window_of_tab(&id))
+                            .ok_or(())
+                            .map_err(|_| ())
+                        {
+                            if let Some(tab) = core.tabs.iter_mut().find(|tab| tab.id == id) {
+                                tab.zoom = level;
+                            }
+                        }
+                    }
+                }
+            }
             let owner = crate::ipc::window_of_tab(&id).to_string();
             let _ = app.emit_to(
                 owner,

@@ -37,6 +37,7 @@ pub struct AppState {
     pub suggest_width: parking_lot::RwLock<f64>,
     /// Recently closed tabs, newest last, so Ctrl+Shift+T can bring them back.
     pub closed_tabs: RwLock<Vec<(String, String)>>,
+    pub zoom: parking_lot::RwLock<crate::zoom::ZoomStore>,
     pub bookmarks: RwLock<Vec<Bookmark>>,
     pub scripts: Vec<crate::userscripts::ScriptInfo>,
 }
@@ -67,6 +68,7 @@ impl AppState {
             suggest_text: parking_lot::RwLock::new(String::new()),
             suggest_width: parking_lot::RwLock::new(420.0),
             closed_tabs: RwLock::new(Vec::new()),
+            zoom: parking_lot::RwLock::new(crate::zoom::ZoomStore::load(&dirs.zoom_file)),
             bookmarks: RwLock::new(bookmarks),
             scripts,
             dirs,
@@ -817,19 +819,22 @@ fn zoom_by(app: &AppHandle, label: &str, delta: f64) -> Result<(), AppError> {
 }
 
 fn set_zoom(app: &AppHandle, label: &str, level: f64) -> Result<(), AppError> {
-    let level = (level * 10.0).round() / 10.0;
-    let level = level.clamp(0.5, 2.0);
-    let id = app
-        .state::<AppState>()
-        .read_core(label)
-        .selected
-        .clone()
-        .unwrap_or_default();
-    if id.is_empty() {
-        return Ok(());
-    }
+    let level = crate::zoom::normalize(level);
+    let state = app.state::<AppState>();
+
+    let (id, url) = {
+        let core = state.read_core(label);
+        match core
+            .selected
+            .as_ref()
+            .and_then(|id| core.tabs.iter().find(|tab| &tab.id == id))
+        {
+            Some(tab) => (tab.id.clone(), tab.url.clone()),
+            None => return Ok(()),
+        }
+    };
+
     {
-        let state = app.state::<AppState>();
         let mut core = state.write_core(label);
         if let Some(tab) = core.tabs.iter_mut().find(|tab| tab.id == id) {
             tab.zoom = level;
@@ -838,7 +843,18 @@ fn set_zoom(app: &AppHandle, label: &str, level: f64) -> Result<(), AppError> {
     if let Some(webview) = app.get_webview(&id) {
         webview.set_zoom(level)?;
     }
-    crate::logging::info(&format!("zoom -> {level:.1}"));
+
+    // The level belongs to the site, not the tab, so it survives both.
+    {
+        let mut store = state.zoom.write();
+        if store.remember(&url, level) {
+            if let Err(err) = store.save(&state.dirs.zoom_file) {
+                crate::logging::warn(&format!("zoom save failed: {err}"));
+            }
+        }
+    }
+
+    crate::logging::info(&format!("zoom -> {level:.1} for {url}"));
     Ok(())
 }
 
