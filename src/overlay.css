@@ -491,3 +491,23 @@ footer { margin-top: auto; display: flex; justify-content: flex-end; gap: 8px; }
 .entry-toggle.on { opacity: 1; color: var(--accent); }
 
 .entry-toggle:hover { background: var(--hover); }
+
+.zoom-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px;
+}
+
+.zoom-level {
+  min-width: 54px;
+  height: 28px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+}
+
+.zoom-level:hover { background: var(--hover); }

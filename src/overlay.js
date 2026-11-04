@@ -571,6 +571,40 @@ async function bootSuggest() {
   await invoke("suggest_refresh").catch(() => {});
 }
 
+async function bootZoom() {
+  menu.hidden = false;
+  appMenu.hidden = true;
+  themePanel.hidden = true;
+  applyTheme(await invoke("theme_get"));
+
+  const bar = document.createElement("div");
+  bar.className = "zoom-bar";
+
+  const minus = document.createElement("button");
+  minus.className = "find-step";
+  minus.textContent = "\u2212";
+  const level = document.createElement("button");
+  level.className = "zoom-level";
+  level.title = "Reset to 100%";
+  const plus = document.createElement("button");
+  plus.className = "find-step";
+  plus.textContent = "+";
+
+  let zoom = await invoke("zoom_get");
+  const paint = (value) => {
+    zoom = value;
+    level.textContent = Math.round(value * 100) + "%";
+  };
+  paint(zoom);
+
+  minus.addEventListener("click", async () => paint(await invoke("zoom_step", { delta: -0.1 })));
+  plus.addEventListener("click", async () => paint(await invoke("zoom_step", { delta: 0.1 })));
+  level.addEventListener("click", async () => paint(await invoke("zoom_step", { delta: 1 - zoom })));
+
+  bar.append(minus, level, plus);
+  menu.append(bar);
+}
+
 async function bootFind() {
   menu.hidden = false;
   appMenu.hidden = true;
@@ -796,6 +830,10 @@ async function boot() {
   }
   if (kind === "context_menu") {
     await bootMenu();
+    return;
+  }
+  if (kind === "zoom") {
+    await bootZoom();
     return;
   }
   if (kind === "find") {

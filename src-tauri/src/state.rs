@@ -30,11 +30,11 @@ impl Default for Settings {
             chrome_height: 68.0,
         show_bookmarks: false,
         toolbar: vec![
-            "downloads".into(),
             "translate".into(),
-            "find".into(),
+            "zoom".into(),
             "bookmark".into(),
             "extensions".into(),
+            "downloads".into(),
         ],
         hidden_extensions: Vec::new(),
             max_live_tabs: 12,

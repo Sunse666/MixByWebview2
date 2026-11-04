@@ -1070,7 +1070,7 @@ pub async fn settings_set(
         }
         if let Some(value) = patch.toolbar {
             // Only ids we know how to draw survive a hand edited settings file.
-            let known = ["downloads", "translate", "find", "bookmark", "extensions"];
+            let known = ["downloads", "translate", "find", "zoom", "bookmark", "extensions"];
             guard.toolbar = value
                 .into_iter()
                 .filter(|id| known.contains(&id.as_str()))

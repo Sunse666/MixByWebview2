@@ -135,7 +135,8 @@ function renderTabs() {
 
 const TOOLBAR_ITEMS = {
   translate: { glyph: "\u6587", label: "Translate this page", where: "inside", run: () => invoke("translate_page", { target: null }) },
-  find: { glyph: "\u2315", label: "Find in page", where: "inside", run: () => invoke("overlay_toggle", { kind: "find" }) },
+  zoom: { glyph: "\u2315", label: "Zoom", where: "inside", run: () => invoke("overlay_toggle", { kind: "zoom" }) },
+  find: { glyph: "\u2315", label: "Find in page", where: "outside", run: () => invoke("overlay_toggle", { kind: "find" }) },
   bookmark: { glyph: "\u2606", label: "Bookmark this page", where: "inside", run: () => invoke("bookmark_toggle") },
   extensions: { glyph: "\u25a4", label: "Extensions", where: "outside", run: () => invoke("overlay_open", { kind: "app_menu&page=extensions" }) },
   downloads: { glyph: "\u2193", label: "Downloads", where: "outside", run: () => invoke("open_dir", { which: "downloads" }) },
@@ -152,7 +153,7 @@ async function renderToolbar(extensions) {
   const outer = [];
 
   // Order follows Chrome: extensions puzzle first, downloads last.
-  const order = ["translate", "find", "bookmark", "extensions", "downloads"];
+  const order = ["translate", "zoom", "find", "bookmark", "extensions", "downloads"];
   for (const id of order) {
     if (!(settings.toolbar || []).includes(id)) continue;
     const spec = TOOLBAR_ITEMS[id];
@@ -160,7 +161,17 @@ async function renderToolbar(extensions) {
     const button = document.createElement("button");
     button.className = spec.where === "inside" ? "url-action" : "tool-btn";
     button.title = spec.label;
-    button.textContent = id === "bookmark" && bookmarked ? "\u2605" : spec.glyph;
+    if (id === "bookmark") {
+      button.textContent = bookmarked ? "\u2605" : "\u2606";
+    } else if (id === "zoom") {
+      // Chrome shows the percentage once the page is not at 100%.
+      const level = await invoke("zoom_get").catch(() => 1);
+      const pct = Math.round(level * 100);
+      button.textContent = pct === 100 ? spec.glyph : `${pct}%`;
+      button.title = `Zoom ${pct}%`;
+    } else {
+      button.textContent = spec.glyph;
+    }
     button.addEventListener("click", () => spec.run().catch(() => {}));
     (spec.where === "inside" ? inner : outer).push(button);
   }
