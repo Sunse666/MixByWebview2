@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-url-action"
+description = "Enables the url_action command without any pre-configured scope."
+commands.allow = ["url_action"]
+
+[[permission]]
+identifier = "deny-url-action"
+description = "Denies the url_action command without any pre-configured scope."
+commands.deny = ["url_action"]

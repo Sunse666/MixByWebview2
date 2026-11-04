@@ -712,6 +712,42 @@ async function bootExtInfo() {
   });
 }
 
+async function bootChromeMenu(kind) {
+  menu.hidden = false;
+  appMenu.hidden = true;
+  themePanel.hidden = true;
+  applyTheme(await invoke("theme_get"));
+
+  const item = (label, run) => {
+    const button = document.createElement("button");
+    button.className = "row plain";
+    button.textContent = label;
+    button.addEventListener("click", async () => {
+      await run();
+      await invoke("overlay_close").catch(() => {});
+    });
+    menu.append(button);
+  };
+
+  if (kind === "url") {
+    item("Cut", () => invoke("url_action", { action: "cut" }));
+    item("Copy", () => invoke("url_action", { action: "copy" }));
+    item("Paste", () => invoke("url_action", { action: "paste" }));
+    const divider = document.createElement("div");
+    divider.className = "divider";
+    menu.append(divider);
+    item("Select all", () => invoke("url_action", { action: "select-all" }));
+    return;
+  }
+
+  item("New tab", () => invoke("tab_new", { url: null }));
+  item("Reload", () => invoke("tab_reload"));
+  const divider = document.createElement("div");
+  divider.className = "divider";
+  menu.append(divider);
+  item("Settings", () => invoke("overlay_open", { kind: "app_menu&page=settings" }));
+}
+
 async function bootMenu() {
   menu.hidden = false;
   appMenu.hidden = true;
@@ -846,6 +882,14 @@ async function boot() {
   }
   if (kind === "find") {
     await bootFind();
+    return;
+  }
+  if (kind === "url_menu") {
+    await bootChromeMenu("url");
+    return;
+  }
+  if (kind === "chrome_menu") {
+    await bootChromeMenu("chrome");
     return;
   }
   if (kind === "ext_info") {

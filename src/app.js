@@ -323,6 +323,123 @@ function setTabs(payload) {
 }
 
 const report = (message) => invoke("ui_log", { message }).catch(() => {});
+report("chrome boot v2");
+
+// Chrome draws its own menus; the WebView2 default menu does not belong on our UI.
+// Edits requested by the overlay menu; the field lives in this page.
+window.__mixUrlAction = (action) => {
+  urlInput.focus();
+  const selection = urlInput.value.slice(urlInput.selectionStart, urlInput.selectionEnd);
+  const place = (text) => {
+    urlInput.setRangeText(text, urlInput.selectionStart, urlInput.selectionEnd, "end");
+    urlInput.dispatchEvent(new Event("input"));
+  };
+  if (action === "cut") {
+    navigator.clipboard.writeText(selection).catch(() => {});
+    place("");
+  } else if (action === "copy") {
+    navigator.clipboard.writeText(selection).catch(() => {});
+  } else if (action === "paste") {
+    navigator.clipboard.readText().then(place).catch(() => {});
+  } else if (action === "select-all") {
+    urlInput.select();
+  }
+};
+
+const ctxMenu = document.getElementById("ctx-menu");
+
+function hideContextMenu() {
+  if (!ctxMenu) return;
+  ctxMenu.hidden = true;
+  ctxMenu.replaceChildren();
+}
+
+function showContextMenu(x, y, rows) {
+  if (!ctxMenu) return;
+  ctxMenu.replaceChildren(
+    ...rows.map((row) => {
+      if (row === "-") {
+        return Object.assign(document.createElement("div"), { className: "ctx-divider" });
+      }
+      const button = document.createElement("button");
+      button.className = "ctx-item";
+      button.textContent = row.label;
+      button.disabled = Boolean(row.disabled);
+      button.addEventListener("click", () => {
+        hideContextMenu();
+        row.run();
+      });
+      return button;
+    }),
+  );
+  ctxMenu.hidden = false;
+  // Keep the menu inside the window.
+  const width = ctxMenu.offsetWidth || 180;
+  const height = ctxMenu.offsetHeight || 200;
+  ctxMenu.style.left = Math.min(x, window.innerWidth - width - 6) + "px";
+  ctxMenu.style.top = Math.min(y, window.innerHeight - height - 6) + "px";
+}
+
+function urlEditMenu() {
+  const selection = urlInput.value.slice(urlInput.selectionStart, urlInput.selectionEnd);
+  const read = () => navigator.clipboard.readText();
+  const place = (text) => {
+    const start = urlInput.selectionStart;
+    const end = urlInput.selectionEnd;
+    urlInput.setRangeText(text, start, end, "end");
+    urlInput.dispatchEvent(new Event("input"));
+  };
+
+  return [
+    {
+      label: "Cut",
+      disabled: !selection,
+      run: () => {
+        navigator.clipboard.writeText(selection).catch(() => {});
+        place("");
+      },
+    },
+    {
+      label: "Copy",
+      disabled: !selection,
+      run: () => navigator.clipboard.writeText(selection).catch(() => {}),
+    },
+    { label: "Paste", run: () => read().then(place).catch(() => {}) },
+    "-",
+    {
+      label: "Select all",
+      run: () => {
+        urlInput.focus();
+        urlInput.select();
+      },
+    },
+  ];
+}
+
+function chromeMenu() {
+  return [
+    { label: "New tab", run: () => invoke("tab_new", { url: null }) },
+    { label: "Reload", run: () => invoke("tab_reload") },
+    "-",
+    { label: "Settings", run: () => invoke("overlay_open", { kind: "app_menu&page=settings" }) },
+  ];
+}
+
+document.addEventListener("contextmenu", (event) => {
+  event.preventDefault();
+  const inField = event.target === urlInput || Boolean(event.target.closest("#url-wrap"));
+  invoke("chrome_menu", {
+    kind: inField ? "url" : "chrome",
+    x: event.clientX,
+    y: event.clientY,
+  }).catch(() => {});
+});
+
+document.addEventListener("mousedown", (event) => {
+  if (!event.target.closest("#ctx-menu")) hideContextMenu();
+});
+window.addEventListener("blur", hideContextMenu);
+window.addEventListener("resize", hideContextMenu);
 
 // Rust calls this after saving settings: the event bus does not reach child
 // webviews reliably, so the refresh is pushed in explicitly.

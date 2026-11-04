@@ -513,3 +513,11 @@ footer { margin-top: auto; display: flex; justify-content: flex-end; gap: 8px; }
 .zoom-level:hover { background: var(--hover); }
 
 
+
+/* Plain rows: one label, no icon column, never wrapped. */
+.menu .row.plain {
+  display: block;
+  white-space: nowrap;
+  text-align: left;
+  padding: 0 10px;
+}

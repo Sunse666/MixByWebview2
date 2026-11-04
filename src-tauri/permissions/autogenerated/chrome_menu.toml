@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-chrome-menu"
+description = "Enables the chrome_menu command without any pre-configured scope."
+commands.allow = ["chrome_menu"]
+
+[[permission]]
+identifier = "deny-chrome-menu"
+description = "Denies the chrome_menu command without any pre-configured scope."
+commands.deny = ["chrome_menu"]

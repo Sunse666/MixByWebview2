@@ -81,6 +81,8 @@ pub fn open(app: &AppHandle, win: &tauri::Window, kind: &str) -> Result<(), Stri
         "app_menu" => APP_MENU,
         // Generic page menu: five rows and two dividers.
         "context_menu" => (250.0, 184.0),
+        "url_menu" => (190.0, 150.0),
+        "chrome_menu" => (190.0, 110.0),
         _ => DEFAULT,
     };
     // Never taller than the space under the chrome strip.

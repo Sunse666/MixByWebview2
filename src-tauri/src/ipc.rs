@@ -933,6 +933,44 @@ fn set_zoom(app: &AppHandle, label: &str, level: f64) -> Result<(), AppError> {
 }
 
 /// Pages report their context menu here; dismiss=true closes an open menu.
+/// The chrome strip is only as tall as the toolbar, so a menu drawn inside it
+/// would be clipped; it gets its own overlay like the page menu.
+#[tauri::command]
+pub async fn chrome_menu(
+    app: AppHandle,
+    window: tauri::Window,
+    kind: String,
+    x: f64,
+    y: f64,
+) -> Result<(), AppError> {
+    let label = match kind.as_str() {
+        "url" => "url_menu",
+        _ => "chrome_menu",
+    };
+    let (menu_w, menu_h) = if label == "url_menu" {
+        (190.0, 150.0)
+    } else {
+        (190.0, 110.0)
+    };
+    let _ = app.emit_to(window.label(), "chrome-menu", ());
+    let _ = crate::overlay::open_at(&app, &window, label, x, y, menu_w, menu_h);
+    Ok(())
+}
+
+/// Runs a text edit in the chrome page, which owns the address field.
+#[tauri::command]
+pub async fn url_action(
+    app: AppHandle,
+    window: tauri::Window,
+    action: String,
+) -> Result<(), AppError> {
+    if let Some(chrome) = app.get_webview(&format!("{}-chrome", window.label())) {
+        let script = format!("window.__mixUrlAction && window.__mixUrlAction(\"{action}\")");
+        let _ = chrome.eval(&script);
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn context_menu(
     app: AppHandle,

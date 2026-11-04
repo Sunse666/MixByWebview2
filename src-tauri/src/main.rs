@@ -26,6 +26,7 @@ mod window;
 
 use tauri::Manager;
 
+// embed bump 4
 fn main() {
     let dirs = paths::AppDirs::resolve().ensure();
     logging::init(&dirs.logs);
@@ -120,6 +121,8 @@ fn main() {
             ipc::app_info,
             ipc::app_quit,
             ipc::shortcut,
+            ipc::chrome_menu,
+            ipc::url_action,
             ipc::context_menu,
             ipc::snap,
             ipc::settings_get,

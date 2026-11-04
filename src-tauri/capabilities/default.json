@@ -68,6 +68,8 @@
     "allow-download-list",
     "allow-download-open-dir",
     "allow-shortcut",
+    "allow-chrome-menu",
+    "allow-url-action",
     "allow-context-menu",
     "allow-menu-context-get",
     "allow-permission-request",
