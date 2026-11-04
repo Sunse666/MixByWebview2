@@ -723,7 +723,7 @@ async function bootExtInfo() {
     icon.textContent = glyph;
     const text = document.createElement("span");
     text.className = "label";
-    text.textContent = label;
+    text.textContent = t(label);
     button.append(icon, text, document.createElement("span"));
     button.addEventListener("click", run);
     appMenu.append(button);
@@ -748,7 +748,7 @@ async function bootChromeMenu(kind) {
   const item = (label, run) => {
     const button = document.createElement("button");
     button.className = "row plain";
-    button.textContent = label;
+    button.textContent = t(label);
     button.addEventListener("click", async () => {
       await run();
       await invoke("overlay_close").catch(() => {});
@@ -793,7 +793,7 @@ async function bootMenu() {
     icon.textContent = glyph;
     const text = document.createElement("span");
     text.className = "label";
-    text.textContent = label;
+    text.textContent = t(label);
     const key = document.createElement("span");
     key.className = "hint";
     key.textContent = hint || "";

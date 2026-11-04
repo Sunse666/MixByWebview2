@@ -204,7 +204,7 @@ async function renderToolbar(extensions) {
     if (id === "translate") {
       const on = translateOn;
       button.textContent = spec.glyph;
-      button.title = on ? "Show original" : spec.label;
+      button.title = t(on ? "Show original" : spec.label);
       button.classList.toggle("is-on", Boolean(on));
     } else if (id === "bookmark") {
       button.textContent = bookmarked ? "\u2605" : "\u2606";
@@ -213,7 +213,7 @@ async function renderToolbar(extensions) {
       const level = await invoke("zoom_get").catch(() => 1);
       const pct = Math.round(level * 100);
       button.textContent = pct === 100 ? spec.glyph : `${pct}%`;
-      button.title = `Zoom ${pct}%`;
+      button.title = `${t("Zoom")} ${pct}%`;
     } else {
       button.textContent = spec.glyph;
     }
