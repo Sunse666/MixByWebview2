@@ -1,5 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+// assets: frontend files are embedded at compile time, so editing src/*.js
+// only takes effect after the crate is rebuilt.
 mod diag;
 mod downloads;
 mod extensions;
