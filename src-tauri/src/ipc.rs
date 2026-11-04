@@ -1749,6 +1749,7 @@ mod tab_order_tests {
             incognito: false,
             icon: None,
             loading: false,
+            scroll: 0.0,
             alive: true,
             last_active: 0,
         }
