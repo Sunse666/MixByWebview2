@@ -13,6 +13,10 @@ pub struct Settings {
     pub chrome_height: f64,
     /// Adds a bookmarks row under the address bar, which also grows the chrome.
     pub show_bookmarks: bool,
+    /// Toolbar buttons the user kept, in display order.
+    pub toolbar: Vec<String>,
+    /// Extensions the user hid from the toolbar, by name.
+    pub hidden_extensions: Vec<String>,
     pub max_live_tabs: usize,
     pub download_dir: Option<String>,
 }
@@ -25,6 +29,14 @@ impl Default for Settings {
             restore_session: true,
             chrome_height: 68.0,
         show_bookmarks: false,
+        toolbar: vec![
+            "downloads".into(),
+            "translate".into(),
+            "find".into(),
+            "bookmark".into(),
+            "extensions".into(),
+        ],
+        hidden_extensions: Vec::new(),
             max_live_tabs: 12,
             download_dir: None,
         }

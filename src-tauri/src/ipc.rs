@@ -141,6 +141,8 @@ impl AppState {
 pub struct SettingsPatch {
     pub restore_session: Option<bool>,
     pub show_bookmarks: Option<bool>,
+    pub toolbar: Option<Vec<String>>,
+    pub hidden_extensions: Option<Vec<String>>,
     pub start_url: Option<String>,
     pub max_live_tabs: Option<usize>,
 }
@@ -1066,6 +1068,17 @@ pub async fn settings_set(
         if let Some(value) = patch.show_bookmarks {
             guard.show_bookmarks = value;
         }
+        if let Some(value) = patch.toolbar {
+            // Only ids we know how to draw survive a hand edited settings file.
+            let known = ["downloads", "translate", "find", "bookmark", "extensions"];
+            guard.toolbar = value
+                .into_iter()
+                .filter(|id| known.contains(&id.as_str()))
+                .collect();
+        }
+        if let Some(value) = patch.hidden_extensions {
+            guard.hidden_extensions = value;
+        }
         if let Some(value) = patch.start_url {
             if !value.trim().is_empty() {
                 guard.start_url = value;
@@ -1740,6 +1753,30 @@ pub async fn download_url(
     crate::downloads::record_done(&app, &url, &target);
     crate::logging::info(&format!("saved {}", target.display()));
     Ok(target.display().to_string())
+}
+
+/// Drives the browser's own find through the page: there is no API to open the
+/// WebView2 find bar, so we keep our own box and call window.find.
+#[tauri::command]
+pub async fn find_in_page(
+    app: AppHandle,
+    window: tauri::Window,
+    state: State<'_, AppState>,
+    text: String,
+    forward: Option<bool>,
+    restart: Option<bool>,
+) -> Result<(), AppError> {
+    let id = selected_label(&state, &window);
+    let Some(webview) = app.get_webview(&id) else {
+        return Ok(());
+    };
+    // JSON encoded so quotes or backslashes in the query cannot break the script.
+    let query = serde_json::to_string(&text).unwrap_or_else(|_| "\"\"".into());
+    let back = forward.map(|value| !value).unwrap_or(false);
+    let again = restart.unwrap_or(false);
+    let script = format!("window.find({query}, false, {back}, true, {again}, false, false);");
+    let _ = webview.eval(&script);
+    Ok(())
 }
 
 #[tauri::command]

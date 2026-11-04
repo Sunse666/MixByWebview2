@@ -42,6 +42,7 @@ fn main() {
         "suggest_refresh",
         "overlay_toggle",
         "download_url",
+        "find_in_page",
         "translate_page",
         "page_failed",
         "tab_scroll",

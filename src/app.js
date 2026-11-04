@@ -133,26 +133,49 @@ function renderTabs() {
   tabStrip.replaceChildren(...nodes);
 }
 
-function renderExtensions(list) {
+const TOOLBAR_ITEMS = {
+  downloads: { glyph: "\u2193", label: "Downloads", run: () => invoke("open_dir", { which: "downloads" }) },
+  translate: { glyph: "\u6587", label: "Translate this page", run: () => invoke("translate_page", { target: null }) },
+  find: { glyph: "\u2315", label: "Find in page", run: () => invoke("overlay_toggle", { kind: "find" }) },
+  bookmark: { glyph: "\u2606", label: "Bookmark this page", run: () => invoke("bookmark_toggle") },
+  extensions: { glyph: "\u25a4", label: "Extensions", run: () => invoke("overlay_open", { kind: "app_menu&page=extensions" }) },
+};
+
+function renderToolbar(extensions) {
   const holder = document.getElementById("extensions-bar");
-  const items = (list || []).filter((ext) => ext.status === "loaded" && ext.icon);
-  holder.hidden = items.length === 0;
-  holder.replaceChildren(
-    ...items.map((ext) => {
-      const button = document.createElement("button");
-      button.className = "ext-btn";
-      button.title = ext.version ? `${ext.name} ${ext.version}` : ext.name;
-      const img = document.createElement("img");
-      img.src = ext.icon;
-      img.alt = "";
-      button.append(img);
-      button.addEventListener("click", () =>
-        invoke("overlay_open", { kind: `ext_info&name=${encodeURIComponent(ext.name)}` }),
-      );
-      return button;
-    }),
-  );
+  const buttons = [];
+
+  for (const id of settings.toolbar || []) {
+    const spec = TOOLBAR_ITEMS[id];
+    if (!spec) continue;
+    const button = document.createElement("button");
+    button.className = "tool-btn";
+    button.title = spec.label;
+    button.textContent = spec.glyph;
+    button.addEventListener("click", () => spec.run().catch(() => {}));
+    buttons.push(button);
+  }
+
+  const hidden = new Set(settings.hidden_extensions || []);
+  for (const ext of (extensions || []).filter((item) => item.status === "loaded" && item.icon)) {
+    if (hidden.has(ext.name)) continue;
+    const button = document.createElement("button");
+    button.className = "tool-btn ext-btn";
+    button.title = ext.version ? `${ext.name} ${ext.version}` : ext.name;
+    const img = document.createElement("img");
+    img.src = ext.icon;
+    img.alt = "";
+    button.append(img);
+    button.addEventListener("click", () =>
+      invoke("overlay_open", { kind: `ext_info&name=${encodeURIComponent(ext.name)}` }),
+    );
+    buttons.push(button);
+  }
+
+  holder.hidden = buttons.length === 0;
+  holder.replaceChildren(...buttons);
 }
+
 
 function renderBookmarks(list) {
   const bar = document.getElementById("bookmarks");
@@ -242,10 +265,11 @@ async function boot() {
   await listen("bookmarks:changed", async () => {
     renderBookmarks(await invoke("bookmark_list"));
   });
-  await listen("ext:changed", async () => renderExtensions(await invoke("ext_list")));
+  await listen("ext:changed", async () => renderToolbar(await invoke("ext_list")));
   await listen("settings:changed", async () => {
     settings = await invoke("settings_get");
     renderBookmarks(await invoke("bookmark_list"));
+    renderToolbar(await invoke("ext_list"));
   });
   await listen("tab:loading", (event) => {
     const tab = tabs.find((item) => item.id === event.payload.id);
@@ -313,7 +337,7 @@ async function boot() {
   });
 
   renderDownloads(await invoke("download_list"));
-  renderExtensions(await invoke("ext_list"));
+  renderToolbar(await invoke("ext_list"));
   renderBookmarks(await invoke("bookmark_list"));
 
   for (const button of document.querySelectorAll("[data-window]")) {

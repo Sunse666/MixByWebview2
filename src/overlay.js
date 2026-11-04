@@ -382,12 +382,58 @@ async function bootAppMenu() {
       });
     },
 
+    toolbar: async () => {
+      header("Toolbar");
+      const settings = await invoke("settings_get");
+      const enabled = new Set(settings.toolbar || []);
+      const names = {
+        downloads: "Downloads",
+        translate: "Translate",
+        find: "Find in page",
+        bookmark: "Bookmark",
+        extensions: "Extensions",
+      };
+
+      for (const id of Object.keys(names)) {
+        const on = enabled.has(id);
+        row(on ? "\u2611" : "\u2610", names[id], "", async () => {
+          const next = new Set(settings.toolbar || []);
+          if (next.has(id)) next.delete(id);
+          else next.add(id);
+          await invoke("settings_set", { patch: { toolbar: [...next] } });
+          render("toolbar");
+        });
+      }
+
+      divider();
+      const loaded = (await invoke("ext_list")).filter((ext) => ext.status === "loaded");
+      if (!loaded.length) {
+        const note = document.createElement("div");
+        note.className = "menu-note";
+        note.textContent = "No extensions loaded.";
+        appMenu.append(note);
+        return;
+      }
+      const hidden = new Set(settings.hidden_extensions || []);
+      for (const ext of loaded) {
+        const shown = !hidden.has(ext.name);
+        row(shown ? "\u2611" : "\u2610", ext.name, "", async () => {
+          const next = new Set(settings.hidden_extensions || []);
+          if (next.has(ext.name)) next.delete(ext.name);
+          else next.add(ext.name);
+          await invoke("settings_set", { patch: { hidden_extensions: [...next] } });
+          render("toolbar");
+        });
+      }
+    },
+
     settings: async () => {
       header("Settings");
       row("\u25d0", "Appearance", "", () =>
         invoke("overlay_open", { kind: "settings&section=appearance" }), { page: true });
       row("\u25b6", "Startup", "", () =>
         invoke("overlay_open", { kind: "settings&section=startup" }), { page: true });
+      row("\u25ab", "Toolbar buttons", "", () => render("toolbar"), { page: true });
       row("\u2398", "Theme file", "", () =>
         invoke("overlay_open", { kind: "settings&section=theme" }), { page: true });
       divider();
@@ -501,6 +547,45 @@ async function bootSuggest() {
   };
 
   await invoke("suggest_refresh").catch(() => {});
+}
+
+async function bootFind() {
+  menu.hidden = false;
+  appMenu.hidden = true;
+  themePanel.hidden = true;
+  applyTheme(await invoke("theme_get"));
+
+  const bar = document.createElement("div");
+  bar.className = "find-bar";
+  const input = document.createElement("input");
+  input.type = "text";
+  input.placeholder = "Find in page";
+  input.className = "find-input";
+  const prev = document.createElement("button");
+  prev.className = "find-step";
+  prev.textContent = "\u2191";
+  const next = document.createElement("button");
+  next.className = "find-step";
+  next.textContent = "\u2193";
+  bar.append(input, prev, next);
+  menu.append(bar);
+
+  const search = async (forward, restart) => {
+    if (!input.value) return;
+    await invoke("find_in_page", { text: input.value, forward, restart }).catch(() => {});
+  };
+
+  input.addEventListener("input", () => search(true, true));
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      search(!event.shiftKey, false);
+    }
+  });
+  next.addEventListener("click", () => search(true, false));
+  prev.addEventListener("click", () => search(false, false));
+
+  setTimeout(() => input.focus(), 30);
 }
 
 async function bootExtInfo() {
@@ -689,6 +774,10 @@ async function boot() {
   }
   if (kind === "context_menu") {
     await bootMenu();
+    return;
+  }
+  if (kind === "find") {
+    await bootFind();
     return;
   }
   if (kind === "ext_info") {

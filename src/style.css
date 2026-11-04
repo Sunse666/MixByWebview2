@@ -309,3 +309,26 @@ button {
   height: 16px;
   object-fit: contain;
 }
+
+.tool-btn {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  opacity: 0.85;
+}
+
+.tool-btn:hover { background: var(--hover); opacity: 1; }
+
+.tool-btn img {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+}

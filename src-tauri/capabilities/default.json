@@ -38,6 +38,7 @@
     "allow-suggest-refresh",
     "allow-overlay-toggle",
     "allow-download-url",
+    "allow-find-in-page",
     "allow-translate-page",
     "allow-page-failed",
     "allow-tab-scroll",

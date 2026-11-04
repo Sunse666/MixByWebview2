@@ -91,6 +91,7 @@ fn main() {
             ipc::suggest_refresh,
             ipc::overlay_toggle,
             ipc::download_url,
+            ipc::find_in_page,
             ipc::translate_page,
             ipc::page_failed,
             ipc::tab_scroll,
