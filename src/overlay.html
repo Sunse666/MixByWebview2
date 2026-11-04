@@ -21,57 +21,62 @@
 
   <section class="panel" id="theme-panel">
     <header class="panel-head">
-      <h1>Appearance</h1>
-      <div class="presets">
+      <div class="head-left">
+        <button class="back" id="panel-back" title="Back">‹</button>
+        <h1 id="panel-title">Appearance</h1>
+      </div>
+      <div class="presets" id="presets">
         <button data-preset="green">Green</button>
         <button data-preset="dark">Dark</button>
         <button data-preset="light">Light</button>
       </div>
     </header>
 
-    <h2>Colors</h2>
-    <div class="color-grid">
-      <label><span>Background</span><input type="color" id="bg" /></label>
-      <label><span>Toolbar</span><input type="color" id="chrome" /></label>
-      <label><span>Active tab</span><input type="color" id="tab" /></label>
-      <label><span>Tab text</span><input type="color" id="tab-text" /></label>
-      <label><span>Text</span><input type="color" id="text" /></label>
-      <label><span>Accent</span><input type="color" id="accent" /></label>
-      <label><span>Address bar</span><input type="color" id="url-bg" /></label>
-      <label><span>Hover</span><input type="color" id="hover" /></label>
-      <label><span>Border</span><input type="color" id="border" /></label>
+    <div data-section="appearance">
+      <h2>Colors</h2>
+      <div class="color-grid">
+        <label><span>Background</span><input type="color" id="bg" /></label>
+        <label><span>Toolbar</span><input type="color" id="chrome" /></label>
+        <label><span>Active tab</span><input type="color" id="tab" /></label>
+        <label><span>Tab text</span><input type="color" id="tab-text" /></label>
+        <label><span>Text</span><input type="color" id="text" /></label>
+        <label><span>Accent</span><input type="color" id="accent" /></label>
+        <label><span>Address bar</span><input type="color" id="url-bg" /></label>
+        <label><span>Hover</span><input type="color" id="hover" /></label>
+        <label><span>Border</span><input type="color" id="border" /></label>
+      </div>
+
+      <h2>Shape</h2>
+      <label class="slider">Panel radius <input type="range" id="radius" min="0" max="32" step="1" /><output id="radius-out"></output></label>
+      <label class="slider">Tab radius <input type="range" id="tab-radius" min="0" max="20" step="1" /><output id="tab-radius-out"></output></label>
+
+      <h2>Type</h2>
+      <label class="slider">Font size <input type="range" id="font-size" min="10" max="20" step="1" /><output id="font-out"></output></label>
+      <label class="text">Font <input type="text" id="font-family" list="font-list" placeholder="Segoe UI" />
+        <datalist id="font-list">
+          <option value="Segoe UI, system-ui, sans-serif"></option>
+          <option value="Microsoft YaHei UI, sans-serif"></option>
+          <option value="Consolas, monospace"></option>
+          <option value="Georgia, serif"></option>
+        </datalist>
+      </label>
     </div>
 
-    <h2>Shape</h2>
-    <label class="slider">Panel radius <input type="range" id="radius" min="0" max="32" step="1" /><output id="radius-out"></output></label>
-    <label class="slider">Tab radius <input type="range" id="tab-radius" min="0" max="20" step="1" /><output id="tab-radius-out"></output></label>
+    <div data-section="startup" hidden>
+      <h2>Startup</h2>
+      <label class="toggle"><input type="checkbox" id="autostart" /> Start Mix when the system starts</label>
+      <label class="toggle"><input type="checkbox" id="restore" /> Restore windows on launch</label>
+    </div>
 
-    <h2>Type</h2>
-    <label class="slider">Font size <input type="range" id="font-size" min="10" max="20" step="1" /><output id="font-out"></output></label>
-    <label class="text">Font <input type="text" id="font-family" list="font-list" placeholder="Segoe UI" />
-      <datalist id="font-list">
-        <option value="Segoe UI, system-ui, sans-serif"></option>
-        <option value="Microsoft YaHei UI, sans-serif"></option>
-        <option value="Consolas, monospace"></option>
-        <option value="Georgia, serif"></option>
-      </datalist>
-    </label>
-
-    <h2>Startup</h2>
-    <label class="toggle"><input type="checkbox" id="autostart" /> Start Mix when the system starts</label>
-    <label class="toggle"><input type="checkbox" id="restore" /> Restore windows on launch</label>
-
-    <h2>Extensions</h2>
-    <ul id="extensions" class="ext-list"></ul>
-    <h2>Userscripts</h2>
-    <ul id="scripts" class="ext-list"></ul>
-
-    <h2>Theme file</h2>
-    <textarea id="theme-json" spellcheck="false" placeholder="Paste a theme.json here, then Apply"></textarea>
-    <p id="theme-error" class="error"></p>
-    <div class="row-actions">
-      <button id="theme-export">Export</button>
-      <button id="theme-apply-json">Apply JSON</button>
+    <div data-section="theme" hidden>
+      <h2>Theme file</h2>
+      <p class="hint-text">Paste a theme.json below, or export the current one.</p>
+      <textarea id="theme-json" spellcheck="false" placeholder="{ &quot;colors&quot;: { ... } }"></textarea>
+      <p id="theme-error" class="error"></p>
+      <div class="row-actions">
+        <button id="theme-export">Export</button>
+        <button id="theme-apply-json">Apply JSON</button>
+      </div>
     </div>
 
     <footer class="panel-foot">

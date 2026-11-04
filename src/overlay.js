@@ -214,7 +214,7 @@ async function bootAppMenu() {
       row("\u2699", "Userscripts", "", () => render("scripts"), { page: true });
       row("\u2261", "More tools", "", () => render("tools"), { page: true });
       divider();
-      row("\u2699", "Preferences", "", () => invoke("overlay_open", { kind: "settings" }));
+      row("\u2699", "Settings", "", () => render("settings"), { page: true });
       row("\u003f", "Help", "", () => render("help"), { page: true });
 
       const about = document.createElement("div");
@@ -361,6 +361,21 @@ async function bootAppMenu() {
         await invoke("open_dir", { which: "diag" });
         await close();
       });
+    },
+
+    settings: async () => {
+      header("Settings");
+      row("\u25d0", "Appearance", "", () =>
+        invoke("overlay_open", { kind: "settings&section=appearance" }), { page: true });
+      row("\u25b6", "Startup", "", () =>
+        invoke("overlay_open", { kind: "settings&section=startup" }), { page: true });
+      row("\u2398", "Theme file", "", () =>
+        invoke("overlay_open", { kind: "settings&section=theme" }), { page: true });
+      divider();
+      row("\u25a4", "Extensions", "", () => render("extensions"), { page: true });
+      row("\u2699", "Userscripts", "", () => render("scripts"), { page: true });
+      divider();
+      row("\u2261", "Open profile folder", "", act(() => invoke("open_dir", { which: "userdata" })));
     },
 
     help: async () => {
@@ -585,52 +600,21 @@ async function boot() {
     return;
   }
 
+  const section = params.get("section") || "appearance";
+  const titles = { appearance: "Appearance", startup: "Startup", theme: "Theme file" };
+  document.getElementById("panel-title").textContent = titles[section] || "Settings";
+  for (const block of document.querySelectorAll("[data-section]")) {
+    block.hidden = block.dataset.section !== section;
+  }
+  document.getElementById("presets").hidden = section !== "appearance";
+  document.getElementById("panel-back").addEventListener("click", () =>
+    invoke("overlay_open", { kind: "app_menu&page=settings" }),
+  );
+
   current = await invoke("theme_get");
   render(current);
 
   autostartBox.checked = await invoke("autostart_get");
-
-  const extensionList = document.getElementById("extensions");
-  const loaded = await invoke("ext_list");
-  if (!loaded.length) {
-    const empty = document.createElement("li");
-    empty.textContent = "none loaded";
-    extensionList.append(empty);
-  }
-  const scriptList = document.getElementById("scripts");
-  const scripts = await invoke("script_list");
-  if (!scripts.length) {
-    const empty = document.createElement("li");
-    empty.textContent = "none loaded";
-    scriptList.append(empty);
-  }
-  for (const script of scripts) {
-    const item = document.createElement("li");
-    const name = document.createElement("span");
-    name.className = "ext-name";
-    name.textContent = script.name;
-    name.title = script.matches.join(", ");
-    const state = document.createElement("span");
-    state.className = "ext-state";
-    state.textContent = script.run_at;
-    item.append(name, state);
-    scriptList.append(item);
-  }
-
-  for (const extension of loaded) {
-    const item = document.createElement("li");
-    const name = document.createElement("span");
-    name.className = "ext-name";
-    name.textContent = extension.version
-      ? `${extension.name} v${extension.version}`
-      : extension.name;
-    name.title = extension.reason || extension.dir;
-    const state = document.createElement("span");
-    state.className = extension.status === "error" ? "ext-state error" : "ext-state";
-    state.textContent = extension.status;
-    item.append(name, state);
-    extensionList.append(item);
-  }
 
   const settings = await invoke("settings_get");
   restoreBox.checked = !!settings.restore_session;

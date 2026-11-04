@@ -58,8 +58,21 @@ pub fn open(app: &AppHandle, win: &tauri::Window, kind: &str) -> Result<(), Stri
 
     // The page can ride along in the hash ("app_menu&page=extensions").
     let base = kind.split('&').next().unwrap_or(kind);
+    // Settings panels size to the section they show, so Startup is not a
+    // full height empty box.
+    let section = kind
+        .split('&')
+        .skip(1)
+        .find_map(|part| part.strip_prefix("section="))
+        .unwrap_or("appearance");
+    let settings_size = match section {
+        "startup" => (520.0, 250.0),
+        "theme" => (520.0, 380.0),
+        _ => SETTINGS,
+    };
+
     let (ow, oh) = match base {
-        "settings" => SETTINGS,
+        "settings" => settings_size,
         "app_menu" => APP_MENU,
         // Generic page menu: five rows and two dividers.
         "context_menu" => (250.0, 184.0),
