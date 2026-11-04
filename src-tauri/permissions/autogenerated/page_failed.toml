@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-page-failed"
+description = "Enables the page_failed command without any pre-configured scope."
+commands.allow = ["page_failed"]
+
+[[permission]]
+identifier = "deny-page-failed"
+description = "Denies the page_failed command without any pre-configured scope."
+commands.deny = ["page_failed"]

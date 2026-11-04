@@ -8,6 +8,7 @@ const tabStrip = document.getElementById("tabs");
 let tabs = [];
 let dragging = null;
 let settings = { show_bookmarks: false };
+let draggingBookmark = null;
 let selected = null;
 let hidePill = null;
 const downloadPill = document.getElementById("download");
@@ -104,7 +105,7 @@ function renderTabs() {
     el.addEventListener("dragstart", (event) => {
       dragging = tab.id;
       event.dataTransfer.effectAllowed = "move";
-      event.dataTransfer.setData("text/plain", tab.id);
+      event.dataTransfer.setData("text/plain", tab.url);
       el.classList.add("dragging");
     });
     el.addEventListener("dragend", () => {
@@ -121,7 +122,7 @@ function renderTabs() {
     el.addEventListener("drop", (event) => {
       event.preventDefault();
       el.classList.remove("drop-target");
-      const source = dragging || event.dataTransfer.getData("text/plain");
+      const source = dragging;
       if (!source || source === tab.id) return;
       const to = tabs.findIndex((item) => item.id === tab.id);
       invoke("tab_move", { id: source, to }).catch(() => {});
@@ -135,18 +136,50 @@ function renderTabs() {
 function renderBookmarks(list) {
   const bar = document.getElementById("bookmarks");
   const items = list || [];
-  bar.hidden = !settings.show_bookmarks || items.length === 0;
+  bar.hidden = !settings.show_bookmarks;
   if (bar.hidden) return;
+
   bar.replaceChildren(
-    ...items.map((bookmark) => {
+    ...items.map((bookmark, index) => {
       const chip = document.createElement("button");
       chip.className = "bookmark";
       chip.textContent = bookmark.title || bookmark.url;
       chip.title = bookmark.url;
+      chip.draggable = true;
       chip.addEventListener("click", () => invoke("tab_new", { url: bookmark.url }));
+      chip.addEventListener("dragstart", (event) => {
+        draggingBookmark = bookmark.url;
+        event.dataTransfer.effectAllowed = "move";
+        event.dataTransfer.setData("text/plain", bookmark.url);
+        chip.classList.add("dragging");
+      });
+      chip.addEventListener("dragend", () => {
+        draggingBookmark = null;
+        chip.classList.remove("dragging");
+      });
+      chip.addEventListener("dragover", (event) => {
+        if (!draggingBookmark) return;
+        event.preventDefault();
+        chip.classList.add("drop-target");
+      });
+      chip.addEventListener("dragleave", () => chip.classList.remove("drop-target"));
+      chip.addEventListener("drop", (event) => {
+        event.preventDefault();
+        chip.classList.remove("drop-target");
+        const source = draggingBookmark;
+        if (!source || source === bookmark.url) return;
+        invoke("bookmark_move", { from: source, to: index }).catch(() => {});
+      });
       return chip;
     }),
   );
+
+  if (!items.length) {
+    const hint = document.createElement("span");
+    hint.className = "bookmark-hint";
+    hint.textContent = "Drag a link here to bookmark it";
+    bar.append(hint);
+  }
 }
 
 function syncAddressIcon(active) {
@@ -243,6 +276,20 @@ async function boot() {
     // Focus events inside an unfocused webview are unreliable, so feed directly.
     if (typeof feedSuggest === "function") feedSuggest(urlInput.value);
   });
+  const bar = document.getElementById("bookmarks");
+  bar.addEventListener("dragover", (event) => {
+    event.preventDefault();
+    bar.classList.add("drop-target");
+  });
+  bar.addEventListener("dragleave", () => bar.classList.remove("drop-target"));
+  bar.addEventListener("drop", (event) => {
+    event.preventDefault();
+    bar.classList.remove("drop-target");
+    const url = event.dataTransfer.getData("text/plain");
+    if (!url || !url.startsWith("http")) return;
+    invoke("bookmark_add", { url, title: url }).catch(() => {});
+  });
+
   renderDownloads(await invoke("download_list"));
   renderBookmarks(await invoke("bookmark_list"));
 

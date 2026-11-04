@@ -14,6 +14,8 @@ pub struct Core {
     pub tabs: Vec<Tab>,
     pub selected: Option<String>,
     pub next_tab_id: usize,
+    /// Tab ids by recency, most recent first; Ctrl+Tab walks this.
+    pub mru: Vec<String>,
     pub tick: u64,
 }
 
@@ -40,6 +42,12 @@ pub struct AppState {
     pub zoom: parking_lot::RwLock<crate::zoom::ZoomStore>,
     /// Window label -> text typed while the address bar owns the keyboard.
     pub url_edit: RwLock<std::collections::HashMap<String, String>>,
+    /// Tab id -> the url it is currently trying to load.
+    /// Origin of the bundled pages, e.g. http://tauri.localhost/
+    pub app_base: parking_lot::RwLock<String>,
+    pub pending: RwLock<std::collections::HashMap<String, String>>,
+    /// Tab id -> the url whose error page is already showing.
+    pub error_shown: RwLock<std::collections::HashMap<String, String>>,
     pub bookmarks: RwLock<Vec<Bookmark>>,
     pub scripts: Vec<crate::userscripts::ScriptInfo>,
 }
@@ -72,6 +80,9 @@ impl AppState {
             closed_tabs: RwLock::new(Vec::new()),
             zoom: parking_lot::RwLock::new(crate::zoom::ZoomStore::load(&dirs.zoom_file)),
             url_edit: RwLock::new(std::collections::HashMap::new()),
+            app_base: parking_lot::RwLock::new(String::new()),
+            pending: RwLock::new(std::collections::HashMap::new()),
+            error_shown: RwLock::new(std::collections::HashMap::new()),
             bookmarks: RwLock::new(bookmarks),
             scripts,
             dirs,
@@ -359,11 +370,11 @@ pub(crate) fn save_sessions(app: &AppHandle) {
 
     let mut windows: Vec<crate::session::WindowSession> = Vec::new();
     for (label, core) in state.cores.read().iter() {
-        let tabs: Vec<String> = core
+        let tabs: Vec<crate::session::SessionTab> = core
             .tabs
             .iter()
             .filter(|tab| !tab.incognito)
-            .map(|tab| tab.url.clone())
+            .map(|tab| crate::session::SessionTab::new(tab.url.clone(), tab.scroll))
             .collect();
         if tabs.is_empty() {
             continue;
@@ -481,6 +492,7 @@ pub async fn tab_select(app: AppHandle, window: tauri::Window, state: State<'_, 
     {
         let mut core = state.write_core(window.label());
         core.selected = Some(id.clone());
+        touch_mru(&mut core.mru, &id);
     }
 
     sync_visibility(&app, window.label());
@@ -538,6 +550,7 @@ pub async fn tab_new(
             last_active: tick,
         });
         core.selected = Some(id.clone());
+        touch_mru(&mut core.mru, &id);
         (id, target)
     };
 
@@ -570,6 +583,7 @@ pub async fn tab_close(app: AppHandle, window: tauri::Window, state: State<'_, A
             }
         }
         core.tabs.retain(|tab| tab.id != id);
+        core.mru.retain(|entry| entry != &id);
         if core.selected.as_deref() == Some(id.as_str()) {
             core.selected = core.tabs.last().map(|tab| tab.id.clone());
         }
@@ -592,6 +606,10 @@ pub async fn tab_close(app: AppHandle, window: tauri::Window, state: State<'_, A
 pub async fn tab_navigate(app: AppHandle, window: tauri::Window, state: State<'_, AppState>, url: String) -> Result<(), AppError> {
     let Some(target) = crate::tabs::parse_url(&url) else {
         crate::logging::warn(&format!("rejected address: {url}"));
+        let id = selected_label(&state, &window);
+        if !id.is_empty() {
+            show_error_page(&app, &id, url.trim());
+        }
         return Err(AppError::new("bad_url", format!("not a web address: {url}")));
     };
     let label = selected_label(&state, &window);
@@ -807,21 +825,28 @@ pub async fn shortcut(app: AppHandle, window: tauri::Window, state: State<'_, Ap
     Ok(())
 }
 
+/// Ctrl+Tab follows the recency list, so it jumps to the last used tab.
+fn next_by_recency(mru: &[String], delta: isize) -> Option<String> {
+    if mru.len() < 2 {
+        return None;
+    }
+    if delta >= 0 {
+        Some(mru[1].clone())
+    } else {
+        Some(mru[mru.len() - 1].clone())
+    }
+}
+
+fn touch_mru(mru: &mut Vec<String>, id: &str) {
+    mru.retain(|entry| entry != id);
+    mru.insert(0, id.to_string());
+}
+
 async fn cycle_tab(app: &AppHandle, window: &tauri::Window, delta: isize) {
     let next = {
         let state = app.state::<AppState>();
         let core = state.read_core(window.label());
-        if core.tabs.len() < 2 {
-            return;
-        }
-        let current = core
-            .selected
-            .as_ref()
-            .and_then(|id| core.tabs.iter().position(|tab| &tab.id == id))
-            .unwrap_or(0);
-        let len = core.tabs.len() as isize;
-        let index = (current as isize + delta).rem_euclid(len);
-        Some(core.tabs[index as usize].id.clone())
+        next_by_recency(&core.mru, delta)
     };
 
     if let Some(id) = next {
@@ -1373,6 +1398,83 @@ pub async fn bookmark_toggle(app: AppHandle, window: tauri::Window, state: State
     Ok(added)
 }
 
+/// Adds a bookmark for an explicit url; used when something is dropped on the bar.
+#[tauri::command]
+pub async fn bookmark_add(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    url: String,
+    title: String,
+) -> Result<(), AppError> {
+    if !url.starts_with("http://") && !url.starts_with("https://") {
+        return Ok(());
+    }
+    let snapshot = {
+        let mut bookmarks = state.bookmarks.write().unwrap_or_else(|e| e.into_inner());
+        if !bookmarks.iter().any(|bookmark| bookmark.url == url) {
+            crate::library::toggle_bookmark(&mut bookmarks, &url, &title);
+        }
+        bookmarks.clone()
+    };
+    crate::library::save_bookmarks(&state.dirs.bookmarks_file, &snapshot)?;
+    let _ = app.emit("bookmarks:changed", true);
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn bookmark_move(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    from: String,
+    to: usize,
+) -> Result<(), AppError> {
+    let snapshot = {
+        let mut bookmarks = state.bookmarks.write().unwrap_or_else(|e| e.into_inner());
+        move_bookmark(&mut bookmarks, &from, to);
+        bookmarks.clone()
+    };
+    crate::library::save_bookmarks(&state.dirs.bookmarks_file, &snapshot)?;
+    let _ = app.emit("bookmarks:changed", false);
+    Ok(())
+}
+
+/// Swaps WebView2's own error page for ours; returns the url it replaced.
+pub fn show_error_page(app: &AppHandle, id: &str, failed_url: &str) -> Option<String> {
+    let state = app.try_state::<AppState>()?;
+    {
+        let mut shown = state.error_shown.write().unwrap_or_else(|e| e.into_inner());
+        if shown.get(id).map(String::as_str) == Some(failed_url) {
+            return None;
+        }
+        shown.insert(id.to_string(), failed_url.to_string());
+    }
+
+    let base = state.app_base.read().clone();
+    if base.is_empty() {
+        return None;
+    }
+    let webview = app.get_webview(id)?;
+    let page = format!("{base}error.html#{}", crate::permissions::encode(failed_url));
+    if let Ok(url) = tauri::Url::parse(&page) {
+        let _ = webview.navigate(url);
+        crate::logging::info(&format!("error page for {failed_url}"));
+        return Some(failed_url.to_string());
+    }
+    None
+}
+fn move_bookmark(bookmarks: &mut Vec<Bookmark>, from: &str, to: usize) -> bool {
+    let Some(index) = bookmarks.iter().position(|bookmark| bookmark.url == from) else {
+        return false;
+    };
+    let target = to.min(bookmarks.len().saturating_sub(1));
+    if index == target {
+        return false;
+    }
+    let item = bookmarks.remove(index);
+    bookmarks.insert(target, item);
+    true
+}
+
 #[tauri::command]
 pub async fn bookmark_remove(
     app: AppHandle,
@@ -1584,6 +1686,30 @@ pub async fn tab_scroll(
     Ok(())
 }
 
+/// The page reports a browser error page; replace it with ours.
+#[tauri::command]
+pub async fn page_failed(
+    app: AppHandle,
+    webview: tauri::Webview,
+    state: State<'_, AppState>,
+    code: String,
+) -> Result<(), AppError> {
+    let id = webview.label().to_string();
+    let failed = state
+        .pending
+        .read()
+        .unwrap_or_else(|e| e.into_inner())
+        .get(&id)
+        .cloned()
+        .unwrap_or_default();
+    if failed.is_empty() {
+        return Ok(());
+    }
+    crate::logging::info(&format!("page failed: {failed} ({code})"));
+    show_error_page(&app, &id, &failed);
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn tab_move(
     app: AppHandle,
@@ -1654,7 +1780,7 @@ pub async fn window_new(app: AppHandle, state: State<'_, AppState>) -> Result<St
     };
 
     let url = state.settings.read().start_url.clone();
-    crate::window::open_window(&app, &label, vec![url], 0, None)?;
+    crate::window::open_window(&app, &label, vec![(url, 0.0)], 0, None)?;
     crate::logging::info(&format!("window {label} opened"));
     Ok(label)
 }
@@ -1779,5 +1905,35 @@ mod tab_order_tests {
         assert!(!move_tab(&mut tabs, "zzz", 0));
         assert!(!move_tab(&mut tabs, "a", 0));
         assert_eq!(ids(&tabs), vec!["a", "b"]);
+    }
+}
+
+#[cfg(test)]
+mod recency_tests {
+    use super::*;
+
+    fn list(ids: &[&str]) -> Vec<String> {
+        ids.iter().map(|id| id.to_string()).collect()
+    }
+
+    #[test]
+    fn recency_jumps_to_the_last_used_tab() {
+        let mru = list(&["c", "a", "b"]);
+        assert_eq!(next_by_recency(&mru, 1), Some("a".to_string()));
+        assert_eq!(next_by_recency(&mru, -1), Some("b".to_string()));
+    }
+
+    #[test]
+    fn a_single_tab_has_nowhere_to_go() {
+        assert_eq!(next_by_recency(&list(&["a"]), 1), None);
+    }
+
+    #[test]
+    fn touching_moves_an_id_to_the_front() {
+        let mut mru = list(&["a", "b", "c"]);
+        touch_mru(&mut mru, "c");
+        assert_eq!(mru, list(&["c", "a", "b"]));
+        touch_mru(&mut mru, "d");
+        assert_eq!(mru, list(&["d", "c", "a", "b"]));
     }
 }

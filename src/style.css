@@ -271,3 +271,15 @@ button {
 }
 
 .bookmark:hover { background: var(--hover); opacity: 1; }
+
+.bookmarks.drop-target { background: var(--hover); }
+
+.bookmark.dragging { opacity: 0.4; }
+
+.bookmark.drop-target { box-shadow: inset 2px 0 0 0 var(--accent); }
+
+.bookmark-hint {
+  padding: 0 8px;
+  font-size: 11px;
+  opacity: 0.5;
+}

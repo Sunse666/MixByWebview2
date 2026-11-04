@@ -52,17 +52,16 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
                     format!("w{}", index + 1)
                 };
                 let selected = window.selected.min(window.tabs.len().saturating_sub(1));
-                open_window(
-                    app.handle(),
-                    &label,
-                    window.tabs.clone(),
-                    selected,
-                    window.window.clone(),
-                )?;
+                let tabs: Vec<(String, f64)> = window
+                    .tabs
+                    .iter()
+                    .map(|tab| (tab.url().to_string(), tab.scroll()))
+                    .collect();
+                open_window(app.handle(), &label, tabs, selected, window.window.clone())?;
             }
         }
         None => {
-            open_window(app.handle(), PRIMARY, vec![start_url], 0, None)?;
+            open_window(app.handle(), PRIMARY, vec![(start_url, 0.0)], 0, None)?;
         }
     }
 
@@ -113,9 +112,27 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
                 let state = target.state::<AppState>();
                 let url = state.settings.read().start_url.clone();
                 drop(state);
-                match crate::window::open_window(&target, "w2", vec![url], 0, None) {
+                match crate::window::open_window(&target, "w2", vec![(url, 0.0)], 0, None) {
                     Ok(_) => crate::logging::info("debug: second window opened"),
                     Err(err) => crate::logging::warn(&format!("debug window failed: {err}")),
+                }
+            });
+        });
+    }
+
+    // Support hook: MIX_ERROR_PAGE=1 shows the error page so it can be reviewed.
+    if std::env::var("MIX_ERROR_PAGE").is_ok() {
+        let handle = app.handle().clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(2500));
+            let target = handle.clone();
+            let _ = handle.run_on_main_thread(move || {
+                if let Some(state) = target.try_state::<AppState>() {
+                    let id = state
+                        .try_read_core(PRIMARY)
+                        .and_then(|core| core.selected.clone())
+                        .unwrap_or_default();
+                    crate::ipc::show_error_page(&target, &id, "hello world");
                 }
             });
         });
@@ -154,7 +171,7 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
 pub fn open_window(
     app: &tauri::AppHandle,
     label: &str,
-    urls: Vec<String>,
+    urls: Vec<(String, f64)>,
     selected: usize,
     geometry: Option<crate::session::WindowGeometry>,
 ) -> tauri::Result<Window> {
@@ -201,7 +218,7 @@ pub fn open_window(
         core.tabs = urls
             .iter()
             .enumerate()
-            .map(|(index, url)| tabs::Tab {
+            .map(|(index, (url, scroll))| tabs::Tab {
                 id: crate::ipc::tab_label(label, index + 1),
                 url: url.clone(),
                 title: "New tab".into(),
@@ -209,12 +226,18 @@ pub fn open_window(
                 incognito: false,
                 icon: None,
                 loading: false,
-                scroll: 0.0,
+                scroll: *scroll,
                 alive: true,
                 last_active: index as u64,
             })
             .collect();
         core.selected = Some(crate::ipc::tab_label(label, selected + 1));
+        // Recency starts in strip order with the selected tab first.
+        core.mru = core.tabs.iter().map(|tab| tab.id.clone()).collect();
+        if let Some(id) = core.selected.clone() {
+            core.mru.retain(|entry| entry != &id);
+            core.mru.insert(0, id);
+        }
     }
 
     let chrome_builder = tabs::apply_profile(
@@ -233,7 +256,7 @@ pub fn open_window(
         LogicalSize::new(width, chrome_h),
     )?;
 
-    for (index, url) in urls.iter().enumerate() {
+    for (index, (url, _scroll)) in urls.iter().enumerate() {
         let id = crate::ipc::tab_label(label, index + 1);
         tabs::create(&win, &id, url, width, height - chrome_h, &opts, false)?;
     }
@@ -289,6 +312,21 @@ pub fn start_url_watch(app: AppHandle, label: String) {
                 return;
             }
 
+            // The bundled pages live on whatever scheme this runtime picked.
+            if let Some(state) = app.try_state::<AppState>() {
+                if state.app_base.read().is_empty() {
+                    if let Some(chrome) = app.get_webview(&format!("{label}-chrome")) {
+                        if let Ok(url) = chrome.url() {
+                            let origin = url.origin().ascii_serialization();
+                            if origin.starts_with("http") {
+                                *state.app_base.write() = format!("{origin}/");
+                                crate::logging::info(&format!("app base {origin}/"));
+                            }
+                        }
+                    }
+                }
+            }
+
             let ids: Vec<String> = match app.try_state::<AppState>() {
                 Some(state) => match state.try_read_core(&label) {
                     Some(core) => core.tabs.iter().map(|tab| tab.id.clone()).collect(),
@@ -305,6 +343,22 @@ pub fn start_url_watch(app: AppHandle, label: String) {
                     continue;
                 };
                 let current = url.to_string();
+                if current.starts_with("chrome-error://") {
+                    // WebView2's own error page: replace it with ours.
+                    if let Some(state) = app.try_state::<AppState>() {
+                        let failed = state
+                            .pending
+                            .read()
+                            .unwrap_or_else(|e| e.into_inner())
+                            .get(&id)
+                            .cloned()
+                            .unwrap_or_default();
+                        if !failed.is_empty() {
+                            crate::ipc::show_error_page(&app, &id, &failed);
+                        }
+                    }
+                    continue;
+                }
                 if last.get(&id).map(String::as_str) == Some(current.as_str()) {
                     continue;
                 }

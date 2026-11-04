@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
-pub const SCHEMA: u32 = 2;
+pub const SCHEMA: u32 = 3;
 
 /// Only URLs are stored: the webview back/forward stack cannot be restored,
 /// so the UI shows a disabled back button instead of pretending otherwise.
@@ -15,11 +15,39 @@ pub struct WindowGeometry {
     pub maximized: bool,
 }
 
+/// A tab in the saved session. Old files stored bare urls, so both forms load.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum SessionTab {
+    Url(String),
+    Full { url: String, scroll: f64 },
+}
+
+impl SessionTab {
+    pub fn url(&self) -> &str {
+        match self {
+            SessionTab::Url(url) => url,
+            SessionTab::Full { url, .. } => url,
+        }
+    }
+
+    pub fn scroll(&self) -> f64 {
+        match self {
+            SessionTab::Url(_) => 0.0,
+            SessionTab::Full { scroll, .. } => *scroll,
+        }
+    }
+
+    pub fn new(url: String, scroll: f64) -> Self {
+        SessionTab::Full { url, scroll }
+    }
+}
+
 /// One entry per window, in the order the windows were created.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct WindowSession {
-    pub tabs: Vec<String>,
+    pub tabs: Vec<SessionTab>,
     pub selected: usize,
     /// Kept here instead of a plugin so it stays inside the portable folder.
     pub window: Option<WindowGeometry>,
@@ -65,12 +93,15 @@ mod tests {
             schema_version: SCHEMA,
             windows: vec![
                 WindowSession {
-                    tabs: vec!["https://a.test".into()],
+                    tabs: vec![SessionTab::new("https://a.test".into(), 0.0)],
                     selected: 0,
                     window: None,
                 },
                 WindowSession {
-                    tabs: vec!["https://b.test".into(), "https://c.test".into()],
+                    tabs: vec![
+                        SessionTab::new("https://b.test".into(), 120.0),
+                        SessionTab::new("https://c.test".into(), 0.0),
+                    ],
                     selected: 1,
                     window: Some(WindowGeometry {
                         x: 10,
@@ -87,7 +118,24 @@ mod tests {
         let loaded = Session::load(&path).expect("load");
         assert_eq!(loaded.windows.len(), 2);
         assert_eq!(loaded.windows[1].tabs.len(), 2);
+        assert_eq!(loaded.windows[1].tabs[0].scroll(), 120.0);
+        assert_eq!(loaded.windows[1].tabs[0].url(), "https://b.test");
         assert_eq!(loaded.windows[1].selected, 1);
+    }
+
+    #[test]
+    fn bare_url_sessions_still_load() {
+        let dir = std::env::temp_dir().join("mix-session-legacy");
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("session.json");
+        std::fs::write(
+            &path,
+            "{\"schema_version\":2,\"windows\":[{\"tabs\":[\"https://a.test\"],\"selected\":0}]}",
+        )
+        .unwrap();
+        let loaded = Session::load(&path).expect("load");
+        assert_eq!(loaded.windows[0].tabs[0].url(), "https://a.test");
+        assert_eq!(loaded.windows[0].tabs[0].scroll(), 0.0);
     }
 
     #[test]

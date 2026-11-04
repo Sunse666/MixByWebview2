@@ -1,0 +1,61 @@
+html, body {
+  margin: 0;
+  height: 100%;
+}
+
+body {
+  display: grid;
+  place-items: center;
+  background: var(--bg, #1F2020);
+  color: var(--text, #E8E8E8);
+  font: 14px/1.6 "Segoe UI", system-ui, sans-serif;
+}
+
+.card {
+  max-width: 460px;
+  padding: 28px 32px;
+  text-align: center;
+}
+
+h1 {
+  margin: 0 0 8px;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.address {
+  margin: 0 0 6px;
+  font-family: Consolas, monospace;
+  font-size: 12px;
+  opacity: 0.7;
+  word-break: break-all;
+}
+
+.hint {
+  margin: 0 0 18px;
+  opacity: 0.6;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+}
+
+button {
+  height: 30px;
+  padding: 0 14px;
+  color: inherit;
+  background: color-mix(in srgb, currentColor 12%, transparent);
+  border: 1px solid color-mix(in srgb, currentColor 22%, transparent);
+  border-radius: 6px;
+  font: inherit;
+}
+
+button:hover { background: color-mix(in srgb, currentColor 20%, transparent); }
+
+button.primary {
+  border-color: #00FF00;
+  color: #00FF00;
+  background: transparent;
+}

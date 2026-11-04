@@ -37,6 +37,23 @@ const SHORTCUT_FORWARDER: &str = r#"
   setTimeout(sendIcon, 1500);
 })();
 
+// WebView2 renders its own error page; detect it so we can show ours instead.
+(function () {
+  var check = function () {
+    try {
+      var text = document.body ? document.body.innerText || "" : "";
+      var match = /ERR_[A-Z_]+/.exec(text);
+      if (!match) return;
+      window.__TAURI_INTERNALS__.invoke("page_failed", { code: match[0] }).catch(function () {});
+    } catch (error) {
+      /* ignore */
+    }
+  };
+  document.addEventListener("DOMContentLoaded", function () {
+    setTimeout(check, 600);
+  });
+})();
+
 // Scroll position is remembered per tab so switching back does not jump to top.
 (function () {
   var timer = null;
@@ -315,6 +332,7 @@ pub fn create(
     incognito: bool,
 ) -> tauri::Result<Webview> {
     let app = win.app_handle().clone();
+    let nav_app = app.clone();
     let owner = crate::ipc::window_of_tab(id).to_string();
     let target = parse_url(url).unwrap_or_else(|| "about:blank".parse().expect("static url"));
     let builder = WebviewBuilder::new(id, WebviewUrl::External(target))
@@ -335,6 +353,21 @@ pub fn create(
             tauri::webview::NewWindowResponse::Deny
         })
         .initialization_script(SHORTCUT_FORWARDER)
+        // Remember what we are loading, so a failed load can say which url died.
+        .on_navigation({
+            let tab_id = id.to_string();
+            let app = nav_app;
+            move |url| {
+                if let Some(state) = app.try_state::<crate::ipc::AppState>() {
+                    state
+                        .pending
+                        .write()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .insert(tab_id.clone(), url.to_string());
+                }
+                true
+            }
+        })
         // Page load events drive the tab spinner.
         .on_page_load(|webview, payload| {
             let app = webview.app_handle().clone();
