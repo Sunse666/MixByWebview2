@@ -31,7 +31,6 @@ struct Manifest {
     manifest_version: u32,
     description: String,
     icons: std::collections::HashMap<String, String>,
-    icons_fallback: Option<String>,
     action_icon: Option<String>,
     action_icon_map: std::collections::HashMap<String, String>,
     action_popup: String,
@@ -311,7 +310,6 @@ fn read_manifest(dir: &Path) -> Result<Manifest, String> {
             .unwrap_or_default()
             .to_string(),
         icons,
-        icons_fallback: None,
         action_icon,
         action_icon_map,
         action_popup,
