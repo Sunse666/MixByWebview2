@@ -120,6 +120,23 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
         });
     }
 
+    #[cfg(debug_assertions)]
+    if std::env::var("MIX_DEVTOOLS").is_ok() {
+        let handle = app.handle().clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(2500));
+            let label = {
+                let state = handle.state::<AppState>();
+                let core = state.read_core(crate::window::PRIMARY);
+                core.selected.clone().unwrap_or_default()
+            };
+            if let Some(webview) = handle.get_webview(&label) {
+                webview.open_devtools();
+                crate::logging::info(&format!("debug: devtools on {label}"));
+            }
+        });
+    }
+
     crate::logging::info(&format!(
         "main window ready, startup {} ms",
         crate::logging::elapsed_ms()

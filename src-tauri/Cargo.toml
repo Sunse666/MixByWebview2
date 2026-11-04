@@ -8,7 +8,8 @@ rust-version = "1.77"
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = ["unstable", "tray-icon"] }
+# devtools: F12 must work in the packaged release, not only in debug builds.
+tauri = { version = "2", features = ["unstable", "tray-icon", "devtools"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri-runtime = "2"
