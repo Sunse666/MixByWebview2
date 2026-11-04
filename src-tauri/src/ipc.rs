@@ -151,6 +151,7 @@ pub struct SettingsPatch {
     pub baidu_appid: Option<String>,
     pub baidu_secret: Option<String>,
     pub translate_to: Option<String>,
+    pub language: Option<String>,
     pub hidden_extensions: Option<Vec<String>>,
     pub start_url: Option<String>,
     pub max_live_tabs: Option<usize>,
@@ -1120,6 +1121,12 @@ pub async fn settings_set(
         }
         if let Some(value) = patch.baidu_secret {
             guard.baidu_secret = value.trim().to_string();
+        }
+        if let Some(value) = patch.language {
+            guard.language = match value.as_str() {
+                "zh" => "zh".to_string(),
+                _ => "en".to_string(),
+            };
         }
         if let Some(value) = patch.translate_to {
             if !value.trim().is_empty() {

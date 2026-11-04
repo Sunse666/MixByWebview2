@@ -1,4 +1,5 @@
 const { invoke } = window.__TAURI__.core;
+import { setLanguage, t } from "./i18n.js";
 const { listen } = window.__TAURI__.event;
 
 const root = document.documentElement;
@@ -122,10 +123,10 @@ async function bootAppMenu() {
     const back = document.createElement("button");
     back.className = "back";
     back.textContent = "\u2039";
-    back.title = "Back";
+    back.title = t("Back");
     back.addEventListener("click", () => render("root"));
     const label = document.createElement("span");
-    label.textContent = title;
+    label.textContent = t(title);
     bar.append(back, label);
     appMenu.append(bar);
   };
@@ -140,7 +141,7 @@ async function bootAppMenu() {
 
     const text = document.createElement("span");
     text.className = "label";
-    text.textContent = label;
+    text.textContent = t(label);
 
     const key = document.createElement("span");
     key.className = "hint";
@@ -406,6 +407,19 @@ async function bootAppMenu() {
       });
     },
 
+    language: async () => {
+      header("Language");
+      const settings = await invoke("settings_get");
+      const current = settings.language || "en";
+      const choose = (value) => async () => {
+        await invoke("settings_set", { patch: { language: value } });
+        await applyLanguage();
+        render("language");
+      };
+      row(current === "en" ? "\u25c9" : "\u25cb", "English", "", choose("en"));
+      row(current === "zh" ? "\u25c9" : "\u25cb", "Simplified Chinese", "", choose("zh"));
+    },
+
     toolbar: async () => {
       header("Toolbar");
       const settings = await invoke("settings_get");
@@ -458,6 +472,7 @@ async function bootAppMenu() {
       row("\u25b6", "Startup", "", () =>
         invoke("overlay_open", { kind: "settings&section=startup" }), { page: true });
       row("\u25ab", "Toolbar buttons", "", () => render("toolbar"), { page: true });
+      row("\u1f310", "Language", "", () => render("language"), { page: true });
       row("\u2398", "Theme file", "", () =>
         invoke("overlay_open", { kind: "settings&section=theme" }), { page: true });
       divider();
@@ -878,7 +893,13 @@ document.addEventListener("keydown", (event) => {
   }
 });
 
+async function applyLanguage() {
+  const settings = await invoke("settings_get").catch(() => null);
+  setLanguage((settings && settings.language) || "en");
+}
+
 async function boot() {
+  await applyLanguage();
   report(`overlay kind=${kind}`);
   if (kind === "app_menu") {
     await bootAppMenu();

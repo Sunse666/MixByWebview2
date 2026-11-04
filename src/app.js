@@ -1,4 +1,5 @@
 const { invoke } = window.__TAURI__.core;
+import { setLanguage, t } from "./i18n.js";
 const { listen } = window.__TAURI__.event;
 
 const root = document.documentElement;
@@ -233,12 +234,17 @@ async function renderToolbar(extensions) {
     button.addEventListener("click", () =>
       invoke("overlay_open", { kind: `ext_info&name=${encodeURIComponent(ext.name)}` }),
     );
-    // Extension icons sit between the puzzle and the download button.
-    const at = outer.findIndex((node) => node.title === TOOLBAR_ITEMS.downloads.label);
-    if (at >= 0) outer.splice(at, 0, button);
-    else outer.push(button);
+    // Extension icons come before the puzzle menu, so the menu stays rightmost.
+    outer.unshift(button);
   }
 
+  // Chrome order: every extension icon, then the puzzle, then downloads.
+  const weight = (node) => {
+    if (node.title === t(TOOLBAR_ITEMS.extensions.label)) return 1;
+    if (node.title === t(TOOLBAR_ITEMS.downloads.label)) return 2;
+    return 0;
+  };
+  outer.sort((left, right) => weight(left) - weight(right));
   inside.replaceChildren(...inner);
   outside.hidden = outer.length === 0;
   outside.replaceChildren(...outer);
@@ -457,6 +463,7 @@ window.__mixSettingsChanged = async () => {
 async function boot() {
   applyTheme(await invoke("theme_get"));
   settings = await invoke("settings_get");
+  setLanguage(settings.language || "en");
 
   // Listeners first: the backend may emit while this page is still starting.
   await listen("tabs:changed", (event) => {

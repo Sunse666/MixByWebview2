@@ -21,6 +21,8 @@ pub struct Settings {
     pub baidu_appid: String,
     pub baidu_secret: String,
     pub translate_to: String,
+    /// Interface language: "en" or "zh".
+    pub language: String,
     pub max_live_tabs: usize,
     pub download_dir: Option<String>,
 }
@@ -44,6 +46,7 @@ impl Default for Settings {
             baidu_appid: String::new(),
             baidu_secret: String::new(),
             translate_to: "zh".into(),
+            language: "en".into(),
             max_live_tabs: 12,
             download_dir: None,
         }
