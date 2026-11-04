@@ -43,6 +43,12 @@ function applyTheme(theme) {
   s.setProperty("--border", theme.colors.border);
   s.setProperty("--radius", `${theme.radius}px`);
   s.setProperty("--font-size", `${theme.font_size}px`);
+  s.setProperty("--tab", theme.colors.tab);
+  s.setProperty("--tab-text", theme.colors.tab_text);
+  s.setProperty("--url-bg", theme.colors.url_bg);
+  s.setProperty("--hover", theme.colors.hover);
+  s.setProperty("--font-family", theme.font_family);
+  s.setProperty("--tab-radius", `${theme.tab_radius}px`);
 }
 
 // Rust calls this after every theme change, including live preview.

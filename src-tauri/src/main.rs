@@ -83,6 +83,8 @@ fn main() {
             ipc::tab_print,
             ipc::window_fullscreen,
             ipc::app_clear_data,
+            ipc::theme_export,
+            ipc::theme_import,
             ipc::suggest_open,
             ipc::suggest_feed,
             ipc::suggest_refresh,

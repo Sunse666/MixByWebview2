@@ -5,7 +5,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 static NEXT_ID: AtomicU64 = AtomicU64::new(1);
 
-const SETTINGS: (f64, f64) = (460.0, 540.0);
+const SETTINGS: (f64, f64) = (520.0, 700.0);
 const APP_MENU: (f64, f64) = (320.0, 566.0);
 const DEFAULT: (f64, f64) = (420.0, 320.0);
 

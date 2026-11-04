@@ -20,60 +20,66 @@
   </section>
 
   <section class="panel" id="theme-panel">
-    <header>
-      <strong>Preferences</strong>
-      <span class="hint">live preview</span>
+    <header class="panel-head">
+      <h1>Appearance</h1>
+      <div class="presets">
+        <button data-preset="green">Green</button>
+        <button data-preset="dark">Dark</button>
+        <button data-preset="light">Light</button>
+      </div>
     </header>
 
-    <div class="presets">
-      <button data-preset="green">Green</button>
-      <button data-preset="dark">Dark</button>
-      <button data-preset="light">Light</button>
+    <h2>Colors</h2>
+    <div class="color-grid">
+      <label><span>Background</span><input type="color" id="bg" /></label>
+      <label><span>Toolbar</span><input type="color" id="chrome" /></label>
+      <label><span>Active tab</span><input type="color" id="tab" /></label>
+      <label><span>Tab text</span><input type="color" id="tab-text" /></label>
+      <label><span>Text</span><input type="color" id="text" /></label>
+      <label><span>Accent</span><input type="color" id="accent" /></label>
+      <label><span>Address bar</span><input type="color" id="url-bg" /></label>
+      <label><span>Hover</span><input type="color" id="hover" /></label>
+      <label><span>Border</span><input type="color" id="border" /></label>
     </div>
 
-    <label>Background <input type="color" id="bg" /></label>
-    <label>Chrome <input type="color" id="chrome" /></label>
-    <label>Accent <input type="color" id="accent" /></label>
-    <label>Text <input type="color" id="text" /></label>
+    <h2>Shape</h2>
+    <label class="slider">Panel radius <input type="range" id="radius" min="0" max="32" step="1" /><output id="radius-out"></output></label>
+    <label class="slider">Tab radius <input type="range" id="tab-radius" min="0" max="20" step="1" /><output id="tab-radius-out"></output></label>
 
-    <label>Radius <input type="range" id="radius" min="0" max="32" step="1" /><output id="radius-out"></output></label>
-    <label>Font size <input type="range" id="font-size" min="10" max="20" step="1" /><output id="font-out"></output></label>
+    <h2>Type</h2>
+    <label class="slider">Font size <input type="range" id="font-size" min="10" max="20" step="1" /><output id="font-out"></output></label>
+    <label class="text">Font <input type="text" id="font-family" list="font-list" placeholder="Segoe UI" />
+      <datalist id="font-list">
+        <option value="Segoe UI, system-ui, sans-serif"></option>
+        <option value="Microsoft YaHei UI, sans-serif"></option>
+        <option value="Consolas, monospace"></option>
+        <option value="Georgia, serif"></option>
+      </datalist>
+    </label>
 
-    <hr class="split" />
-
+    <h2>Startup</h2>
     <label class="toggle"><input type="checkbox" id="autostart" /> Start Mix when the system starts</label>
-    <label class="toggle"><input type="checkbox" id="restore" /> Restore tabs on launch</label>
+    <label class="toggle"><input type="checkbox" id="restore" /> Restore windows on launch</label>
 
-    <hr class="split" />
-
-    <div class="ext-title">Extensions <span class="hint">drop folders or .crx into crx/, then restart</span></div>
+    <h2>Extensions</h2>
     <ul id="extensions" class="ext-list"></ul>
-
-    <div class="ext-title">Scripts <span class="hint">*.user.js in javascript/</span></div>
+    <h2>Userscripts</h2>
     <ul id="scripts" class="ext-list"></ul>
 
-    <footer>
+    <h2>Theme file</h2>
+    <textarea id="theme-json" spellcheck="false" placeholder="Paste a theme.json here, then Apply"></textarea>
+    <p id="theme-error" class="error"></p>
+    <div class="row-actions">
+      <button id="theme-export">Export</button>
+      <button id="theme-apply-json">Apply JSON</button>
+    </div>
+
+    <footer class="panel-foot">
       <button id="cancel">Cancel</button>
       <button id="save" class="primary">Save</button>
     </footer>
   </section>
-  <script>
-    // Diagnostics: the overlay has no console we can read, so report into the log.
-    (function () {
-      var send = function (message) {
-        var api = window.__TAURI_INTERNALS__;
-        if (api && api.invoke) api.invoke("ui_log", { message: message }).catch(function () {});
-      };
-      window.addEventListener("error", function (event) {
-        send("overlay error: " + (event.message || "unknown"));
-      });
-      if (window.__TAURI_INTERNALS__) {
-        send("overlay html body=" + document.body.innerHTML.length + " size=" + window.innerWidth + "x" + window.innerHeight);
-      } else {
-        document.title = "no-ipc";
-      }
-    })();
-  </script>
+
   <script type="module" src="overlay.js"></script>
 </body>
 </html>

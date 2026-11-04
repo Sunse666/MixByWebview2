@@ -4,13 +4,21 @@ const root = document.documentElement;
 const fields = {
   bg: document.getElementById("bg"),
   chrome: document.getElementById("chrome"),
-  accent: document.getElementById("accent"),
+  tab: document.getElementById("tab"),
+  tab_text: document.getElementById("tab-text"),
   text: document.getElementById("text"),
+  accent: document.getElementById("accent"),
+  url_bg: document.getElementById("url-bg"),
+  hover: document.getElementById("hover"),
+  border: document.getElementById("border"),
 };
 const radius = document.getElementById("radius");
 const radiusOut = document.getElementById("radius-out");
+const tabRadius = document.getElementById("tab-radius");
+const tabRadiusOut = document.getElementById("tab-radius-out");
 const fontSize = document.getElementById("font-size");
 const fontOut = document.getElementById("font-out");
+const fontFamily = document.getElementById("font-family");
 
 const PRESETS = {
   green: { bg: "#1F2020", chrome: "#1F2020", accent: "#00FF00", text: "#E8E8E8", border: "#2E3131", radius: 15 },
@@ -41,6 +49,12 @@ function applyTheme(theme) {
   s.setProperty("--border", theme.colors.border);
   s.setProperty("--radius", `${theme.radius}px`);
   s.setProperty("--font-size", `${theme.font_size}px`);
+  s.setProperty("--tab", theme.colors.tab);
+  s.setProperty("--tab-text", theme.colors.tab_text);
+  s.setProperty("--url-bg", theme.colors.url_bg);
+  s.setProperty("--hover", theme.colors.hover);
+  s.setProperty("--font-family", theme.font_family);
+  s.setProperty("--tab-radius", `${theme.tab_radius}px`);
 }
 
 // Rust pushes every change here too, so preview and chrome stay in sync.
@@ -51,25 +65,27 @@ function render(theme) {
   for (const [key, input] of Object.entries(fields)) input.value = theme.colors[key];
   radius.value = String(Math.round(theme.radius));
   radiusOut.textContent = `${Math.round(theme.radius)}px`;
+  tabRadius.value = String(Math.round(theme.tab_radius));
+  tabRadiusOut.textContent = `${Math.round(theme.tab_radius)}px`;
   fontSize.value = String(Math.round(theme.font_size));
   fontOut.textContent = `${Math.round(theme.font_size)}px`;
+  fontFamily.value = theme.font_family;
 }
 
 async function preview() {
+  const colors = { ...current.colors };
+  for (const [key, input] of Object.entries(fields)) colors[key] = input.value;
   const next = {
     ...current,
-    colors: {
-      ...current.colors,
-      bg: fields.bg.value,
-      chrome: fields.chrome.value,
-      accent: fields.accent.value,
-      text: fields.text.value,
-    },
+    colors,
     radius: Number(radius.value),
+    tab_radius: Number(tabRadius.value),
     font_size: Number(fontSize.value),
+    font_family: fontFamily.value,
   };
   current = await invoke("theme_apply", { theme: next, persist: false });
   radiusOut.textContent = `${Math.round(current.radius)}px`;
+  tabRadiusOut.textContent = `${Math.round(current.tab_radius)}px`;
   fontOut.textContent = `${Math.round(current.font_size)}px`;
 }
 
@@ -621,7 +637,9 @@ async function boot() {
 
   for (const input of Object.values(fields)) input.addEventListener("input", preview);
   radius.addEventListener("input", preview);
+  tabRadius.addEventListener("input", preview);
   fontSize.addEventListener("input", preview);
+  fontFamily.addEventListener("change", preview);
 
   for (const button of document.querySelectorAll("[data-preset]")) {
     button.addEventListener("click", async () => {
@@ -633,6 +651,30 @@ async function boot() {
       render(current);
     });
   }
+
+  const themeError = document.getElementById("theme-error");
+
+  document.getElementById("theme-export").addEventListener("click", async () => {
+    try {
+      const path = await invoke("theme_export");
+      themeError.textContent = "";
+      report("theme exported to " + path);
+    } catch (error) {
+      themeError.textContent = String(error);
+    }
+  });
+
+  document.getElementById("theme-apply-json").addEventListener("click", async () => {
+    const box = document.getElementById("theme-json");
+    try {
+      current = await invoke("theme_import", { json: box.value });
+      render(current);
+      box.value = "";
+      themeError.textContent = "";
+    } catch (error) {
+      themeError.textContent = String(error);
+    }
+  });
 
   document.getElementById("save").addEventListener("click", async () => {
     await invoke("theme_apply", { theme: current, persist: true });

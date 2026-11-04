@@ -1307,6 +1307,38 @@ pub async fn bookmark_remove(
     Ok(())
 }
 
+/// Writes the current theme next to the settings so it can be shared.
+#[tauri::command]
+pub async fn theme_export(app: AppHandle, _window: tauri::Window) -> Result<String, AppError> {
+    let state = app.state::<AppState>();
+    let theme = state.theme.read().clone();
+    let path = state.dirs.user_data.join("theme-export.json");
+    theme.save(&path)?;
+    crate::logging::info(&format!("theme exported to {}", path.display()));
+    Ok(path.display().to_string())
+}
+
+/// Applies a pasted theme. Invalid JSON is rejected and the old theme stays.
+#[tauri::command]
+pub async fn theme_import(
+    app: AppHandle,
+    window: tauri::Window,
+    state: State<'_, AppState>,
+    json: String,
+) -> Result<Theme, AppError> {
+    let parsed: Theme = serde_json::from_str(&json)
+        .map_err(|err| AppError::new("bad_theme", format!("not valid theme json: {err}")))?;
+    let theme = parsed.sanitized();
+
+    *state.theme.write() = theme.clone();
+    *state.baseline.write() = theme.clone();
+    theme.save(&state.dirs.theme_file)?;
+    broadcast_theme(&app, &theme);
+    let _ = window.emit("theme:changed", &theme);
+    crate::logging::info("theme imported");
+    Ok(theme)
+}
+
 #[tauri::command]
 pub async fn diag_export(app: AppHandle) -> Result<String, AppError> {
     let path = crate::diag::export(&app).map_err(|err| AppError::new("diag", err))?;

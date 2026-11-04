@@ -35,6 +35,8 @@
     "allow-tab-print",
     "allow-window-fullscreen",
     "allow-app-clear-data",
+    "allow-theme-export",
+    "allow-theme-import",
     "allow-suggest-open",
     "allow-suggest-feed",
     "allow-suggest-refresh",

@@ -37,6 +37,8 @@ fn main() {
         "tab_print",
         "window_fullscreen",
         "app_clear_data",
+        "theme_export",
+        "theme_import",
         "suggest_open",
         "suggest_feed",
         "suggest_refresh",

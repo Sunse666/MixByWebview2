@@ -6,6 +6,12 @@
   --border: #2E3131;
   --radius: 15px;
   --font-size: 13px;
+  --tab: #2A2E2A;
+  --tab-text: #E8E8E8;
+  --url-bg: #171818;
+  --hover: #333737;
+  --font-family: "Segoe UI", system-ui, sans-serif;
+  --tab-radius: 8px;
 }
 
 * { box-sizing: border-box; }
@@ -80,12 +86,12 @@ button {
   min-width: 84px;
   height: 24px;
   padding: 0 4px 0 10px;
-  border-radius: 7px;
+  border-radius: var(--tab-radius);
   border: 1px solid transparent;
   opacity: 0.7;
 }
 
-.tab:hover { opacity: 1; background: color-mix(in srgb, var(--panel) 70%, var(--text) 10%); }
+.tab:hover { opacity: 1; background: var(--hover); }
 
 .tab.suspended .tab-title { opacity: 0.45; font-style: italic; }
 
@@ -97,7 +103,8 @@ button {
 .tab.active {
   opacity: 1;
   border-color: var(--border);
-  background: color-mix(in srgb, var(--panel) 70%, var(--text) 12%);
+  background: var(--tab);
+  color: var(--tab-text);
 }
 
 .tab-title {
@@ -160,7 +167,7 @@ button {
   height: 28px;
   padding: 0 10px;
   color: var(--text);
-  background: color-mix(in srgb, var(--panel) 80%, #000 20%);
+  background: var(--url-bg);
   border: 1px solid var(--border);
   border-radius: 8px;
   outline: none;
