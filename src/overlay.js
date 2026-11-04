@@ -402,8 +402,111 @@ async function bootAppMenu() {
     report("menu page=" + page + " nodes=" + appMenu.children.length);
   }
 
+  appMenu.addEventListener("pointerdown", (event) => {
+    if (event.target === appMenu) invoke("overlay_close");
+  });
+
   await render(params.get("page") || "root");
 }
+async function bootMenu() {
+  menu.hidden = false;
+  appMenu.hidden = true;
+  themePanel.hidden = true;
+  applyTheme(await invoke("theme_get"));
+
+  const context = await invoke("menu_context_get");
+
+  const divider = () => menu.append(Object.assign(document.createElement("div"), { className: "divider" }));
+
+  const item = (glyph, label, hint, run) => {
+    const button = document.createElement("button");
+    button.className = "row";
+    const icon = document.createElement("span");
+    icon.className = "ico";
+    icon.textContent = glyph;
+    const text = document.createElement("span");
+    text.className = "label";
+    text.textContent = label;
+    const key = document.createElement("span");
+    key.className = "hint";
+    key.textContent = hint || "";
+    button.append(icon, text, key);
+    button.addEventListener("click", run);
+    menu.append(button);
+    return button;
+  };
+
+  const copy = async (value) => {
+    try {
+      await navigator.clipboard.writeText(value || "");
+    } catch (error) {
+      report("clipboard failed: " + error);
+    }
+  };
+
+  // Only offer what applies to what was clicked.
+  if (context.link) {
+    item("\u2197", "Open link in new tab", "", () => invoke("tab_new", { url: context.link }));
+    item("\u2398", "Copy link address", "", () => copy(context.link));
+    divider();
+  }
+  if (context.image) {
+    item("\u25a3", "Open image in new tab", "", () => invoke("tab_new", { url: context.image }));
+    item("\u2398", "Copy image address", "", () => copy(context.image));
+    divider();
+  }
+  if (context.selection) {
+    item("\u2398", "Copy", "", () => copy(context.selection));
+    divider();
+  }
+  if (context.editable) {
+    item("\u2702", "Cut", "", () => document.execCommand("cut"));
+    item("\u2398", "Copy", "", () => document.execCommand("copy"));
+    item("\u2399", "Paste", "", () => document.execCommand("paste"));
+    divider();
+  }
+
+  item("\u2190", "Back", "", () => invoke("tab_nav", { action: "back" }));
+  item("\u2192", "Forward", "", () => invoke("tab_nav", { action: "forward" }));
+  item("\u21bb", "Reload", "Ctrl+R", () => invoke("tab_nav", { action: "reload" }));
+  divider();
+  item("\u2399", "Print", "Ctrl+P", () => invoke("tab_print"));
+  item("\u2691", "Inspect", "", () => invoke("shortcut", { action: "devtools" }));
+
+  // Dismiss when the pointer lands anywhere in the panel but not on a row.
+  menu.addEventListener("pointerdown", (event) => {
+    if (event.target === menu) invoke("overlay_close");
+  });
+}
+
+async function bootPermission() {
+  permissionPanel.hidden = false;
+  themePanel.hidden = true;
+  appMenu.hidden = true;
+  menu.hidden = true;
+  applyTheme(await invoke("theme_get"));
+
+  const id = Number(params.get("id") || 0);
+  const origin = params.get("origin") || "this page";
+  const name = params.get("kind") || "something";
+
+  const text = document.getElementById("permission-text");
+  text.textContent = `${origin} wants to use ${name}.`;
+
+  const answer = async (allow) => {
+    await invoke("permission_reply", { id, allow });
+  };
+  document.getElementById("permission-allow").addEventListener("click", () => answer(true));
+  document.getElementById("permission-block").addEventListener("click", () => answer(false));
+}
+
+// Escape closes any overlay, whatever kind it is.
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") {
+    invoke("overlay_close").catch(() => {});
+  }
+});
+
 async function boot() {
   report(`overlay kind=${kind}`);
   if (kind === "app_menu") {

@@ -35,6 +35,7 @@
     "allow-tab-print",
     "allow-window-fullscreen",
     "allow-app-clear-data",
+    "allow-overlay-toggle",
     "allow-window-new",
     "allow-history-list",
     "allow-history-clear",

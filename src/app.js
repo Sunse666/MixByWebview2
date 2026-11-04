@@ -209,7 +209,7 @@ async function boot() {
     if (!Number.isNaN(id)) invoke("download_open_dir", { id });
   });
 
-  document.getElementById("theme-btn").addEventListener("click", () => invoke("overlay_open", { kind: "app_menu" }));
+  document.getElementById("theme-btn").addEventListener("click", () => invoke("overlay_toggle", { kind: "app_menu" }));
   document.getElementById("tab-new").addEventListener("click", () => invoke("tab_new", {}));
 
   urlInput.focus();

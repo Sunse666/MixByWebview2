@@ -9,6 +9,15 @@ use crate::paths::AppDirs;
 /// Runs in every page. Frames cannot see chrome keydown, so shortcuts are
 /// forwarded from the page to Rust and dispatched there.
 const SHORTCUT_FORWARDER: &str = r#"
+  // Clicking anywhere in the page closes an open overlay (menu or context menu).
+  let __mixDismiss = false;
+  window.addEventListener("pointerdown", (event) => {
+    if (event.button !== 0 || __mixDismiss) return;
+    __mixDismiss = true;
+    setTimeout(() => { __mixDismiss = false; }, 100);
+    window.__TAURI_INTERNALS__.invoke("shortcut", { action: "dismiss" }).catch(() => {});
+  }, true);
+
 (function () {
   if (window.__mixKeys) return;
   window.__mixKeys = true;

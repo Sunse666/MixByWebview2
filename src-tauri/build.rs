@@ -37,6 +37,7 @@ fn main() {
         "tab_print",
         "window_fullscreen",
         "app_clear_data",
+        "overlay_toggle",
         "window_new",
         "history_list",
         "history_clear",

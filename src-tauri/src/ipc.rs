@@ -668,13 +668,18 @@ pub async fn download_open_dir(_window: tauri::Window, state: State<'_, AppState
 
 #[tauri::command]
 pub async fn shortcut(app: AppHandle, window: tauri::Window, state: State<'_, AppState>, action: String) -> Result<(), AppError> {
-    crate::logging::info(&format!("shortcut {action}"));
+    if action != "dismiss" {
+        crate::logging::info(&format!("shortcut {action}"));
+    }
     match action.as_str() {
         "new_tab" => {
             tab_new(app, window.clone(), state, None, None).await?;
         }
         "new_incognito" => {
             tab_new(app, window.clone(), state, None, Some(true)).await?;
+        }
+        "dismiss" => {
+            crate::overlay::close(&app, window.label());
         }
         "new_window" => {
             window_new(app, state).await?;
@@ -818,8 +823,16 @@ pub async fn context_menu(
     // Page coordinates are relative to the tab webview, which starts below chrome.
     let win = window_of(&window);
     let (width, height) = crate::window::logical_size(&win)?;
-    let menu_w = 232.0;
-    let menu_h = 260.0;
+    // Height follows the entries that actually apply, so the panel has no dead space.
+    let mut rows = 5.0; // back, forward, reload, print, inspect
+    let mut groups = 2.0;
+    if context.link.is_some() { rows += 2.0; groups += 1.0; }
+    if context.image.is_some() { rows += 2.0; groups += 1.0; }
+    if context.selection.is_some() { rows += 1.0; groups += 1.0; }
+    if context.editable { rows += 3.0; groups += 1.0; }
+
+    let menu_w = 250.0;
+    let menu_h = rows * 30.0 + groups * 11.0 + 12.0;
     let x = (request.x.unwrap_or(0.0) + 80.0).clamp(4.0, (width - menu_w - 4.0).max(4.0));
     let y = (crate::window::CHROME_H + request.y.unwrap_or(0.0))
         .clamp(4.0, (height - menu_h - 4.0).max(4.0));
@@ -1212,6 +1225,27 @@ pub async fn overlay_open(
     kind: String,
 ) -> Result<(), AppError> {
     crate::overlay::open(&app, &window, &kind).map_err(|e| AppError::new("overlay", e))
+}
+
+/// Opens the overlay, or closes it when it is already open for this window.
+#[tauri::command]
+pub async fn overlay_toggle(
+    app: AppHandle,
+    window: tauri::Window,
+    kind: String,
+) -> Result<bool, AppError> {
+    let open = app
+        .state::<AppState>()
+        .overlay
+        .read()
+        .unwrap_or_else(|e| e.into_inner())
+        .contains_key(window.label());
+    if open {
+        crate::overlay::close(&app, window.label());
+        return Ok(false);
+    }
+    crate::overlay::open(&app, &window, &kind).map_err(|e| AppError::new("overlay", e))?;
+    Ok(true)
 }
 
 #[tauri::command]
