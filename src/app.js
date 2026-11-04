@@ -7,6 +7,7 @@ const tabStrip = document.getElementById("tabs");
 
 let tabs = [];
 let dragging = null;
+let settings = { show_bookmarks: false };
 let selected = null;
 let hidePill = null;
 const downloadPill = document.getElementById("download");
@@ -131,6 +132,23 @@ function renderTabs() {
   tabStrip.replaceChildren(...nodes);
 }
 
+function renderBookmarks(list) {
+  const bar = document.getElementById("bookmarks");
+  const items = list || [];
+  bar.hidden = !settings.show_bookmarks || items.length === 0;
+  if (bar.hidden) return;
+  bar.replaceChildren(
+    ...items.map((bookmark) => {
+      const chip = document.createElement("button");
+      chip.className = "bookmark";
+      chip.textContent = bookmark.title || bookmark.url;
+      chip.title = bookmark.url;
+      chip.addEventListener("click", () => invoke("tab_new", { url: bookmark.url }));
+      return chip;
+    }),
+  );
+}
+
 function syncAddressIcon(active) {
   const holder = document.getElementById("url-icon");
   if (!holder) return;
@@ -163,9 +181,17 @@ const report = (message) => invoke("ui_log", { message }).catch(() => {});
 
 async function boot() {
   applyTheme(await invoke("theme_get"));
+  settings = await invoke("settings_get");
 
   // Listeners first: the backend may emit while this page is still starting.
   await listen("tabs:changed", (event) => setTabs(event.payload));
+  await listen("bookmarks:changed", async () => {
+    renderBookmarks(await invoke("bookmark_list"));
+  });
+  await listen("settings:changed", async () => {
+    settings = await invoke("settings_get");
+    renderBookmarks(await invoke("bookmark_list"));
+  });
   await listen("tab:loading", (event) => {
     const tab = tabs.find((item) => item.id === event.payload.id);
     if (!tab) return;
@@ -218,6 +244,7 @@ async function boot() {
     if (typeof feedSuggest === "function") feedSuggest(urlInput.value);
   });
   renderDownloads(await invoke("download_list"));
+  renderBookmarks(await invoke("bookmark_list"));
 
   for (const button of document.querySelectorAll("[data-window]")) {
     button.addEventListener("click", () => invoke("window_control", { action: button.dataset.window }));

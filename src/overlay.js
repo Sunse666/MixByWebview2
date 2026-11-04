@@ -281,6 +281,17 @@ async function bootAppMenu() {
 
     bookmarks: async () => {
       header("Bookmarks");
+      const settings = await invoke("settings_get");
+      row(
+        settings.show_bookmarks ? "\u2611" : "\u2610",
+        "Show bookmarks bar",
+        "",
+        async () => {
+          await invoke("settings_set", { patch: { show_bookmarks: !settings.show_bookmarks } });
+          render("bookmarks");
+        },
+      );
+      divider();
       const list = await invoke("bookmark_list");
       if (!list.length) {
         const empty = document.createElement("div");

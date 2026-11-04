@@ -37,6 +37,18 @@ const SHORTCUT_FORWARDER: &str = r#"
   setTimeout(sendIcon, 1500);
 })();
 
+// Scroll position is remembered per tab so switching back does not jump to top.
+(function () {
+  var timer = null;
+  window.addEventListener("scroll", function () {
+    if (timer) return;
+    timer = setTimeout(function () {
+      timer = null;
+      window.__TAURI_INTERNALS__.invoke("tab_scroll", { y: window.scrollY }).catch(function () {});
+    }, 400);
+  }, { passive: true });
+})();
+
 // While the address bar owns the keyboard, keys are forwarded to it. This does
 // not depend on which webview has OS focus.
 (function () {
@@ -198,7 +210,7 @@ const SHORTCUT_FORWARDER: &str = r#"
   }, true);
 })();
 "#;
-use crate::window::CHROME_H;
+
 
 /// Where the webview keeps its profile and, on Windows, which folders hold extensions.
 #[derive(Clone, Debug, Default)]
@@ -260,6 +272,8 @@ pub struct Tab {
     /// Favicon url reported by the page, if any.
     pub icon: Option<String>,
     pub loading: bool,
+    /// Last scroll offset, restored when the tab becomes visible again.
+    pub scroll: f64,
     /// False means the webview was dropped to save memory; selecting the tab
     /// recreates it from url.
     pub alive: bool,
@@ -328,6 +342,18 @@ pub fn create(
             let loading = matches!(payload.event(), tauri::webview::PageLoadEvent::Started);
 
             // Zoom is remembered per site, so it has to be reapplied on every load.
+            if !loading {
+                // Restoring the offset has to wait until the document exists.
+                if let Some(state) = app.try_state::<crate::ipc::AppState>() {
+                    let scroll = state
+                        .try_read_core(crate::ipc::window_of_tab(&id))
+                        .and_then(|core| core.tabs.iter().find(|tab| tab.id == id).map(|tab| tab.scroll))
+                        .unwrap_or(0.0);
+                    if scroll > 0.0 {
+                        let _ = webview.eval(&format!("window.scrollTo(0, {scroll});"));
+                    }
+                }
+            }
             if loading {
                 if let Some(state) = app.try_state::<crate::ipc::AppState>() {
                     let level = state.zoom.read().level_for(payload.url().as_str());
@@ -395,9 +421,15 @@ pub fn create(
     let builder = apply_profile(builder, &opts.tab_data_dir);
     let builder = apply_extensions(builder, opts);
 
+    // The caller already subtracted the chrome height; place below it.
+    let top = win
+        .inner_size()
+        .map(|size| size.to_logical::<f64>(win.scale_factor().unwrap_or(1.0)).height)
+        .map(|full| (full - height).max(0.0))
+        .unwrap_or(0.0);
     win.add_child(
         builder,
-        LogicalPosition::new(0.0, CHROME_H),
+        LogicalPosition::new(0.0, top),
         LogicalSize::new(width.max(1.0), height.max(1.0)),
     )
 }

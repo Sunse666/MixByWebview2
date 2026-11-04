@@ -1,6 +1,6 @@
 use tauri::{webview::WebviewBuilder, AppHandle, Manager, WebviewUrl};
 
-use crate::window::{logical_size, CHROME_H};
+use crate::window::logical_size;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 static NEXT_ID: AtomicU64 = AtomicU64::new(1);
@@ -82,13 +82,14 @@ pub fn open(app: &AppHandle, win: &tauri::Window, kind: &str) -> Result<(), Stri
         _ => DEFAULT,
     };
     // Never taller than the space under the chrome strip.
-    let oh = oh.min((win_h - CHROME_H - 12.0).max(180.0));
+    let chrome_h = crate::ipc::chrome_height(app);
+    let oh = oh.min((win_h - chrome_h - 12.0).max(180.0));
 
     let (x, y) = if base == "app_menu" {
         // Right aligned under the menu button, like a desktop app menu.
-        ((win_w - ow - 8.0).max(0.0), CHROME_H + 6.0)
+        ((win_w - ow - 8.0).max(0.0), chrome_h + 6.0)
     } else {
-        (((win_w - ow) / 2.0).max(0.0), CHROME_H + 6.0)
+        (((win_w - ow) / 2.0).max(0.0), chrome_h + 6.0)
     };
 
     crate::logging::info(&format!(

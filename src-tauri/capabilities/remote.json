@@ -19,6 +19,7 @@
   "permissions": [
     "allow-shortcut",
     "allow-tab-icon",
+    "allow-tab-scroll",
     "allow-url-type",
     "allow-url-key",
     "allow-context-menu",

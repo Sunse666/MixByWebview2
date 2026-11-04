@@ -238,3 +238,36 @@ button {
 .tab.drop-target {
   box-shadow: inset 2px 0 0 0 var(--accent);
 }
+
+.bookmarks {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 30px;
+  padding: 0 8px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  background: var(--panel);
+  border-top: 1px solid var(--border);
+  scrollbar-width: none;
+}
+
+.bookmarks::-webkit-scrollbar { display: none; }
+
+.bookmark {
+  flex: 0 0 auto;
+  max-width: 180px;
+  height: 22px;
+  padding: 0 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+  background: transparent;
+  border: 0;
+  border-radius: var(--tab-radius);
+  font: inherit;
+  opacity: 0.85;
+}
+
+.bookmark:hover { background: var(--hover); opacity: 1; }

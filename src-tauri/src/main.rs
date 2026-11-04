@@ -89,6 +89,7 @@ fn main() {
             ipc::suggest_feed,
             ipc::suggest_refresh,
             ipc::overlay_toggle,
+            ipc::tab_scroll,
             ipc::url_type,
             ipc::url_key,
             ipc::url_blur,

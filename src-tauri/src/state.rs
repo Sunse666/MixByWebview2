@@ -11,6 +11,8 @@ pub struct Settings {
     pub start_url: String,
     pub restore_session: bool,
     pub chrome_height: f64,
+    /// Adds a bookmarks row under the address bar, which also grows the chrome.
+    pub show_bookmarks: bool,
     pub max_live_tabs: usize,
     pub download_dir: Option<String>,
 }
@@ -22,6 +24,7 @@ impl Default for Settings {
             start_url: "https://example.com".into(),
             restore_session: true,
             chrome_height: 68.0,
+        show_bookmarks: false,
             max_live_tabs: 12,
             download_dir: None,
         }

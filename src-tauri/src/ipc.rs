@@ -126,6 +126,7 @@ impl AppState {
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct SettingsPatch {
     pub restore_session: Option<bool>,
+    pub show_bookmarks: Option<bool>,
     pub start_url: Option<String>,
     pub max_live_tabs: Option<usize>,
 }
@@ -188,6 +189,17 @@ pub fn focused_window(app: &AppHandle) -> Option<tauri::Window> {
         .into_values()
         .find(|win| win.is_focused().unwrap_or(false))
         .or_else(|| app.get_window("w1"))
+}
+
+/// Height of the chrome strip: the base plus the optional bookmarks row.
+pub fn chrome_height(app: &AppHandle) -> f64 {
+    match app.try_state::<AppState>() {
+        Some(state) => {
+            let settings = state.settings.read();
+            settings.chrome_height + if settings.show_bookmarks { 30.0 } else { 0.0 }
+        }
+        None => crate::window::CHROME_H,
+    }
 }
 
 fn window_of(window: &tauri::Window) -> tauri::Window {
@@ -394,7 +406,7 @@ fn spawn_tab(
         id,
         url,
         width,
-        (height - crate::window::CHROME_H).max(1.0),
+        (height - chrome_height(app)).max(1.0),
         &opts,
         incognito,
     )
@@ -474,6 +486,13 @@ pub async fn tab_select(app: AppHandle, window: tauri::Window, state: State<'_, 
     sync_visibility(&app, window.label());
     if let Some(webview) = app.get_webview(&id) {
         let _ = webview.set_focus();
+        let scroll = state
+            .try_read_core(window.label())
+            .and_then(|core| core.tabs.iter().find(|tab| tab.id == id).map(|tab| tab.scroll))
+            .unwrap_or(0.0);
+        if scroll > 0.0 {
+            let _ = webview.eval(&format!("window.scrollTo(0, {scroll});"));
+        }
     }
     emit_tabs(&app, window.label());
     Ok(())
@@ -514,6 +533,7 @@ pub async fn tab_new(
             incognito: incognito.unwrap_or(false),
             icon: None,
             loading: false,
+            scroll: 0.0,
             alive: true,
             last_active: tick,
         });
@@ -902,7 +922,7 @@ pub async fn context_menu(
     let menu_w = 250.0;
     let menu_h = rows * 30.0 + groups * 11.0 + 12.0;
     let x = (request.x.unwrap_or(0.0) + 80.0).clamp(4.0, (width - menu_w - 4.0).max(4.0));
-    let y = (crate::window::CHROME_H + request.y.unwrap_or(0.0))
+    let y = (chrome_height(&app) + request.y.unwrap_or(0.0))
         .clamp(4.0, (height - menu_h - 4.0).max(4.0));
 
     crate::logging::info(&format!(
@@ -954,7 +974,7 @@ pub async fn permission_request(
         &window,
         &url,
         x,
-        crate::window::CHROME_H + 48.0,
+        chrome_height(&app) + 48.0,
         prompt_w,
         prompt_h,
     )
@@ -1003,6 +1023,9 @@ pub async fn settings_set(
         let mut guard = state.settings.write();
         if let Some(value) = patch.restore_session {
             guard.restore_session = value;
+        }
+        if let Some(value) = patch.show_bookmarks {
+            guard.show_bookmarks = value;
         }
         if let Some(value) = patch.start_url {
             if !value.trim().is_empty() {
@@ -1178,7 +1201,7 @@ pub async fn suggest_open(
         &window,
         "suggest",
         x,
-        crate::window::CHROME_H + 2.0,
+        chrome_height(&app) + 2.0,
         width,
         48.0,
     )
@@ -1541,6 +1564,24 @@ fn exit_url_edit(app: &AppHandle, window_label: &str) {
     if let Some(win) = app.get_window(window_label) {
         set_url_edit(app, &win, false);
     }
+}
+
+/// Pages report their scroll offset here so it survives a tab switch.
+#[tauri::command]
+pub async fn tab_scroll(
+    _app: AppHandle,
+    webview: tauri::Webview,
+    state: State<'_, AppState>,
+    y: f64,
+) -> Result<(), AppError> {
+    let id = webview.label().to_string();
+    let owner = window_of_tab(&id).to_string();
+    if let Some(mut core) = state.try_write_core(&owner) {
+        if let Some(tab) = core.tabs.iter_mut().find(|tab| tab.id == id) {
+            tab.scroll = y.max(0.0);
+        }
+    }
+    Ok(())
 }
 
 #[tauri::command]

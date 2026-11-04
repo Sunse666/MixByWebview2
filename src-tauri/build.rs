@@ -41,6 +41,7 @@ fn main() {
         "suggest_feed",
         "suggest_refresh",
         "overlay_toggle",
+        "tab_scroll",
         "url_type",
         "url_key",
         "url_blur",

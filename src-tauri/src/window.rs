@@ -209,6 +209,7 @@ pub fn open_window(
                 incognito: false,
                 icon: None,
                 loading: false,
+                scroll: 0.0,
                 alive: true,
                 last_active: index as u64,
             })
@@ -225,15 +226,16 @@ pub fn open_window(
         &opts.ui_data_dir,
     );
 
+    let chrome_h = crate::ipc::chrome_height(app);
     win.add_child(
         chrome_builder,
         LogicalPosition::new(0.0, 0.0),
-        LogicalSize::new(width, CHROME_H),
+        LogicalSize::new(width, chrome_h),
     )?;
 
     for (index, url) in urls.iter().enumerate() {
         let id = crate::ipc::tab_label(label, index + 1);
-        tabs::create(&win, &id, url, width, height - CHROME_H, &opts, false)?;
+        tabs::create(&win, &id, url, width, height - chrome_h, &opts, false)?;
     }
 
     let handle = app.clone();
@@ -356,10 +358,11 @@ pub fn relayout(app: &AppHandle, label: &str) -> Result<(), tauri::Error> {
         return Ok(());
     };
     let (width, height) = logical_size(&win)?;
-    let tab_height = (height - CHROME_H).max(1.0);
+    let chrome_h = crate::ipc::chrome_height(app);
+    let tab_height = (height - chrome_h).max(1.0);
 
     if let Some(chrome) = app.get_webview(&format!("{label}-chrome")) {
-        set_bounds(&chrome, 0.0, 0.0, width, CHROME_H)?;
+        set_bounds(&chrome, 0.0, 0.0, width, chrome_h)?;
     }
 
     let ids: Vec<String> = match app.try_state::<AppState>() {
@@ -371,7 +374,7 @@ pub fn relayout(app: &AppHandle, label: &str) -> Result<(), tauri::Error> {
     };
     for id in ids {
         if let Some(webview) = app.get_webview(&id) {
-            set_bounds(&webview, 0.0, CHROME_H, width, tab_height)?;
+            set_bounds(&webview, 0.0, chrome_h, width, tab_height)?;
         }
     }
 
