@@ -958,6 +958,20 @@ pub async fn chrome_menu(
     Ok(())
 }
 
+/// The address field cannot read the clipboard itself: the webview clipboard API
+/// is gated behind a permission prompt that never appears, so go through the OS.
+#[tauri::command]
+pub async fn clipboard_read() -> Result<String, AppError> {
+    let mut board = arboard::Clipboard::new().map_err(|err| AppError::new("clipboard", err.to_string()))?;
+    board.get_text().map_err(|err| AppError::new("clipboard", err.to_string()))
+}
+
+#[tauri::command]
+pub async fn clipboard_write(text: String) -> Result<(), AppError> {
+    let mut board = arboard::Clipboard::new().map_err(|err| AppError::new("clipboard", err.to_string()))?;
+    board.set_text(text).map_err(|err| AppError::new("clipboard", err.to_string()))
+}
+
 /// Runs a text edit in the chrome page, which owns the address field.
 #[tauri::command]
 pub async fn url_action(
@@ -1863,6 +1877,13 @@ pub async fn translate_done(
     let owner = window_of_tab(webview.label()).to_string();
     if let Some(message) = &error {
         crate::logging::warn(&format!("translation failed: {message}"));
+        // Child webviews drop events, so the hint is pushed in directly.
+        if let Some(chrome) = app.get_webview(&format!("{owner}-chrome")) {
+            let text = serde_json::to_string(message).unwrap_or_else(|_| "\"failed\"".into());
+            let _ = chrome.eval(&format!(
+                "window.__mixTranslateFailed && window.__mixTranslateFailed({text})"
+            ));
+        }
     } else {
         crate::logging::info(&format!("translated {count} text nodes"));
     }

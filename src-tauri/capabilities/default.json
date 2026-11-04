@@ -68,6 +68,8 @@
     "allow-download-list",
     "allow-download-open-dir",
     "allow-shortcut",
+    "allow-clipboard-read",
+    "allow-clipboard-write",
     "allow-focus-page",
     "allow-chrome-menu",
     "allow-url-action",

@@ -137,7 +137,10 @@ const SHORTCUT_FORWARDER: &str = r#"
         var applied = apply(translated || []);
         total += applied;
         if (applied === 0) {
-          window.__TAURI_INTERNALS__.invoke("translate_done", { count: total, error: null });
+          window.__TAURI_INTERNALS__.invoke("translate_done", {
+            count: total,
+            error: total === 0 ? "translation returned nothing" : null,
+          });
           running = false;
           return;
         }

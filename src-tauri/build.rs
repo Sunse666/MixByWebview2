@@ -72,6 +72,8 @@ fn main() {
         "download_list",
         "download_open_dir",
         "shortcut",
+        "clipboard_read",
+        "clipboard_write",
         "focus_page",
         "chrome_menu",
         "url_action",

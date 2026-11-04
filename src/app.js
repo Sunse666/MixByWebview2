@@ -329,6 +329,27 @@ function setTabs(payload) {
 }
 
 const report = (message) => invoke("ui_log", { message }).catch(() => {});
+
+// Translation failures are reported by the backend; a silent no-op looks broken.
+let translateError = "";
+
+function showToast(text) {
+  const toast = document.getElementById("toast");
+  if (!toast) return;
+  toast.textContent = text;
+  toast.hidden = false;
+  clearTimeout(showToast.timer);
+  // A failure message deserves a longer look than a success flash.
+  showToast.timer = setTimeout(() => {
+    toast.hidden = true;
+  }, 7000);
+}
+
+window.__mixTranslateFailed = (message) => {
+  translateError = String(message || "failed");
+  showToast(`${t("Translate failed")}: ${t(translateError)}`);
+  renderToolbar(currentExtensions);
+};
 report("chrome boot v2");
 
 // Chrome draws its own menus; the WebView2 default menu does not belong on our UI.
@@ -341,12 +362,14 @@ window.__mixUrlAction = (action) => {
     urlInput.dispatchEvent(new Event("input"));
   };
   if (action === "cut") {
-    navigator.clipboard.writeText(selection).catch(() => {});
+    invoke("clipboard_write", { text: selection }).catch(() => {});
     place("");
   } else if (action === "copy") {
-    navigator.clipboard.writeText(selection).catch(() => {});
+    invoke("clipboard_write", { text: selection }).catch(() => {});
   } else if (action === "paste") {
-    navigator.clipboard.readText().then(place).catch(() => {});
+    invoke("clipboard_read")
+      .then((text) => place(text || ""))
+      .catch(() => {});
   } else if (action === "select-all") {
     urlInput.select();
   }

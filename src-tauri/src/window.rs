@@ -26,6 +26,12 @@ pub fn set_bounds(webview: &Webview, x: f64, y: f64, w: f64, h: f64) -> tauri::R
 
 pub const PRIMARY: &str = "w1";
 
+/// The MIX_* hooks exist for tests and manual probing. They are inert unless
+/// this switch is set, so a release build cannot be driven by a stray variable.
+fn debug_hooks() -> bool {
+    std::env::var("MIX_DEBUG").is_ok_and(|value| value != "0")
+}
+
 pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
     let (start_url, restore, session_file) = {
         let state = app.state::<AppState>();
@@ -72,7 +78,8 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
     // startup. Opening it inside setup deadlocks the page: the main thread is
     // still creating webviews, so its invoke never resolves.
     #[cfg(debug_assertions)]
-    if let Ok(kind) = std::env::var("MIX_OPEN_ON_START") {
+    if debug_hooks() {
+        if let Ok(kind) = std::env::var("MIX_OPEN_ON_START") {
         let handle = app.handle().clone();
         std::thread::spawn(move || {
             std::thread::sleep(std::time::Duration::from_millis(1500));
@@ -86,10 +93,11 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
                 }
             });
         });
+        }
     }
 
     #[cfg(debug_assertions)]
-    if std::env::var("MIX_DIAG_ON_START").is_ok() {
+    if debug_hooks() && std::env::var("MIX_DIAG_ON_START").is_ok() {
         let handle = app.handle().clone();
         std::thread::spawn(move || {
             std::thread::sleep(std::time::Duration::from_millis(2500));
@@ -103,7 +111,7 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
     // Debug helper: MIX_NEW_WINDOW=1 opens a second window after startup so the
     // multi window path can be checked without a click.
     #[cfg(debug_assertions)]
-    if std::env::var("MIX_NEW_WINDOW").is_ok() {
+    if debug_hooks() && std::env::var("MIX_NEW_WINDOW").is_ok() {
         let handle = app.handle().clone();
         std::thread::spawn(move || {
             std::thread::sleep(std::time::Duration::from_millis(2000));
@@ -121,7 +129,7 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
     }
 
     // Support hook: MIX_TRANSLATE=1 runs the translator on the current page.
-    if std::env::var("MIX_TRANSLATE").is_ok() {
+    if debug_hooks() && std::env::var("MIX_TRANSLATE").is_ok() {
         let handle = app.handle().clone();
         std::thread::spawn(move || {
             std::thread::sleep(std::time::Duration::from_millis(3000));
@@ -154,7 +162,7 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
 
     // Support hook: MIX_DOM_PUSH=1 appends a paragraph later, so the observer that
     // picks up dynamic content can be exercised without a real feed.
-    if std::env::var("MIX_DOM_PUSH").is_ok() {
+    if debug_hooks() && std::env::var("MIX_DOM_PUSH").is_ok() {
         let handle = app.handle().clone();
         std::thread::spawn(move || {
             std::thread::sleep(std::time::Duration::from_millis(9000));
@@ -176,7 +184,7 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
 
     // Support hook: MIX_TOGGLE_EXT=1 hides the first extension after startup, so
     // the live settings path can be checked without a click.
-    if std::env::var("MIX_TOGGLE_EXT").is_ok() {
+    if debug_hooks() && std::env::var("MIX_TOGGLE_EXT").is_ok() {
         let handle = app.handle().clone();
         std::thread::spawn(move || {
             std::thread::sleep(std::time::Duration::from_millis(4000));
@@ -210,7 +218,8 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
 
     // Support hook: MIX_SAVE_URL=<url> saves that file, so the download path
     // can be checked without a right click.
-    if let Ok(url) = std::env::var("MIX_SAVE_URL") {
+    if debug_hooks() {
+        if let Ok(url) = std::env::var("MIX_SAVE_URL") {
         let handle = app.handle().clone();
         std::thread::spawn(move || {
             std::thread::sleep(std::time::Duration::from_millis(2500));
@@ -224,11 +233,12 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
                 }
             });
         });
+        }
     }
 
     // Support hook: MIX_NAV=1 navigates the first tab to a dead host, so the
     // "unreachable" path can be checked without typing.
-    if std::env::var("MIX_NAV").is_ok() {
+    if debug_hooks() && std::env::var("MIX_NAV").is_ok() {
         let handle = app.handle().clone();
         std::thread::spawn(move || {
             std::thread::sleep(std::time::Duration::from_millis(2500));
@@ -250,7 +260,7 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
     }
 
     // Support hook: MIX_ERROR_PAGE=1 shows the error page so it can be reviewed.
-    if std::env::var("MIX_ERROR_PAGE").is_ok() {
+    if debug_hooks() && std::env::var("MIX_ERROR_PAGE").is_ok() {
         let handle = app.handle().clone();
         std::thread::spawn(move || {
             std::thread::sleep(std::time::Duration::from_millis(2500));
@@ -269,7 +279,7 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
 
     // Support hook: MIX_DEVTOOLS=1 runs the devtools shortcut, so a broken F12
     // can be told apart from a broken key path.
-    if std::env::var("MIX_DEVTOOLS").is_ok() {
+    if debug_hooks() && std::env::var("MIX_DEVTOOLS").is_ok() {
         let handle = app.handle().clone();
         std::thread::spawn(move || {
             std::thread::sleep(std::time::Duration::from_millis(2500));

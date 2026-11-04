@@ -410,3 +410,22 @@ button {
   margin: 4px 6px;
   background: var(--border);
 }
+
+.toast {
+  position: absolute;
+  right: 44px;
+  bottom: 4px;
+  z-index: 40;
+  max-width: 55%;
+  padding: 3px 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: calc(var(--font-size) - 2px);
+  color: var(--text);
+  background: var(--menu-bg, #2a2a2a);
+  border: 1px solid #c0392b;
+  border-radius: 999px;
+}
+
+.toast[hidden] { display: none; }
