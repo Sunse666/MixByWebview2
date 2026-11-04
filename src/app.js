@@ -437,6 +437,11 @@ document.addEventListener("contextmenu", (event) => {
 
 document.addEventListener("mousedown", (event) => {
   if (!event.target.closest("#ctx-menu")) hideContextMenu();
+  // Anything that is not the field itself gives the keyboard back to the page.
+  if (document.activeElement === urlInput && !event.target.closest("#url-wrap")) {
+    urlInput.blur();
+    invoke("focus_page").catch(() => {});
+  }
 });
 window.addEventListener("blur", hideContextMenu);
 window.addEventListener("resize", hideContextMenu);
@@ -631,7 +636,13 @@ async function boot() {
     invoke("overlay_close").catch(() => {});
   };
 
-  urlInput.addEventListener("focus", () => feedSuggest(urlInput.value));
+  // The dropdown opens on typing, not on focus: an open dropdown is a separate
+  // webview that would swallow the click meant to move focus to the page.
+  urlInput.addEventListener("keydown", (event) => {
+    if (event.key.length === 1 || event.key === "Backspace" || event.key === "Delete") {
+      feedSuggest(urlInput.value);
+    }
+  });
   urlInput.addEventListener("input", () => feedSuggest(urlInput.value));
   urlInput.addEventListener("blur", () => closeSuggest());
 

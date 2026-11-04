@@ -121,6 +121,7 @@ fn main() {
             ipc::app_info,
             ipc::app_quit,
             ipc::shortcut,
+            ipc::focus_page,
             ipc::chrome_menu,
             ipc::url_action,
             ipc::context_menu,

@@ -68,6 +68,7 @@
     "allow-download-list",
     "allow-download-open-dir",
     "allow-shortcut",
+    "allow-focus-page",
     "allow-chrome-menu",
     "allow-url-action",
     "allow-context-menu",

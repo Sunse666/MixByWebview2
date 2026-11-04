@@ -1771,6 +1771,20 @@ pub async fn tab_scroll(
     Ok(())
 }
 
+/// Gives the keyboard to the page once the address bar is done.
+#[tauri::command]
+pub async fn focus_page(
+    app: AppHandle,
+    window: tauri::Window,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    let id = selected_label(&state, &window);
+    if let Some(webview) = app.get_webview(&id) {
+        let _ = webview.set_focus();
+    }
+    Ok(())
+}
+
 /// Starts the in-page translator. The page collects its own text and calls back;
 /// eval cannot return a value, so the flow is push based.
 #[tauri::command]

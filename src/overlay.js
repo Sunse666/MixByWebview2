@@ -531,6 +531,18 @@ async function bootAppMenu() {
   await render(params.get("page") || "root");
 }
 async function bootSuggest() {
+  // suggest closes on blur
+  window.addEventListener("blur", () => invoke("overlay_close").catch(() => {}));
+  window.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") invoke("overlay_close").catch(() => {});
+  });
+  document.addEventListener("mousedown", (event) => {
+    if (!event.target.closest(".suggest") && !event.target.closest("button")) {
+      invoke("overlay_close").catch(() => {});
+    }
+  });
+
+
   menu.hidden = false;
   appMenu.hidden = true;
   themePanel.hidden = true;
