@@ -236,6 +236,8 @@ async function bootAppMenu() {
     extensions: async () => {
       header("Extensions");
       const list = await invoke("ext_list");
+      const settings = await invoke("settings_get");
+      const hidden = new Set(settings.hidden_extensions || []);
       if (!list.length) {
         const empty = document.createElement("div");
         empty.className = "menu-note";
@@ -244,14 +246,34 @@ async function bootAppMenu() {
       }
       for (const ext of list) {
         const item = document.createElement("div");
-        item.className = "menu-entry";
+        item.className = "menu-entry entry-row";
+        const text = document.createElement("div");
+        text.className = "entry-text";
         const name = document.createElement("div");
         name.className = "entry-name";
         name.textContent = ext.version ? ext.name + " " + ext.version : ext.name;
         const state = document.createElement("div");
         state.className = "entry-note" + (ext.status === "error" ? " bad" : "");
         state.textContent = ext.status + (ext.reason ? " \u00b7 " + ext.reason : "");
-        item.append(name, state);
+        text.append(name, state);
+        item.append(text);
+
+        if (ext.status === "loaded") {
+          const shown = !hidden.has(ext.name);
+          const toggle = document.createElement("button");
+          toggle.className = "entry-toggle" + (shown ? " on" : "");
+          toggle.title = shown ? "Hide from the toolbar" : "Show in the toolbar";
+          toggle.textContent = shown ? "\u25c9" : "\u25cb";
+          toggle.addEventListener("click", async (event) => {
+            event.stopPropagation();
+            const next = new Set(hidden);
+            if (next.has(ext.name)) next.delete(ext.name);
+            else next.add(ext.name);
+            await invoke("settings_set", { patch: { hidden_extensions: [...next] } });
+            render("extensions");
+          });
+          item.append(toggle);
+        }
         appMenu.append(item);
       }
       divider();

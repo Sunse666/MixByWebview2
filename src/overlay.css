@@ -466,3 +466,28 @@ footer { margin-top: auto; display: flex; justify-content: flex-end; gap: 8px; }
 }
 
 .find-step:hover { background: var(--hover); }
+
+.entry-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.entry-text { flex: 1; min-width: 0; }
+
+.entry-toggle {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  opacity: 0.45;
+}
+
+.entry-toggle.on { opacity: 1; color: var(--accent); }
+
+.entry-toggle:hover { background: var(--hover); }
