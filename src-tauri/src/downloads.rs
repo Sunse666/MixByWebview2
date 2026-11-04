@@ -12,6 +12,8 @@ pub struct DownloadTask {
     pub path: String,
     /// started | finished | failed
     pub state: String,
+    /// Bytes written so far; WebView2 gives no total, so there is no percentage.
+    pub bytes: u64,
 }
 
 static NEXT_ID: AtomicU64 = AtomicU64::new(1);
@@ -65,6 +67,7 @@ fn record(app: &tauri::AppHandle, url: Option<&str>, path: Option<&Path>, state:
                     file_name: file_name(&target),
                     path: target.display().to_string(),
                     state: state.to_string(),
+                    bytes: 0,
                 });
                 if tasks.len() > KEEP {
                     let drop_count = tasks.len() - KEEP;
@@ -90,6 +93,33 @@ fn record(app: &tauri::AppHandle, url: Option<&str>, path: Option<&Path>, state:
 
     crate::logging::info(&format!("download {state}: {}", url.unwrap_or_default()));
     let _ = app.emit("download:changed", tasks);
+}
+
+/// WebView2 reports only start and finish, so the size on disk is polled to
+/// give the strip something to show while a download runs.
+pub fn start_progress_watch(app: tauri::AppHandle) {
+    std::thread::spawn(move || loop {
+        std::thread::sleep(std::time::Duration::from_millis(500));
+
+        let Some(state) = app.try_state::<AppState>() else {
+            return;
+        };
+        let mut changed = false;
+        let tasks = {
+            let mut tasks = state.downloads.write().unwrap_or_else(|e| e.into_inner());
+            for task in tasks.iter_mut().filter(|task| task.state == "started") {
+                let size = std::fs::metadata(&task.path).map(|meta| meta.len()).unwrap_or(0);
+                if size != task.bytes {
+                    task.bytes = size;
+                    changed = true;
+                }
+            }
+            tasks.clone()
+        };
+        if changed {
+            let _ = app.emit("download:changed", tasks);
+        }
+    });
 }
 
 /// Prefer the name the server suggested, fall back to the URL, then avoid

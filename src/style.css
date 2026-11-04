@@ -232,3 +232,9 @@ button {
   border-radius: 3px;
   object-fit: contain;
 }
+
+.tab.dragging { opacity: 0.4; }
+
+.tab.drop-target {
+  box-shadow: inset 2px 0 0 0 var(--accent);
+}

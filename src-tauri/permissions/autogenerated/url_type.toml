@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-url-type"
+description = "Enables the url_type command without any pre-configured scope."
+commands.allow = ["url_type"]
+
+[[permission]]
+identifier = "deny-url-type"
+description = "Denies the url_type command without any pre-configured scope."
+commands.deny = ["url_type"]

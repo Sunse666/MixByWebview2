@@ -38,6 +38,8 @@ pub struct AppState {
     /// Recently closed tabs, newest last, so Ctrl+Shift+T can bring them back.
     pub closed_tabs: RwLock<Vec<(String, String)>>,
     pub zoom: parking_lot::RwLock<crate::zoom::ZoomStore>,
+    /// Window label -> text typed while the address bar owns the keyboard.
+    pub url_edit: RwLock<std::collections::HashMap<String, String>>,
     pub bookmarks: RwLock<Vec<Bookmark>>,
     pub scripts: Vec<crate::userscripts::ScriptInfo>,
 }
@@ -69,6 +71,7 @@ impl AppState {
             suggest_width: parking_lot::RwLock::new(420.0),
             closed_tabs: RwLock::new(Vec::new()),
             zoom: parking_lot::RwLock::new(crate::zoom::ZoomStore::load(&dirs.zoom_file)),
+            url_edit: RwLock::new(std::collections::HashMap::new()),
             bookmarks: RwLock::new(bookmarks),
             scripts,
             dirs,
@@ -735,12 +738,13 @@ pub async fn shortcut(app: AppHandle, window: tauri::Window, state: State<'_, Ap
         "next_tab" => cycle_tab(&app, &window, 1).await,
         "prev_tab" => cycle_tab(&app, &window, -1).await,
         "focus_url" => {
-            // The chrome webview needs OS focus, otherwise the keys keep going
-            // to the page while the address bar looks focused.
+            // Focus the chrome webview, and arm the page side key bridge so typing
+            // works even when WebView2 keeps the keyboard on the page.
             let _ = window.set_focus();
             if let Some(chrome) = app.get_webview(&format!("{}-chrome", window.label())) {
                 let _ = chrome.set_focus();
             }
+            set_url_edit(&app, &window, true);
             let _ = app.emit_to(window.label(), "ui:focus-url", ());
         }
         "reload" => {
@@ -1435,6 +1439,127 @@ pub async fn script_list(_window: tauri::Window, state: State<'_, AppState>) -> 
 /// Opens another window with its own tab strip.
 /// Reopens the most recently closed tab.
 /// Pages report their favicon here so the tab strip can show it.
+fn move_tab(tabs: &mut Vec<Tab>, id: &str, to: usize) -> bool {
+    let Some(from) = tabs.iter().position(|tab| tab.id == id) else {
+        return false;
+    };
+    let target = to.min(tabs.len().saturating_sub(1));
+    if from == target {
+        return false;
+    }
+    let tab = tabs.remove(from);
+    tabs.insert(target, tab);
+    true
+}
+
+/// Moves a tab to a new index; the strip calls this after a drag.
+/// Pages forward typed characters here while the address bar owns the keyboard,
+/// which avoids depending on webview focus.
+#[tauri::command]
+pub async fn url_type(
+    app: AppHandle,
+    window: tauri::Window,
+    state: State<'_, AppState>,
+    text: String,
+) -> Result<(), AppError> {
+    let next = {
+        let mut edit = state.url_edit.write().unwrap_or_else(|e| e.into_inner());
+        let Some(buffer) = edit.get_mut(window.label()) else {
+            return Ok(());
+        };
+        if text == "\u{8}" {
+            buffer.pop();
+        } else {
+            buffer.push_str(&text);
+        }
+        buffer.clone()
+    };
+    crate::logging::info(&format!("url_type -> {next:?}"));
+    let _ = app.emit_to(window.label(), "url:text", next);
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn url_key(
+    app: AppHandle,
+    window: tauri::Window,
+    _state: State<'_, AppState>,
+    key: String,
+) -> Result<(), AppError> {
+    match key.as_str() {
+        "enter" => {
+            exit_url_edit(&app, window.label());
+            let _ = app.emit_to(window.label(), "url:commit", ());
+        }
+        "escape" => {
+            exit_url_edit(&app, window.label());
+            let _ = app.emit_to(window.label(), "url:cancel", ());
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn url_blur(app: AppHandle, window: tauri::Window) -> Result<(), AppError> {
+    exit_url_edit(&app, window.label());
+    Ok(())
+}
+
+/// Turns the page-side key bridge on or off for every tab in a window.
+pub(crate) fn set_url_edit(app: &AppHandle, window: &tauri::Window, on: bool) {
+    let state = app.state::<AppState>();
+    let tabs: Vec<String> = match state.try_read_core(window.label()) {
+        Some(core) => core.tabs.iter().map(|tab| tab.id.clone()).collect(),
+        None => Vec::new(),
+    };
+    let script = if on { "window.__mixUrlMode = true" } else { "window.__mixUrlMode = false" };
+    let count = tabs.len();
+    for id in tabs {
+        if let Some(webview) = app.get_webview(&id) {
+            let _ = webview.eval(script);
+        }
+    }
+    crate::logging::info(&format!("url edit {on} for {} ({count} tabs)", window.label()));
+    if on {
+        state
+            .url_edit
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(window.label().to_string(), String::new());
+    }
+}
+
+fn exit_url_edit(app: &AppHandle, window_label: &str) {
+    if let Some(state) = app.try_state::<AppState>() {
+        state
+            .url_edit
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(window_label);
+    }
+    if let Some(win) = app.get_window(window_label) {
+        set_url_edit(app, &win, false);
+    }
+}
+
+#[tauri::command]
+pub async fn tab_move(
+    app: AppHandle,
+    window: tauri::Window,
+    state: State<'_, AppState>,
+    id: String,
+    to: usize,
+) -> Result<(), AppError> {
+    {
+        let mut core = state.write_core(window.label());
+        move_tab(&mut core.tabs, &id, to);
+    }
+    emit_tabs(&app, window.label());
+    save_sessions(&app);
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn tab_icon(
     app: AppHandle,
@@ -1569,4 +1694,48 @@ fn reveal(path: &std::path::Path) -> std::io::Result<()> {
         c
     };
     cmd.spawn().map(|_| ())
+}
+#[cfg(test)]
+mod tab_order_tests {
+    use super::*;
+
+    fn tab(id: &str) -> Tab {
+        Tab {
+            id: id.to_string(),
+            url: "https://a.test".into(),
+            title: id.to_string(),
+            zoom: 1.0,
+            incognito: false,
+            icon: None,
+            loading: false,
+            alive: true,
+            last_active: 0,
+        }
+    }
+
+    fn ids(tabs: &[Tab]) -> Vec<&str> {
+        tabs.iter().map(|tab| tab.id.as_str()).collect()
+    }
+
+    #[test]
+    fn reordering_moves_a_tab() {
+        let mut tabs = vec![tab("a"), tab("b"), tab("c")];
+        assert!(move_tab(&mut tabs, "c", 0));
+        assert_eq!(ids(&tabs), vec!["c", "a", "b"]);
+    }
+
+    #[test]
+    fn moving_past_the_end_lands_last() {
+        let mut tabs = vec![tab("a"), tab("b"), tab("c")];
+        assert!(move_tab(&mut tabs, "a", 99));
+        assert_eq!(ids(&tabs), vec!["b", "c", "a"]);
+    }
+
+    #[test]
+    fn unknown_id_or_same_index_is_a_no_op() {
+        let mut tabs = vec![tab("a"), tab("b")];
+        assert!(!move_tab(&mut tabs, "zzz", 0));
+        assert!(!move_tab(&mut tabs, "a", 0));
+        assert_eq!(ids(&tabs), vec!["a", "b"]);
+    }
 }

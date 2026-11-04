@@ -37,6 +37,40 @@ const SHORTCUT_FORWARDER: &str = r#"
   setTimeout(sendIcon, 1500);
 })();
 
+// While the address bar owns the keyboard, keys are forwarded to it. This does
+// not depend on which webview has OS focus.
+(function () {
+  var forward = function (kind, value) {
+    var payload = kind === "type" ? { text: value } : { key: value };
+    var command = kind === "type" ? "url_type" : "url_key";
+    window.__TAURI_INTERNALS__.invoke(command, payload).catch(function () {});
+  };
+
+  window.addEventListener("keydown", function (event) {
+    if (!window.__mixUrlMode) return;
+    if (event.ctrlKey || event.altKey || event.metaKey) return;
+    if (event.key.length === 1) {
+      forward("type", event.key);
+      event.preventDefault();
+      return;
+    }
+    if (event.key === "Backspace") {
+      forward("type", "\u0008");
+      event.preventDefault();
+      return;
+    }
+    if (event.key === "Enter") {
+      forward("key", "enter");
+      event.preventDefault();
+      return;
+    }
+    if (event.key === "Escape") {
+      forward("key", "escape");
+      event.preventDefault();
+    }
+  }, true);
+})();
+
 (function () {
   if (window.__mixKeys) return;
   window.__mixKeys = true;

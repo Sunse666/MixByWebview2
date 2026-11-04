@@ -14,16 +14,19 @@ const DEFAULT: (f64, f64) = (420.0, 320.0);
 /// transparent child webview actually composites; on Windows it produces
 /// ghosting and black boxes, so the panel paints an opaque background instead.
 fn overlay_builder(app: &AppHandle, label: &str, page: &str) -> WebviewBuilder<tauri::Wry> {
+    let _ = page;
     let color = {
         let state = app.state::<crate::ipc::AppState>();
         let theme = state.theme.read().clone();
         parse_color(&theme.colors.chrome)
     };
 
+    // The dropdown must never take focus away from the address bar.
+    let focused = !page.starts_with("overlay.html#suggest");
     let builder = WebviewBuilder::new(label, WebviewUrl::App(page.into()))
         .background_color(color)
         .devtools(true)
-        .focused(true);
+        .focused(focused);
 
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     let builder = builder.transparent(true);
@@ -175,7 +178,9 @@ pub fn open_at(
 
     let webview = place(win, builder, x, y, width, height)?;
 
-    let _ = webview.set_focus();
+    if !kind.starts_with("suggest") {
+        let _ = webview.set_focus();
+    }
     {
         let state = app.state::<crate::ipc::AppState>();
         let mut slots = state.overlay.write().unwrap_or_else(|e| e.into_inner());
@@ -196,6 +201,10 @@ pub fn close(app: &AppHandle, window_label: &str) {
         if let Some(webview) = app.get_webview(&label) {
             let _ = webview.close();
             crate::logging::info(&format!("overlay closed ({label})"));
+        }
+        // The dropdown had no focus, but closing it must not leave keys nowhere.
+        if let Some(chrome) = app.get_webview(&format!("{window_label}-chrome")) {
+            let _ = chrome.set_focus();
         }
     }
 }

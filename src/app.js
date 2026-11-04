@@ -6,6 +6,7 @@ const urlInput = document.getElementById("url");
 const tabStrip = document.getElementById("tabs");
 
 let tabs = [];
+let dragging = null;
 let selected = null;
 let hidePill = null;
 const downloadPill = document.getElementById("download");
@@ -20,7 +21,10 @@ function renderDownloads(tasks) {
   downloadPill.dataset.id = String(latest.id);
   downloadPill.title = latest.path || latest.url;
   if (latest.state === "started") {
-    downloadPill.textContent = "v " + latest.file_name;
+    const mb = (latest.bytes || 0) / (1024 * 1024);
+    downloadPill.textContent = mb > 0.05
+      ? `\u2193 ${mb.toFixed(1)} MB ${latest.file_name}`
+      : "\u2193 " + latest.file_name;
   } else if (latest.state === "finished") {
     downloadPill.textContent = "OK " + latest.file_name;
   } else {
@@ -93,6 +97,35 @@ function renderTabs() {
       if (event.target.closest("button")) return;
       invoke("tab_select", { id: tab.id });
     });
+
+    // Drag to reorder. The strip only sends the index, Rust does the move.
+    el.draggable = true;
+    el.addEventListener("dragstart", (event) => {
+      dragging = tab.id;
+      event.dataTransfer.effectAllowed = "move";
+      event.dataTransfer.setData("text/plain", tab.id);
+      el.classList.add("dragging");
+    });
+    el.addEventListener("dragend", () => {
+      dragging = null;
+      el.classList.remove("dragging");
+      for (const pill of tabStrip.querySelectorAll(".tab")) pill.classList.remove("drop-target");
+    });
+    el.addEventListener("dragover", (event) => {
+      if (!dragging || dragging === tab.id) return;
+      event.preventDefault();
+      el.classList.add("drop-target");
+    });
+    el.addEventListener("dragleave", () => el.classList.remove("drop-target"));
+    el.addEventListener("drop", (event) => {
+      event.preventDefault();
+      el.classList.remove("drop-target");
+      const source = dragging || event.dataTransfer.getData("text/plain");
+      if (!source || source === tab.id) return;
+      const to = tabs.findIndex((item) => item.id === tab.id);
+      invoke("tab_move", { id: source, to }).catch(() => {});
+    });
+
     return el;
   });
   tabStrip.replaceChildren(...nodes);
@@ -166,6 +199,18 @@ async function boot() {
 
   await listen("ui:new-tab", () => invoke("tab_new", {}));
   await listen("ui:open-url", (event) => invoke("tab_new", { url: event.payload }));
+  await listen("url:text", (event) => {
+    urlInput.value = event.payload || "";
+    urlInput.setSelectionRange(urlInput.value.length, urlInput.value.length);
+  });
+  await listen("url:commit", () => {
+    invoke("tab_navigate", { url: urlInput.value }).catch(flagBadUrl);
+    urlInput.blur();
+  });
+  await listen("url:cancel", () => {
+    syncUrl();
+    urlInput.blur();
+  });
   await listen("ui:focus-url", () => {
     urlInput.focus();
     urlInput.select();

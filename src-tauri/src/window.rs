@@ -66,6 +66,7 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
         }
     }
 
+    crate::downloads::start_progress_watch(app.handle().clone());
     crate::snap::install_hotkeys(app.handle());
     crate::tray::install(&app.handle().clone())?;
     // Debug helper: MIX_OPEN_ON_START=settings opens that overlay shortly after

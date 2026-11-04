@@ -19,6 +19,8 @@
   "permissions": [
     "allow-shortcut",
     "allow-tab-icon",
+    "allow-url-type",
+    "allow-url-key",
     "allow-context-menu",
     "allow-permission-request",
     "allow-snap"
