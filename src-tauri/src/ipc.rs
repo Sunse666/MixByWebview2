@@ -48,6 +48,8 @@ pub struct AppState {
     pub pending: RwLock<std::collections::HashMap<String, String>>,
     /// Cached "can we reach this host" answers, so navigation is not slowed down.
     pub reachability: crate::net::Reachability,
+    /// Result of the last in-page translation, polled by the bubble.
+    pub translate_result: parking_lot::RwLock<(usize, Option<String>)>,
     /// Tab id -> the url whose error page is already showing.
     pub error_shown: RwLock<std::collections::HashMap<String, String>>,
     pub bookmarks: RwLock<Vec<Bookmark>>,
@@ -85,6 +87,7 @@ impl AppState {
             app_base: parking_lot::RwLock::new(String::new()),
             pending: RwLock::new(std::collections::HashMap::new()),
             reachability: crate::net::Reachability::default(),
+            translate_result: parking_lot::RwLock::new((0, None)),
             error_shown: RwLock::new(std::collections::HashMap::new()),
             bookmarks: RwLock::new(bookmarks),
             scripts,
@@ -1714,6 +1717,152 @@ pub async fn tab_scroll(
 }
 
 /// The page reports a browser error page; replace it with ours.
+/// Starts the in-page translator. The page collects its own text and calls back;
+/// eval cannot return a value, so the flow is push based.
+#[tauri::command]
+pub async fn translate_page_inplace(
+    app: AppHandle,
+    window: tauri::Window,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    *state.translate_result.write() = (0, None);
+    let id = selected_label(&state, &window);
+    let Some(webview) = app.get_webview(&id) else {
+        return Ok(());
+    };
+    let _ = webview.eval("window.__mixStartTranslate && window.__mixStartTranslate()");
+    Ok(())
+}
+
+/// Asked by the bubble to show progress without depending on events.
+#[tauri::command]
+pub async fn translate_status(
+    state: State<'_, AppState>,
+) -> Result<(usize, Option<String>), AppError> {
+    Ok(state.translate_result.read().clone())
+}
+
+/// Puts the original text back.
+#[tauri::command]
+pub async fn translate_restore(
+    app: AppHandle,
+    window: tauri::Window,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    let id = selected_label(&state, &window);
+    if let Some(webview) = app.get_webview(&id) {
+        let _ = webview.eval("window.__mixStopTranslate && window.__mixStopTranslate()");
+    }
+    Ok(())
+}
+
+/// The page reports how many nodes it replaced, and Chrome shows a hint.
+#[tauri::command]
+pub async fn translate_done(
+    app: AppHandle,
+    webview: tauri::Webview,
+    count: usize,
+    error: Option<String>,
+) -> Result<(), AppError> {
+    if let Some(state) = app.try_state::<AppState>() {
+        *state.translate_result.write() = (count, error.clone());
+    }
+    let owner = window_of_tab(webview.label()).to_string();
+    if let Some(message) = &error {
+        crate::logging::warn(&format!("translation failed: {message}"));
+    } else {
+        crate::logging::info(&format!("translated {count} text nodes"));
+    }
+    let _ = app.emit_to(owner, "translate:done", (count, error));
+    Ok(())
+}
+/// MyMemory needs an explicit source language, so the script is the best hint.
+fn guess_source(text: &str) -> Option<&'static str> {
+    let mut latin = 0;
+    let mut has_cjk = false;
+    for ch in text.chars() {
+        if ('\u{4e00}'..='\u{9fff}').contains(&ch) {
+            has_cjk = true;
+        } else if ('\u{0400}'..='\u{04FF}').contains(&ch) {
+            return Some("ru");
+        } else if ('\u{0600}'..='\u{06FF}').contains(&ch) {
+            return Some("ar");
+        } else if ('\u{3040}'..='\u{30FF}').contains(&ch) {
+            return Some("ja");
+        } else if ('\u{AC00}'..='\u{D7AF}').contains(&ch) {
+            return Some("ko");
+        } else if ch.is_ascii_alphabetic() {
+            latin += 1;
+        }
+    }
+    if has_cjk || latin == 0 {
+        return None;
+    }
+    Some("en")
+}
+
+/// Translates a batch of strings for the in-page translator. Only MyMemory is
+/// reachable from here without a key; it caps a request at ~500 characters.
+#[tauri::command]
+pub async fn translate_texts(
+    _app: AppHandle,
+    _window: tauri::Window,
+    texts: Vec<String>,
+    to: Option<String>,
+) -> Result<Vec<String>, AppError> {
+    let target = to.unwrap_or_else(|| "zh-CN".into());
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(12))
+        .build()
+        .map_err(|err| AppError::new("net", err.to_string()))?;
+
+    let mut out = Vec::with_capacity(texts.len());
+    let mut budget = 3200_usize; // stay inside the anonymous daily quota
+
+    for text in texts {
+        let trimmed = text.trim();
+        if trimmed.len() < 2 || budget < trimmed.len() {
+            out.push(String::new());
+            continue;
+        }
+        // Already Chinese, or a script we have no mapping for: leave it alone.
+        let Some(source) = guess_source(trimmed) else {
+            out.push(String::new());
+            continue;
+        };
+        budget -= trimmed.len();
+
+        let url = format!(
+            "https://api.mymemory.translated.net/get?q={}&langpair={source}|{target}",
+            crate::permissions::encode(trimmed)
+        );
+        match client.get(&url).send().await {
+            Ok(response) => {
+                let body: serde_json::Value = response.json().await.unwrap_or_default();
+                let translated = body
+                    .get("responseData")
+                    .and_then(|data| data.get("translatedText"))
+                    .and_then(|value| value.as_str())
+                    .unwrap_or_default()
+                    .to_string();
+                // The service answers 200 with an error string when the quota is gone.
+                if translated.contains("MYMEMORY WARNING") {
+                    crate::logging::warn("translation quota reached");
+                    out.push(String::new());
+                } else {
+                    out.push(translated);
+                }
+            }
+            Err(err) => {
+                crate::logging::warn(&format!("translate failed: {err}"));
+                out.push(String::new());
+            }
+        }
+    }
+
+    Ok(out)
+}
+
 /// Page translation goes through a web proxy: WebView2 has no translate API.
 /// Bing's proxy is unreachable from this network, Baidu's works and needs no key.
 #[tauri::command]

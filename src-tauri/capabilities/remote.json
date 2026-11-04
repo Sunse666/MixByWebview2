@@ -19,6 +19,8 @@
   "permissions": [
     "allow-shortcut",
     "allow-tab-icon",
+    "allow-translate-texts",
+    "allow-translate-done",
     "allow-page-failed",
     "allow-tab-scroll",
     "allow-url-type",

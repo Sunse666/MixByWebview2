@@ -134,7 +134,7 @@ function renderTabs() {
 }
 
 const TOOLBAR_ITEMS = {
-  translate: { glyph: "\u6587", label: "Translate this page", where: "inside", run: () => invoke("translate_page", { target: null }) },
+  translate: { glyph: "\u6587", label: "Translate this page", where: "inside", run: () => invoke("overlay_toggle", { kind: "translate" }) },
   zoom: { glyph: "\u2315", label: "Zoom", where: "inside", run: () => invoke("overlay_toggle", { kind: "zoom" }) },
   find: { glyph: "\u2315", label: "Find in page", where: "outside", run: () => invoke("overlay_toggle", { kind: "find" }) },
   bookmark: { glyph: "\u2606", label: "Bookmark this page", where: "inside", run: () => invoke("bookmark_toggle") },

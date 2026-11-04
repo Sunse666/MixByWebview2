@@ -37,6 +37,84 @@ const SHORTCUT_FORWARDER: &str = r#"
   setTimeout(sendIcon, 1500);
 })();
 
+// In-place page translation: the page owns the DOM, Rust owns the network.
+(function () {
+  var nodes = [];
+
+  var collect = function () {
+    nodes = [];
+    var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
+      acceptNode: function (node) {
+        var text = node.nodeValue || "";
+        if (text.trim().length < 2) return NodeFilter.FILTER_REJECT;
+        var parent = node.parentElement;
+        if (!parent) return NodeFilter.FILTER_REJECT;
+        if (/^(SCRIPT|STYLE|NOSCRIPT|TEXTAREA|CODE|PRE|KBD|SAMP)$/.test(parent.tagName)) {
+          return NodeFilter.FILTER_REJECT;
+        }
+        return NodeFilter.FILTER_ACCEPT;
+      },
+    });
+
+    var seen = new Set();
+    var total = 0;
+    while (walker.nextNode()) {
+      var node = walker.currentNode;
+      var text = node.nodeValue;
+      if (seen.has(text)) continue;
+      if (total + text.length > 3000) break;
+      seen.add(text);
+      total += text.length;
+      nodes.push({ node: node, original: text });
+      if (nodes.length >= 120) break;
+    }
+    return nodes.map(function (item) { return item.original; });
+  };
+
+  var apply = function (translated) {
+    var done = 0;
+    for (var i = 0; i < nodes.length; i++) {
+      var replacement = translated[i];
+      if (!replacement) continue;
+      if (replacement === nodes[i].original) continue;
+      nodes[i].node.nodeValue = replacement;
+      done++;
+    }
+    return done;
+  };
+
+  var restore = function () {
+    for (var i = 0; i < nodes.length; i++) {
+      nodes[i].node.nodeValue = nodes[i].original;
+    }
+    nodes = [];
+  };
+
+  window.__mixStartTranslate = function () {
+    var texts = collect();
+    if (!texts.length) {
+      window.__TAURI_INTERNALS__.invoke("translate_done", { count: 0, error: "no text found" });
+      return;
+    }
+    window.__TAURI_INTERNALS__
+      .invoke("translate_texts", { texts: texts })
+      .then(function (translated) {
+        var done = apply(translated || []);
+        window.__TAURI_INTERNALS__.invoke("translate_done", { count: done });
+      })
+      .catch(function (err) {
+        window.__TAURI_INTERNALS__.invoke("translate_done", { count: 0, error: String(err) });
+      });
+  };
+
+  window.__mixStopTranslate = function () {
+    restore();
+    window.__TAURI_INTERNALS__.invoke("translate_done", { count: 0 });
+  };
+
+  window.__mixTranslate = { collect: collect, apply: apply, restore: restore };
+})();
+
 // WebView2 renders its own error page; detect it so we can show ours instead.
 (function () {
   var check = function () {

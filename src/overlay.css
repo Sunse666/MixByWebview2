@@ -511,3 +511,20 @@ footer { margin-top: auto; display: flex; justify-content: flex-end; gap: 8px; }
 }
 
 .zoom-level:hover { background: var(--hover); }
+
+.translate-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+}
+
+.translate-state {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: calc(var(--font-size) - 1px);
+  opacity: 0.8;
+}

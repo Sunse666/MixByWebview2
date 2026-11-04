@@ -76,6 +76,8 @@ pub fn open(app: &AppHandle, win: &tauri::Window, kind: &str) -> Result<(), Stri
 
     let (ow, oh) = match base {
         "settings" => settings_size,
+        // Chrome's translate bubble is a thin strip under the address bar.
+        "translate" => (380.0, 46.0),
         "app_menu" => APP_MENU,
         // Generic page menu: five rows and two dividers.
         "context_menu" => (250.0, 184.0),
