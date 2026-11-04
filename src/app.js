@@ -133,8 +133,36 @@ function renderTabs() {
   tabStrip.replaceChildren(...nodes);
 }
 
+// Tabs whose text was replaced by the translator, so a second click restores it.
+const translatedTabs = new Set();
+
+async function toggleTranslate() {
+  const id = selected;
+  if (!id) return;
+
+  if (translatedTabs.has(id)) {
+    await invoke("translate_restore").catch(() => {});
+    translatedTabs.delete(id);
+    renderToolbar(currentExtensions);
+    return;
+  }
+
+  await invoke("translate_page_inplace").catch(() => {});
+  // The page reports back through the backend; poll until it settles.
+  for (let attempt = 0; attempt < 60; attempt++) {
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    const [count, error] = await invoke("translate_status").catch(() => [0, null]);
+    if (error) break;
+    if (count > 0) {
+      translatedTabs.add(id);
+      break;
+    }
+  }
+  renderToolbar(currentExtensions);
+}
+
 const TOOLBAR_ITEMS = {
-  translate: { glyph: "\u6587", label: "Translate this page", where: "inside", run: () => invoke("overlay_toggle", { kind: "translate" }) },
+  translate: { glyph: "\u6587", label: "Translate this page", where: "inside", run: () => toggleTranslate() },
   zoom: { glyph: "\u2315", label: "Zoom", where: "inside", run: () => invoke("overlay_toggle", { kind: "zoom" }) },
   find: { glyph: "\u2315", label: "Find in page", where: "outside", run: () => invoke("overlay_toggle", { kind: "find" }) },
   bookmark: { glyph: "\u2606", label: "Bookmark this page", where: "inside", run: () => invoke("bookmark_toggle") },
@@ -142,7 +170,10 @@ const TOOLBAR_ITEMS = {
   downloads: { glyph: "\u2193", label: "Downloads", where: "outside", run: () => invoke("open_dir", { which: "downloads" }) },
 };
 
+let currentExtensions = [];
+
 async function renderToolbar(extensions) {
+  if (extensions) currentExtensions = extensions;
   const saved = new Set((await invoke("bookmark_list")).map((item) => item.url));
   const active = tabs.find((tab) => tab.id === selected);
   const bookmarked = active ? saved.has(active.url) : false;
@@ -161,7 +192,12 @@ async function renderToolbar(extensions) {
     const button = document.createElement("button");
     button.className = spec.where === "inside" ? "url-action" : "tool-btn";
     button.title = spec.label;
-    if (id === "bookmark") {
+    if (id === "translate") {
+      const on = translatedTabs.has(active ? active.id : "");
+      button.textContent = spec.glyph;
+      button.title = on ? "Show original" : spec.label;
+      button.classList.toggle("is-on", Boolean(on));
+    } else if (id === "bookmark") {
       button.textContent = bookmarked ? "\u2605" : "\u2606";
     } else if (id === "zoom") {
       // Chrome shows the percentage once the page is not at 100%.

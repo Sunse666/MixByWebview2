@@ -573,66 +573,6 @@ async function bootSuggest() {
   await invoke("suggest_refresh").catch(() => {});
 }
 
-async function bootTranslateBar() {
-  menu.hidden = false;
-  appMenu.hidden = true;
-  themePanel.hidden = true;
-  applyTheme(await invoke("theme_get"));
-
-  const bar = document.createElement("div");
-  bar.className = "translate-bar";
-
-  const state = document.createElement("span");
-  state.className = "translate-state";
-  state.textContent = "Translating...";
-
-  const again = document.createElement("button");
-  again.className = "find-step";
-  again.textContent = "\u21ba";
-  again.title = "Translate";
-  again.addEventListener("click", async () => {
-    state.textContent = "Translating...";
-    await invoke("translate_page_inplace").catch(() => {});
-  });
-
-  const original = document.createElement("button");
-  original.className = "find-step";
-  original.textContent = "\u21e6";
-  original.title = "Show original";
-  original.addEventListener("click", async () => {
-    await invoke("translate_restore").catch(() => {});
-    state.textContent = "Original text";
-  });
-
-  const close = document.createElement("button");
-  close.className = "find-step";
-  close.textContent = "\u2715";
-  close.title = "Close";
-  close.addEventListener("click", () => invoke("overlay_close").catch(() => {}));
-
-  bar.append(state, again, original, close);
-  menu.append(bar);
-
-  const poll = async (ticks) => {
-    for (let i = 0; i < ticks; i++) {
-      await new Promise((resolve) => setTimeout(resolve, 500));
-      const [count, error] = await invoke("translate_status").catch(() => [0, null]);
-      if (error) {
-        state.textContent = "Failed: " + error;
-        return;
-      }
-      if (count > 0) {
-        state.textContent = `Translated ${count} blocks`;
-        return;
-      }
-    }
-    state.textContent = "No translatable text";
-  };
-
-  await invoke("translate_page_inplace").catch(() => {});
-  poll(40);
-}
-
 async function bootZoom() {
   menu.hidden = false;
   appMenu.hidden = true;
@@ -898,10 +838,6 @@ async function boot() {
   }
   if (kind === "context_menu") {
     await bootMenu();
-    return;
-  }
-  if (kind === "translate") {
-    await bootTranslateBar();
     return;
   }
   if (kind === "zoom") {

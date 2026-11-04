@@ -368,3 +368,8 @@ button {
   height: 16px;
   object-fit: contain;
 }
+
+.url-action.is-on {
+  color: var(--accent);
+  opacity: 1;
+}

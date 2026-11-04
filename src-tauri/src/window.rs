@@ -131,9 +131,9 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
                     return;
                 };
                 let state = target.state::<AppState>();
-                let call = crate::ipc::translate_page(target.clone(), win, state, None);
+                let call = crate::ipc::translate_page_inplace(target.clone(), win, state);
                 match tauri::async_runtime::block_on(call) {
-                    Ok(url) => crate::logging::info(&format!("debug translate: {url}")),
+                    Ok(()) => crate::logging::info("debug translate: started"),
                     Err(err) => crate::logging::warn(&format!("debug translate failed: {}", err.message)),
                 }
             });
