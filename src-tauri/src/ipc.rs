@@ -381,14 +381,6 @@ fn spawn_tab(
 }
 
 
-#[derive(Serialize)]
-pub struct Layout {
-    chrome_height: f64,
-    width: f64,
-    height: f64,
-    scale: f64,
-    selected: Option<String>,
-}
 
 
 
@@ -1463,16 +1455,6 @@ pub async fn overlay_close(app: AppHandle, window: tauri::Window) -> Result<(), 
     Ok(())
 }
 
-#[derive(Serialize)]
-pub struct Paths {
-    root: String,
-    user_data: String,
-    crx: String,
-    scripts: String,
-    logs: String,
-    downloads: String,
-    fell_back: bool,
-}
 
 
 
