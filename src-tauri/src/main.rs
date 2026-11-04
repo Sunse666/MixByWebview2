@@ -16,6 +16,7 @@ mod permissions;
 mod platform;
 mod session;
 mod snap;
+mod translate;
 mod tray;
 mod userscripts;
 mod state;

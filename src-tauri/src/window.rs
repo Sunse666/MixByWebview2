@@ -140,6 +140,11 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
         });
     }
 
+    // The translator needs a token and a cookie; fetch them before they are needed.
+    tauri::async_runtime::spawn(async {
+        crate::translate::warm().await;
+    });
+
     // Support hook: MIX_TOGGLE_EXT=1 hides the first extension after startup, so
     // the live settings path can be checked without a click.
     if std::env::var("MIX_TOGGLE_EXT").is_ok() {

@@ -17,6 +17,10 @@ pub struct Settings {
     pub toolbar: Vec<String>,
     /// Extensions the user hid from the toolbar, by name.
     pub hidden_extensions: Vec<String>,
+    /// Baidu translate open platform credentials; empty means the free fallback.
+    pub baidu_appid: String,
+    pub baidu_secret: String,
+    pub translate_to: String,
     pub max_live_tabs: usize,
     pub download_dir: Option<String>,
 }
@@ -37,6 +41,9 @@ impl Default for Settings {
             "downloads".into(),
         ],
         hidden_extensions: Vec::new(),
+            baidu_appid: String::new(),
+            baidu_secret: String::new(),
+            translate_to: "zh".into(),
             max_live_tabs: 12,
             download_dir: None,
         }

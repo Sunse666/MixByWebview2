@@ -145,6 +145,9 @@ pub struct SettingsPatch {
     pub restore_session: Option<bool>,
     pub show_bookmarks: Option<bool>,
     pub toolbar: Option<Vec<String>>,
+    pub baidu_appid: Option<String>,
+    pub baidu_secret: Option<String>,
+    pub translate_to: Option<String>,
     pub hidden_extensions: Option<Vec<String>>,
     pub start_url: Option<String>,
     pub max_live_tabs: Option<usize>,
@@ -1071,6 +1074,17 @@ pub async fn settings_set(
         if let Some(value) = patch.show_bookmarks {
             guard.show_bookmarks = value;
         }
+        if let Some(value) = patch.baidu_appid {
+            guard.baidu_appid = value.trim().to_string();
+        }
+        if let Some(value) = patch.baidu_secret {
+            guard.baidu_secret = value.trim().to_string();
+        }
+        if let Some(value) = patch.translate_to {
+            if !value.trim().is_empty() {
+                guard.translate_to = value.trim().to_string();
+            }
+        }
         if let Some(value) = patch.toolbar {
             // Only ids we know how to draw survive a hand edited settings file.
             let known = ["downloads", "translate", "find", "zoom", "bookmark", "extensions"];
@@ -1716,7 +1730,6 @@ pub async fn tab_scroll(
     Ok(())
 }
 
-/// The page reports a browser error page; replace it with ours.
 /// Starts the in-page translator. The page collects its own text and calls back;
 /// eval cannot return a value, so the flow is push based.
 #[tauri::command]
@@ -1776,95 +1789,39 @@ pub async fn translate_done(
     let _ = app.emit_to(owner, "translate:done", (count, error));
     Ok(())
 }
-/// MyMemory needs an explicit source language, so the script is the best hint.
-fn guess_source(text: &str) -> Option<&'static str> {
-    let mut latin = 0;
-    let mut has_cjk = false;
-    for ch in text.chars() {
-        if ('\u{4e00}'..='\u{9fff}').contains(&ch) {
-            has_cjk = true;
-        } else if ('\u{0400}'..='\u{04FF}').contains(&ch) {
-            return Some("ru");
-        } else if ('\u{0600}'..='\u{06FF}').contains(&ch) {
-            return Some("ar");
-        } else if ('\u{3040}'..='\u{30FF}').contains(&ch) {
-            return Some("ja");
-        } else if ('\u{AC00}'..='\u{D7AF}').contains(&ch) {
-            return Some("ko");
-        } else if ch.is_ascii_alphabetic() {
-            latin += 1;
-        }
-    }
-    if has_cjk || latin == 0 {
-        return None;
-    }
-    Some("en")
-}
-
-/// Translates a batch of strings for the in-page translator. Only MyMemory is
-/// reachable from here without a key; it caps a request at ~500 characters.
+/// Translates a batch of page strings through the Microsoft engine Edge uses.
 #[tauri::command]
 pub async fn translate_texts(
     _app: AppHandle,
     _window: tauri::Window,
+    state: State<'_, AppState>,
     texts: Vec<String>,
     to: Option<String>,
 ) -> Result<Vec<String>, AppError> {
-    let target = to.unwrap_or_else(|| "zh-CN".into());
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(12))
-        .build()
-        .map_err(|err| AppError::new("net", err.to_string()))?;
-
-    let mut out = Vec::with_capacity(texts.len());
-    let mut budget = 3200_usize; // stay inside the anonymous daily quota
-
-    for text in texts {
-        let trimmed = text.trim();
-        if trimmed.len() < 2 || budget < trimmed.len() {
-            out.push(String::new());
-            continue;
+    let target = to.unwrap_or_else(|| {
+        let saved = state.settings.read().translate_to.clone();
+        match saved.as_str() {
+            "" => "zh-Hans".to_string(),
+            "zh" => "zh-Hans".to_string(),
+            other => other.to_string(),
         }
-        // Already Chinese, or a script we have no mapping for: leave it alone.
-        let Some(source) = guess_source(trimmed) else {
-            out.push(String::new());
-            continue;
-        };
-        budget -= trimmed.len();
+    });
 
-        let url = format!(
-            "https://api.mymemory.translated.net/get?q={}&langpair={source}|{target}",
-            crate::permissions::encode(trimmed)
-        );
-        match client.get(&url).send().await {
-            Ok(response) => {
-                let body: serde_json::Value = response.json().await.unwrap_or_default();
-                let translated = body
-                    .get("responseData")
-                    .and_then(|data| data.get("translatedText"))
-                    .and_then(|value| value.as_str())
-                    .unwrap_or_default()
-                    .to_string();
-                // The service answers 200 with an error string when the quota is gone.
-                if translated.contains("MYMEMORY WARNING") {
-                    crate::logging::warn("translation quota reached");
-                    out.push(String::new());
-                } else {
-                    out.push(translated);
-                }
-            }
-            Err(err) => {
-                crate::logging::warn(&format!("translate failed: {err}"));
-                out.push(String::new());
-            }
-        }
-    }
-
+    let trimmed: Vec<String> = texts
+        .into_iter()
+        .map(|text| text.trim().to_string())
+        .collect();
+    let started = std::time::Instant::now();
+    let out = crate::translate::translate(trimmed, &target).await;
+    let done = out.iter().filter(|text| !text.is_empty()).count();
+    crate::logging::info(&format!(
+        "translated {done}/{} blocks to {target} in {} ms",
+        out.len(),
+        started.elapsed().as_millis()
+    ));
     Ok(out)
 }
-
 /// Page translation goes through a web proxy: WebView2 has no translate API.
-/// Bing's proxy is unreachable from this network, Baidu's works and needs no key.
 #[tauri::command]
 pub async fn translate_page(
     app: AppHandle,
