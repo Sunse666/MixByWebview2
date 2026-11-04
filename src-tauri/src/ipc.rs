@@ -722,10 +722,15 @@ pub async fn shortcut(app: AppHandle, window: tauri::Window, state: State<'_, Ap
                 crate::logging::warn(&format!("cannot open downloads: {err}"));
             }
         }
+        // Not gated on debug: F12 must work in the packaged build too.
         "devtools" => {
-            #[cfg(debug_assertions)]
-            if let Some(webview) = app.get_webview(&selected_label(&state, &window)) {
-                webview.open_devtools();
+            let target = selected_label(&state, &window);
+            match app.get_webview(&target) {
+                Some(webview) => {
+                    webview.open_devtools();
+                    crate::logging::info(&format!("devtools opened for {target}"));
+                }
+                None => crate::logging::warn(&format!("devtools: no webview for {target}")),
             }
         }
         other => return Err(AppError::new("bad_shortcut", other)),

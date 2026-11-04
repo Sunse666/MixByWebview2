@@ -120,24 +120,28 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
         });
     }
 
-    // Support hook: MIX_DEVTOOLS=1 opens devtools on the selected tab. Kept in
-    // release builds so a broken F12 can be told apart from a broken shortcut.
+    // Support hook: MIX_DEVTOOLS=1 runs the devtools shortcut, so a broken F12
+    // can be told apart from a broken key path.
     if std::env::var("MIX_DEVTOOLS").is_ok() {
         let handle = app.handle().clone();
         std::thread::spawn(move || {
             std::thread::sleep(std::time::Duration::from_millis(2500));
-            let label = {
-                let state = handle.state::<AppState>();
-                let core = state.read_core(crate::window::PRIMARY);
-                core.selected.clone().unwrap_or_default()
-            };
-            if let Some(webview) = handle.get_webview(&label) {
-                webview.open_devtools();
-                crate::logging::info(&format!("debug: devtools on {label}"));
-            }
+            let target = handle.clone();
+            let _ = handle.run_on_main_thread(move || {
+                let Some(win) = target.get_window(PRIMARY) else {
+                    return;
+                };
+                let state = target.state::<AppState>();
+                let call = crate::ipc::shortcut(
+                    target.clone(),
+                    win,
+                    state,
+                    "devtools".to_string(),
+                );
+                let _ = tauri::async_runtime::block_on(call);
+            });
         });
     }
-
     crate::logging::info(&format!(
         "main window ready, startup {} ms",
         crate::logging::elapsed_ms()
