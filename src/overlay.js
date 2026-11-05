@@ -219,7 +219,7 @@ async function bootAppMenu() {
         report("bookmark toggled -> " + added);
         await close();
       });
-      row("\u2606", "Bookmarks", "", () => render("bookmarks"), { page: true });
+      row("\u2606", "Bookmarks", "", act(() => invoke("tab_new", { url: "http://tauri.localhost/pages/bookmarks.html" })));
       row("\u21ba", "History", "", act(() => invoke("tab_new", { url: "http://tauri.localhost/pages/history.html" })));
       divider();
       row("\u25a4", "Extensions", "", act(() => invoke("tab_new", { url: "http://tauri.localhost/pages/extensions.html" })));
@@ -260,54 +260,6 @@ async function bootAppMenu() {
       }
       divider();
       row("\u2699", "Open userscripts folder", "", act(() => invoke("open_dir", { which: "scripts" })));
-    },
-
-    bookmarks: async () => {
-      header("Bookmarks");
-      const settings = await invoke("settings_get");
-      row(
-        settings.show_bookmarks ? "\u2611" : "\u2610",
-        "Show bookmarks bar",
-        "",
-        async () => {
-          await invoke("settings_set", { patch: { show_bookmarks: !settings.show_bookmarks } });
-          render("bookmarks");
-        },
-      );
-      divider();
-      const list = await invoke("bookmark_list");
-      if (!list.length) {
-        const empty = document.createElement("div");
-        empty.className = "menu-note";
-        empty.textContent = "No bookmarks yet. Press Ctrl+D on a page, or use Bookmark this page.";
-        appMenu.append(empty);
-      }
-      for (const bookmark of list) {
-        const item = document.createElement("button");
-        item.className = "row";
-        const icon = document.createElement("span");
-        icon.className = "ico";
-        icon.textContent = "\u2606";
-        const label = document.createElement("span");
-        label.className = "label";
-        label.textContent = bookmark.title || bookmark.url;
-        label.title = bookmark.url;
-        const remove = document.createElement("span");
-        remove.className = "hint";
-        remove.textContent = "\u00d7";
-        remove.title = "Remove";
-        remove.addEventListener("click", async (event) => {
-          event.stopPropagation();
-          await invoke("bookmark_remove", { url: bookmark.url });
-          render("bookmarks");
-        });
-        item.append(icon, label, remove);
-        item.addEventListener("click", async () => {
-          await invoke("tab_new", { url: bookmark.url });
-          await close();
-        });
-        appMenu.append(item);
-      }
     },
 
     tools: async () => {

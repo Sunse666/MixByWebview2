@@ -1816,11 +1816,17 @@ pub async fn overlay_open_at(
     x: f64,
     y: f64,
 ) -> Result<(), AppError> {
-    let (menu_w, menu_h) = if kind.contains("group=file") || kind.contains("group=tools") {
-        (240.0, 330.0)
-    } else {
-        (240.0, 260.0)
+    // Height per group, so a short menu does not open a tall empty panel.
+    let menu_h = match kind.split("group=").nth(1).unwrap_or("file") {
+        "file" => 322.0,
+        "edit" => 128.0,
+        "view" => 150.0,
+        "history" => 96.0,
+        "bookmarks" => 96.0,
+        "tools" => 254.0,
+        _ => 96.0,
     };
+    let (menu_w, menu_h) = (232.0, menu_h);
     let _ = crate::overlay::open_at(&app, &window, &kind, x, y, menu_w, menu_h);
     Ok(())
 }

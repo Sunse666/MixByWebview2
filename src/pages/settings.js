@@ -97,9 +97,66 @@ async function boot() {
     setLanguage(language.value);
     location.reload();
   });
+  card.append(
+    row(
+      "Menu bar",
+      "Show the menu bar row",
+      toggle(settings.menu_bar !== false, async (value) => {
+        await invoke("settings_set", { patch: { menu_bar: value } }).catch(() => {});
+      }),
+    ),
+  );
+
+  const bar = document.createElement("div");
+  bar.className = "card-actions";
+  const theme = document.createElement("button");
+  theme.className = "button";
+  theme.textContent = t("Appearance & theme");
+  theme.addEventListener("click", () =>
+    invoke("overlay_open", { kind: "app_menu&page=settings" }).catch(() => {}),
+  );
+  bar.append(theme);
+  card.append(bar);
+
   card.append(row("Language", "Choose the language of the interface", language));
 
+  const toolbarHead = document.createElement("h2");
+  toolbarHead.textContent = t("Toolbar buttons");
+  toolbarHead.style.margin = "18px 0 10px";
+  main.append(toolbarHead);
+
+  const toolbarCard = document.createElement("div");
+  toolbarCard.className = "card";
+  toolbarCard.style.maxWidth = "720px";
+
+  const NAMES = {
+    downloads: "Downloads",
+    translate: "Translate",
+    zoom: "Zoom",
+    find: "Find in page",
+    bookmark: "Bookmark",
+    extensions: "Extensions",
+  };
+  const enabled = new Set(settings.toolbar || []);
+  for (const [id, label] of Object.entries(NAMES)) {
+    toolbarCard.append(
+      row(
+        label,
+        "",
+        toggle(enabled.has(id), async (value) => {
+          const next = new Set(settings.toolbar || []);
+          if (value) next.add(id);
+          else next.delete(id);
+          settings.toolbar = [...next];
+          await invoke("settings_set", { patch: { toolbar: [...next] } }).catch(() => {});
+        }),
+      ),
+    );
+  }
+
+
   main.append(card);
+  main.append(toolbarHead, toolbarCard);
 }
 
 boot();

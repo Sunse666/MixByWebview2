@@ -82,6 +82,8 @@ pub fn open(app: &AppHandle, win: &tauri::Window, kind: &str) -> Result<(), Stri
         // Generic page menu: five rows and two dividers.
         "context_menu" => (250.0, 184.0),
         "url_menu" => (190.0, 150.0),
+        // Menu bar dropdown; the exact height comes from the caller.
+        "menubar_menu" => (232.0, 300.0),
         "chrome_menu" => (190.0, 110.0),
         _ => DEFAULT,
     };

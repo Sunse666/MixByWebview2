@@ -95,6 +95,7 @@ const DICT = {
     "Tools": "工具",
     "Help": "帮助",
     "Appearance & theme": "外观与主题",
+    "Menu bar": "菜单栏",
     "New tab": "新标签页",
     "New incognito tab": "新建无痕标签页",
     "Reopen closed tab": "重新打开关闭的标签页",

@@ -1,0 +1,109 @@
+import { setLanguage, t } from "../i18n.js";
+
+const { invoke } = window.__TAURI__.core;
+
+const nav = document.getElementById("nav");
+const main = document.getElementById("main");
+
+const PAGES = {
+  history: "http://tauri.localhost/pages/history.html",
+  extensions: "http://tauri.localhost/pages/extensions.html",
+  settings: "http://tauri.localhost/pages/settings.html",
+};
+
+function navItem(glyph, label, active, page) {
+  const item = document.createElement("div");
+  item.className = "nav-item" + (active ? " active" : "");
+  const icon = document.createElement("span");
+  icon.textContent = glyph;
+  const text = document.createElement("span");
+  text.textContent = t(label);
+  item.append(icon, text);
+  if (page) item.addEventListener("click", () => invoke("tab_navigate", { url: page }).catch(() => {}));
+  nav.append(item);
+}
+
+function hostOf(url) {
+  try {
+    return new URL(url).host || url;
+  } catch (error) {
+    return url;
+  }
+}
+
+async function boot() {
+  const settings = await invoke("settings_get").catch(() => null);
+  setLanguage((settings && settings.language) || "en");
+
+  navItem("⟲", "History", false, PAGES.history);
+  navItem("☆", "Bookmarks", true, null);
+  navItem("⧉", "Extensions", false, PAGES.extensions);
+  navItem("⚙", "Settings", false, PAGES.settings);
+
+  const head = document.createElement("h2");
+  head.textContent = t("Bookmarks");
+  main.append(head);
+
+  const bar = document.createElement("div");
+  bar.className = "toolbar";
+  const search = document.createElement("input");
+  search.placeholder = t("Search bookmarks");
+  bar.append(search);
+  main.append(bar);
+
+  const list = document.createElement("div");
+  main.append(list);
+
+  let items = (await invoke("bookmark_list").catch(() => [])) || [];
+
+  const paint = () => {
+    list.replaceChildren();
+    const needle = search.value.trim().toLowerCase();
+    const rows = items.filter(
+      (item) =>
+        !needle ||
+        item.url.toLowerCase().includes(needle) ||
+        (item.title || "").toLowerCase().includes(needle),
+    );
+
+    if (!rows.length) {
+      const empty = document.createElement("div");
+      empty.className = "empty";
+      empty.textContent = t("Nothing recorded yet.");
+      list.append(empty);
+      return;
+    }
+
+    for (const item of rows) {
+      const row = document.createElement("div");
+      row.className = "entry";
+
+      const title = document.createElement("span");
+      title.className = "title";
+      title.textContent = item.title || item.url;
+
+      const host = document.createElement("span");
+      host.className = "host";
+      host.textContent = hostOf(item.url);
+
+      const remove = document.createElement("button");
+      remove.className = "remove";
+      remove.textContent = "✕";
+      remove.title = t("Remove");
+      remove.addEventListener("click", async () => {
+        await invoke("bookmark_remove", { url: item.url }).catch(() => {});
+        items = items.filter((entry) => entry.url !== item.url);
+        paint();
+      });
+
+      row.append(title, host, remove);
+      row.addEventListener("dblclick", () => invoke("tab_new", { url: item.url }).catch(() => {}));
+      list.append(row);
+    }
+  };
+
+  search.addEventListener("input", paint);
+  paint();
+}
+
+boot();
