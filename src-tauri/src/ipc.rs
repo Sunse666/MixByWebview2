@@ -2229,6 +2229,14 @@ pub async fn tab_icon(
         return Ok(());
     }
 
+    let page_url = state
+        .try_read_core(&window_of_tab(&id))
+        .and_then(|core| core.tabs.iter().find(|tab| tab.id == id).map(|tab| tab.url.clone()))
+        .unwrap_or_default();
+    if !page_url.is_empty() {
+        attach_icon(&app, &page_url, &icon);
+    }
+
     let owner = window_of_tab(&id).to_string();
     if let Some(mut core) = state.try_write_core(&owner) {
         if let Some(tab) = core.tabs.iter_mut().find(|tab| tab.id == id) {
