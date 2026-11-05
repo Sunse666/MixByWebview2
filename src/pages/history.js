@@ -13,6 +13,8 @@ const PAGES = {
 
 let visits = [];
 const selection = new Set();
+// Deleted rows are remembered so a failed or slow write cannot bring them back.
+const tombstones = new Set();
 
 function keyOf(visit) {
   return visit.url + "|" + visit.at;
@@ -131,13 +133,21 @@ function rowFor(visit, repaint) {
   remove.className = "remove";
   remove.textContent = "✕";
   remove.title = t("Remove");
-  remove.addEventListener("click", async () => {
-    // A stale row must not stay visible when the backend refuses the delete.
+  remove.addEventListener("click", async (event) => {
+    // Without this the row's click handler would also navigate away.
+    event.stopPropagation();
+    event.preventDefault();
+
+    tombstones.add(keyOf(visit));
     visits = visits.filter((item) => keyOf(item) !== keyOf(visit));
     selection.delete(keyOf(visit));
     paintSites();
     repaint();
-    await invoke("history_remove", { entries: [[visit.url, visit.at]] }).catch(() => {});
+
+    const removed = await invoke("history_remove", { entries: [[visit.url, visit.at]] }).catch(
+      (error) => "error: " + String(error),
+    );
+    await invoke("ui_log", { message: "history remove -> " + String(removed) }).catch(() => {});
   });
 
   row.append(box, iconFor(visit), time, title, host, remove);
@@ -311,6 +321,7 @@ async function boot() {
       const [url, at] = item.split("|");
       return [url, Number(at)];
     });
+    for (const item of selection) tombstones.add(item);
     await invoke("history_remove", { entries }).catch(() => {});
     visits = visits.filter((visit) => !selection.has(keyOf(visit)));
     selection.clear();
@@ -325,7 +336,9 @@ async function boot() {
   });
 
   const reload = async () => {
-    const fresh = (await invoke("history_list", { limit: 500 }).catch(() => [])) || [];
+    const fresh = ((await invoke("history_list", { limit: 500 }).catch(() => [])) || []).filter(
+      (visit) => !tombstones.has(keyOf(visit)),
+    );
     const same =
       fresh.length === visits.length &&
       fresh.every((visit, index) => keyOf(visit) === keyOf(visits[index]));
@@ -337,6 +350,8 @@ async function boot() {
   };
 
   await reload();
+
+
 
 
 
