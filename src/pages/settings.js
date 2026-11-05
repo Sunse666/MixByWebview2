@@ -146,6 +146,7 @@ function toggle(on, onChange) {
 async function boot() {
   let settings = await invoke("settings_get").catch(() => null);
   setLanguage((settings && settings.language) || "en");
+  document.title = t("Settings");
 
   const pages = {
     history: "http://tauri.localhost/pages/history.html",

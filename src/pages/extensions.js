@@ -30,6 +30,7 @@ function navItem(glyph, label, active, page) {
 async function boot() {
   const settings = await invoke("settings_get").catch(() => null);
   setLanguage((settings && settings.language) || "en");
+  document.title = t("Extensions");
 
   navItem("⟲", "History", false, PAGES.history);
   navItem("☆", "Bookmarks", false, PAGES.bookmarks);

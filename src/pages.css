@@ -252,3 +252,26 @@ main h2 {
 }
 
 .num { width: 80px; }
+
+.entry .fav {
+  display: grid;
+  flex: 0 0 18px;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  overflow: hidden;
+  border-radius: 4px;
+  color: var(--dim);
+  font-size: 11px;
+}
+
+.entry .fav img {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+}
+
+.entry .fav.glyph {
+  background: var(--hover);
+  font-weight: 600;
+}

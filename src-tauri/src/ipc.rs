@@ -1473,6 +1473,29 @@ pub async fn app_clear_data(app: AppHandle, window: tauri::Window, _state: State
     Ok(())
 }
 
+/// The favicon arrives after the visit is recorded, so patch the newest match.
+pub(crate) fn attach_icon(app: &AppHandle, url: &str, icon: &str) {
+    let Some(state) = app.try_state::<AppState>() else {
+        return;
+    };
+    let snapshot = {
+        let mut visits = state.history.write().unwrap_or_else(|e| e.into_inner());
+        let mut changed = false;
+        for visit in visits.iter_mut() {
+            if visit.url == url && visit.icon.as_deref() != Some(icon) {
+                visit.icon = Some(icon.to_string());
+                changed = true;
+                break;
+            }
+        }
+        if !changed {
+            return;
+        }
+        visits.clone()
+    };
+    let _ = crate::library::save_visits(&state.dirs.history_file, &snapshot);
+}
+
 pub(crate) fn record_visit(app: &AppHandle, url: &str, title: &str) {
     if !crate::library::worth_recording(url) {
         return;
@@ -1851,6 +1874,7 @@ pub async fn tab_scroll(
     y: f64,
 ) -> Result<(), AppError> {
     let id = webview.label().to_string();
+
     let owner = window_of_tab(&id).to_string();
     if let Some(mut core) = state.try_write_core(&owner) {
         if let Some(tab) = core.tabs.iter_mut().find(|tab| tab.id == id) {

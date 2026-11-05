@@ -9,6 +9,9 @@ pub struct Visit {
     pub url: String,
     pub title: String,
     pub at: u64,
+    /// Favicon url, filled in when the page reports one.
+    #[serde(default)]
+    pub icon: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -66,6 +69,7 @@ pub fn push_visit(visits: &mut Vec<Visit>, url: &str, title: &str) {
         url: url.to_string(),
         title: title.to_string(),
         at: now(),
+        icon: None,
     };
     visits.retain(|visit| visit.url != entry.url);
     visits.insert(0, entry);

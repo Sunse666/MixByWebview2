@@ -49,12 +49,53 @@ function hostOf(url) {
   }
 }
 
+function initialOf(url) {
+  const host = hostOf(url).replace(/^www\./, "");
+  return (host[0] || "?").toUpperCase();
+}
+
 function matches(visit, needle) {
   return (
     !needle ||
     visit.url.toLowerCase().includes(needle) ||
     (visit.title || "").toLowerCase().includes(needle)
   );
+}
+
+const PAGE_GLYPHS = {
+  "pages/history.html": "⟲",
+  "pages/bookmarks.html": "☆",
+  "pages/extensions.html": "⧉",
+  "pages/settings.html": "⚙",
+  "pages/newtab.html": "+",
+};
+
+function iconFor(visit) {
+  const holder = document.createElement("span");
+  holder.className = "fav";
+
+  const internal = Object.keys(PAGE_GLYPHS).find((page) => visit.url.includes(page));
+  if (internal) {
+    holder.textContent = PAGE_GLYPHS[internal];
+    holder.classList.add("glyph");
+    return holder;
+  }
+
+  if (visit.icon) {
+    const img = document.createElement("img");
+    img.src = visit.icon;
+    img.alt = "";
+    img.addEventListener("error", () => {
+      holder.replaceChildren(document.createTextNode(initialOf(visit.url)));
+      holder.classList.add("glyph");
+    });
+    holder.append(img);
+    return holder;
+  }
+
+  holder.textContent = initialOf(visit.url);
+  holder.classList.add("glyph");
+  return holder;
 }
 
 function rowFor(visit, repaint) {
@@ -98,7 +139,7 @@ function rowFor(visit, repaint) {
     repaint();
   });
 
-  row.append(box, time, title, host, remove);
+  row.append(box, iconFor(visit), time, title, host, remove);
   // A single click opens the entry, like the address list in a desktop browser.
   row.addEventListener("click", (event) => {
     if (event.target === box || event.target === remove) return;
@@ -133,6 +174,7 @@ function groupRows(rows, repaint) {
 async function boot() {
   const settings = await invoke("settings_get").catch(() => null);
   setLanguage((settings && settings.language) || "en");
+  document.title = t("History");
 
   navItem("⟲", "History", true, null);
   navItem("☆", "Bookmarks", false, PAGES.bookmarks);

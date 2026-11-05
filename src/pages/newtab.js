@@ -23,6 +23,7 @@ function open(target) {
 async function boot() {
   const settings = await invoke("settings_get").catch(() => null);
   setLanguage((settings && settings.language) || "en");
+  document.title = t("New tab");
 
   const hour = new Date().getHours();
   greeting.textContent =

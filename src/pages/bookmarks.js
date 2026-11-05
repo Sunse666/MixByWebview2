@@ -38,6 +38,7 @@ function hostOf(url) {
 async function boot() {
   const settings = await invoke("settings_get").catch(() => null);
   setLanguage((settings && settings.language) || "en");
+  document.title = t("Bookmarks");
 
   navItem("⟲", "History", false, PAGES.history);
   navItem("☆", "Bookmarks", true, null);
