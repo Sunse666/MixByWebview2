@@ -48,6 +48,7 @@ async function boot() {
     counts.set(host, entry);
   }
 
+  const icons = (await invoke("favicon_map").catch(() => ({}))) || {};
   const top = [...counts.values()].sort((a, b) => b.count - a.count).slice(0, 12);
   tiles.replaceChildren(
     ...top.map((entry) => {
@@ -55,7 +56,22 @@ async function boot() {
       tile.className = "tile";
       const dot = document.createElement("div");
       dot.className = "dot";
-      dot.textContent = (entry.host[0] || "?").toUpperCase();
+      const icon = icons[entry.host.replace(/^www\./, "").toLowerCase()];
+      if (icon) {
+        const img = document.createElement("img");
+        img.src = icon;
+        img.alt = "";
+        img.style.width = "20px";
+        img.style.height = "20px";
+        img.addEventListener("error", () => {
+          dot.replaceChildren(
+            document.createTextNode((entry.host.replace(/^www\./, "")[0] || "?").toUpperCase()),
+          );
+        });
+        dot.append(img);
+      } else {
+        dot.textContent = (entry.host.replace(/^www\./, "")[0] || "?").toUpperCase();
+      }
       const name = document.createElement("div");
       name.className = "name";
       name.textContent = entry.host;

@@ -6,6 +6,7 @@ mod diag;
 mod zoom;
 mod downloads;
 mod extensions;
+mod favicons;
 mod ipc;
 mod library;
 mod net;
@@ -26,7 +27,7 @@ mod window;
 
 use tauri::Manager;
 
-// embed bump 42
+// embed bump 44
 fn main() {
     let dirs = paths::AppDirs::resolve().ensure();
     logging::init(&dirs.logs);
@@ -113,6 +114,7 @@ fn main() {
             ipc::tab_icon,
             ipc::tab_reopen,
             ipc::window_new,
+            ipc::favicon_map,
             ipc::history_list,
             ipc::history_remove,
             ipc::history_clear,

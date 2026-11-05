@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-favicon-map"
+description = "Enables the favicon_map command without any pre-configured scope."
+commands.allow = ["favicon_map"]
+
+[[permission]]
+identifier = "deny-favicon-map"
+description = "Denies the favicon_map command without any pre-configured scope."
+commands.deny = ["favicon_map"]

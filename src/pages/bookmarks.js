@@ -59,6 +59,13 @@ async function boot() {
   const list = document.createElement("div");
   main.append(list);
 
+  const icons = (await invoke("favicon_map").catch(() => ({}))) || {};
+  const iconFor = (url) => {
+    const host = hostOf(url).replace(/^www\./, "").toLowerCase();
+    const icon = icons[host];
+    return icon || "";
+  };
+
   let items = (await invoke("bookmark_list").catch(() => [])) || [];
 
   const paint = () => {
@@ -83,6 +90,23 @@ async function boot() {
       const row = document.createElement("div");
       row.className = "entry";
 
+      const mark = document.createElement("span");
+      mark.className = "fav";
+      const icon = iconFor(item.url);
+      if (icon) {
+        const img = document.createElement("img");
+        img.src = icon;
+        img.alt = "";
+        img.addEventListener("error", () => {
+          mark.replaceChildren(document.createTextNode((hostOf(item.url).replace(/^www\./, "")[0] || "?").toUpperCase()));
+          mark.classList.add("glyph");
+        });
+        mark.append(img);
+      } else {
+        mark.textContent = (hostOf(item.url).replace(/^www\./, "")[0] || "?").toUpperCase();
+        mark.classList.add("glyph");
+      }
+
       const title = document.createElement("span");
       title.className = "title";
       title.textContent = item.title || item.url;
@@ -101,7 +125,7 @@ async function boot() {
         paint();
       });
 
-      row.append(title, host, remove);
+      row.append(mark, title, host, remove);
       row.draggable = true;
       row.dataset.url = item.url;
       row.addEventListener("dragstart", (event) => {

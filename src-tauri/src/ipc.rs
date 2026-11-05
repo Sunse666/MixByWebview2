@@ -35,6 +35,8 @@ pub struct AppState {
     pub opts: crate::tabs::WebviewOpts,
     pub extensions: Vec<ExtInfo>,
     pub history: RwLock<Vec<Visit>>,
+    /// host -> favicon url, shared by history, bookmarks and the new tab page.
+    pub favicons: RwLock<crate::favicons::Favicons>,
     pub suggest_text: parking_lot::RwLock<String>,
     pub suggest_width: parking_lot::RwLock<f64>,
     /// Recently closed tabs, newest last, so Ctrl+Shift+T can bring them back.
@@ -84,7 +86,8 @@ impl AppState {
         Self {
             opts,
             extensions,
-            history: RwLock::new(history),
+            favicons: RwLock::new(crate::favicons::Favicons::load(&dirs.favicons_file)),
+        history: RwLock::new(history),
             suggest_text: parking_lot::RwLock::new(String::new()),
             suggest_width: parking_lot::RwLock::new(420.0),
             closed_tabs: RwLock::new(Vec::new()),
@@ -1539,11 +1542,30 @@ pub(crate) fn record_visit(app: &AppHandle, url: &str, title: &str) {
     }
 }
 
+/// host -> icon url, used by the bookmarks and new tab pages.
+#[tauri::command]
+pub async fn favicon_map(state: State<'_, AppState>) -> Result<std::collections::BTreeMap<String, String>, AppError> {
+    let icons = state.favicons.read().unwrap_or_else(|e| e.into_inner());
+    Ok(icons.hosts.clone())
+}
+
 #[tauri::command]
 pub async fn history_list(_window: tauri::Window, state: State<'_, AppState>, limit: Option<usize>) -> Result<Vec<Visit>, AppError> {
     let visits = state.history.read().unwrap_or_else(|e| e.into_inner());
+    let icons = state.favicons.read().unwrap_or_else(|e| e.into_inner());
     let take = limit.unwrap_or(500).min(visits.len());
-    Ok(visits.iter().take(take).cloned().collect())
+    Ok(visits
+        .iter()
+        .take(take)
+        .map(|visit| {
+            let mut copy = visit.clone();
+            if copy.icon.is_none() {
+                let host = crate::favicons::host_of(&visit.url);
+                copy.icon = icons.get(&host).map(str::to_string);
+            }
+            copy
+        })
+        .collect())
 }
 
 /// Removes the rows the history page has selected.
@@ -2269,6 +2291,27 @@ pub async fn tab_icon(
         .unwrap_or_default();
     if !page_url.is_empty() {
         attach_icon(&app, &page_url, &icon);
+        let host = crate::favicons::host_of(&page_url);
+        let changed = {
+            let state = app.try_state::<AppState>();
+            match state {
+                Some(state) => state
+                    .favicons
+                    .write()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .set(&host, &icon),
+                None => false,
+            }
+        };
+        if changed {
+            if let Some(state) = app.try_state::<AppState>() {
+                state
+                    .favicons
+                    .read()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .save(&state.dirs.favicons_file);
+            }
+        }
     }
 
     let owner = window_of_tab(&id).to_string();

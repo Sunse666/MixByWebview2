@@ -61,6 +61,7 @@ fn main() {
         "tab_icon",
         "tab_reopen",
         "window_new",
+        "favicon_map",
         "history_list",
         "history_remove",
         "history_clear",
