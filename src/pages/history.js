@@ -26,7 +26,11 @@ function navItem(glyph, label, active, page) {
   const text = document.createElement("span");
   text.textContent = t(label);
   item.append(icon, text);
-  if (page) item.addEventListener("click", () => invoke("tab_navigate", { url: page }).catch(() => {}));
+  if (page) {
+    item.addEventListener("click", () => {
+      invoke("tab_navigate", { url: page }).catch(() => invoke("tab_new", { url: page }).catch(() => {}));
+    });
+  }
   nav.append(item);
 }
 
@@ -95,7 +99,11 @@ function rowFor(visit, repaint) {
   });
 
   row.append(box, time, title, host, remove);
-  row.addEventListener("dblclick", () => invoke("tab_new", { url: visit.url }).catch(() => {}));
+  // A single click opens the entry, like the address list in a desktop browser.
+  row.addEventListener("click", (event) => {
+    if (event.target === box || event.target === remove) return;
+    invoke("tab_navigate", { url: visit.url }).catch(() => {});
+  });
   return row;
 }
 
@@ -273,10 +281,22 @@ async function boot() {
     paint();
   });
 
-  visits = (await invoke("history_list", { limit: 500 }).catch(() => [])) || [];
-  paintSuggestions();
-  paintSites();
-  paint();
+  const reload = async () => {
+    const fresh = (await invoke("history_list", { limit: 500 }).catch(() => [])) || [];
+    const same =
+      fresh.length === visits.length &&
+      fresh.every((visit, index) => keyOf(visit) === keyOf(visits[index]));
+    if (same) return;
+    visits = fresh;
+    paintSuggestions();
+    paintSites();
+    paint();
+  };
+
+  await reload();
+  // The page stays open while other tabs record visits, so poll for changes.
+  setInterval(reload, 1500);
+  window.addEventListener("focus", reload);
 }
 
 boot();

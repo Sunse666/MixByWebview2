@@ -13,7 +13,11 @@ function navItem(glyph, label, active, page) {
   const text = document.createElement("span");
   text.textContent = t(label);
   item.append(icon, text);
-  if (page) item.addEventListener("click", () => invoke("tab_navigate", { url: page }).catch(() => {}));
+  if (page) {
+    item.addEventListener("click", () => {
+      invoke("tab_navigate", { url: page }).catch(() => invoke("tab_new", { url: page }).catch(() => {}));
+    });
+  }
   nav.append(item);
 }
 

@@ -642,7 +642,7 @@ pub async fn tab_close(app: AppHandle, window: tauri::Window, state: State<'_, A
 pub async fn tab_navigate(app: AppHandle, window: tauri::Window, state: State<'_, AppState>, url: String) -> Result<(), AppError> {
     // A dead host would land on WebView2's own error page, which we cannot
     // replace, so answer it ourselves before navigating.
-    if url.starts_with("http") && !state.reachability.check(&url) {
+    if url.starts_with("http") && !is_internal_url(&url) && !state.reachability.check(&url) {
         let id = selected_label(&state, &window);
         if !id.is_empty() {
             crate::logging::info(&format!("unreachable: {url}"));
@@ -955,6 +955,11 @@ fn set_zoom(app: &AppHandle, label: &str, level: f64) -> Result<(), AppError> {
 }
 
 /// Pages report their context menu here; dismiss=true closes an open menu.
+/// Pages served by the app itself: no DNS, no TCP, so never probed.
+pub(crate) fn is_internal_url(url: &str) -> bool {
+    url.contains("tauri.localhost") || url.starts_with("data:") || url.starts_with("about:")
+}
+
 /// The chrome strip is only as tall as the toolbar, so a menu drawn inside it
 /// would be clipped; it gets its own overlay like the page menu.
 #[tauri::command]

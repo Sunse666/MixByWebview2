@@ -5,7 +5,13 @@ const { invoke } = window.__TAURI__.core;
 const nav = document.getElementById("nav");
 const main = document.getElementById("main");
 
-function navItem(glyph, label, active) {
+const PAGES = {
+  history: "http://tauri.localhost/pages/history.html",
+  bookmarks: "http://tauri.localhost/pages/bookmarks.html",
+  settings: "http://tauri.localhost/pages/settings.html",
+};
+
+function navItem(glyph, label, active, page) {
   const item = document.createElement("div");
   item.className = "nav-item" + (active ? " active" : "");
   const icon = document.createElement("span");
@@ -13,6 +19,11 @@ function navItem(glyph, label, active) {
   const text = document.createElement("span");
   text.textContent = t(label);
   item.append(icon, text);
+  if (page) {
+    item.addEventListener("click", () => {
+      invoke("tab_navigate", { url: page }).catch(() => invoke("tab_new", { url: page }).catch(() => {}));
+    });
+  }
   nav.append(item);
 }
 
@@ -20,10 +31,10 @@ async function boot() {
   const settings = await invoke("settings_get").catch(() => null);
   setLanguage((settings && settings.language) || "en");
 
-  navItem("⟲", "History", false);
-  navItem("☆", "Bookmarks", false);
-  navItem("⧉", "Extensions", true);
-  navItem("⚙", "Settings", false);
+  navItem("⟲", "History", false, PAGES.history);
+  navItem("☆", "Bookmarks", false, PAGES.bookmarks);
+  navItem("⧉", "Extensions", true, null);
+  navItem("⚙", "Settings", false, PAGES.settings);
 
   const head = document.createElement("h2");
   head.textContent = t("Extensions");

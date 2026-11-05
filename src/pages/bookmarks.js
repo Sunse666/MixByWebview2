@@ -19,7 +19,11 @@ function navItem(glyph, label, active, page) {
   const text = document.createElement("span");
   text.textContent = t(label);
   item.append(icon, text);
-  if (page) item.addEventListener("click", () => invoke("tab_navigate", { url: page }).catch(() => {}));
+  if (page) {
+    item.addEventListener("click", () => {
+      invoke("tab_navigate", { url: page }).catch(() => invoke("tab_new", { url: page }).catch(() => {}));
+    });
+  }
   nav.append(item);
 }
 
@@ -127,7 +131,10 @@ async function boot() {
         items.splice(index, 0, moved);
         paint();
       });
-      row.addEventListener("dblclick", () => invoke("tab_new", { url: item.url }).catch(() => {}));
+      row.addEventListener("click", (event) => {
+        if (event.target === remove) return;
+        invoke("tab_navigate", { url: item.url }).catch(() => {});
+      });
       list.append(row);
     }
   };
