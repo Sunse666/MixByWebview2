@@ -108,6 +108,22 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
         });
     }
 
+    // Debug helper: MIX_FULLSCREEN=1 reports a fullscreen page, so the strip hiding
+    // can be checked without a video that asks for it.
+    if debug_hooks() && std::env::var("MIX_FULLSCREEN").is_ok() {
+        let handle = app.handle().clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(2500));
+            let target = handle.clone();
+            let _ = handle.run_on_main_thread(move || {
+                let state = target.state::<AppState>();
+                state.fullscreen.write().insert(PRIMARY.to_string());
+                let _ = relayout(&target, PRIMARY);
+                crate::logging::info("debug: page marked fullscreen");
+            });
+        });
+    }
+
     // Debug helper: MIX_NEW_WINDOW=1 opens a second window after startup so the
     // multi window path can be checked without a click.
     #[cfg(debug_assertions)]
@@ -388,7 +404,15 @@ pub fn open_window(
         &opts.ui_data_dir,
     );
 
-    let chrome_h = crate::ipc::chrome_height(app);
+    let fullscreen = app
+        .try_state::<AppState>()
+        .map(|state| state.fullscreen.read().contains(label))
+        .unwrap_or(false);
+    let chrome_h = if fullscreen {
+        0.0
+    } else {
+        crate::ipc::chrome_height(app)
+    };
     win.add_child(
         chrome_builder,
         LogicalPosition::new(0.0, 0.0),
@@ -551,10 +575,24 @@ pub fn relayout(app: &AppHandle, label: &str) -> Result<(), tauri::Error> {
         return Ok(());
     };
     let (width, height) = logical_size(&win)?;
-    let chrome_h = crate::ipc::chrome_height(app);
+    // A fullscreen page owns the whole window, strip included.
+    let fullscreen = app
+        .try_state::<AppState>()
+        .is_some_and(|state| state.fullscreen.read().contains(label));
+    let chrome_h = if fullscreen {
+        0.0
+    } else {
+        crate::ipc::chrome_height(app)
+    };
     let tab_height = (height - chrome_h).max(1.0);
 
     if let Some(chrome) = app.get_webview(&format!("{label}-chrome")) {
+        // A zero height webview keeps its last frame; hide it instead.
+        if fullscreen {
+            let _ = chrome.hide();
+        } else {
+            let _ = chrome.show();
+        }
         set_bounds(&chrome, 0.0, 0.0, width, chrome_h)?;
     }
 

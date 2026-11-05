@@ -191,6 +191,22 @@ const SHORTCUT_FORWARDER: &str = r#"
   window.__mixTranslate = { collect: collect, apply: apply, restore: restore };
 })();
 
+// Video players ask the document for fullscreen; the strip has to follow.
+(function () {
+  var report = function (on) {
+    window.__TAURI_INTERNALS__.invoke("page_fullscreen", { on: on }).catch(function () {});
+  };
+
+  document.addEventListener("fullscreenchange", function () {
+    report(Boolean(document.fullscreenElement));
+  });
+
+  // Safari style prefix, still used by some players.
+  document.addEventListener("webkitfullscreenchange", function () {
+    report(Boolean(document.webkitFullscreenElement));
+  });
+})();
+
 // WebView2 renders its own error page; detect it so we can show ours instead.
 (function () {
   var check = function () {

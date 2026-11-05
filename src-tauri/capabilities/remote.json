@@ -19,6 +19,7 @@
   "permissions": [
     "allow-shortcut",
     "allow-tab-icon",
+    "allow-page-fullscreen",
     "allow-translate-texts",
     "allow-translate-done",
     "allow-page-failed",

@@ -52,6 +52,8 @@ pub struct AppState {
     pub translate_result: parking_lot::RwLock<(usize, Option<String>)>,
     /// Tabs whose text is currently replaced by the translator.
     pub translated_tabs: parking_lot::RwLock<std::collections::HashSet<String>>,
+    /// Windows whose page is showing a fullscreen element; the chrome hides.
+    pub fullscreen: parking_lot::RwLock<std::collections::HashSet<String>>,
     /// Tab id -> the url whose error page is already showing.
     pub error_shown: RwLock<std::collections::HashMap<String, String>>,
     pub bookmarks: RwLock<Vec<Bookmark>>,
@@ -91,6 +93,7 @@ impl AppState {
             reachability: crate::net::Reachability::default(),
             translate_result: parking_lot::RwLock::new((0, None)),
             translated_tabs: parking_lot::RwLock::new(std::collections::HashSet::new()),
+            fullscreen: parking_lot::RwLock::new(std::collections::HashSet::new()),
             error_shown: RwLock::new(std::collections::HashMap::new()),
             bookmarks: RwLock::new(bookmarks),
             scripts,
@@ -1789,6 +1792,28 @@ pub async fn tab_scroll(
             tab.scroll = y.max(0.0);
         }
     }
+    Ok(())
+}
+
+/// Fullscreen video only fills the page webview; the strip has to get out of the
+/// way, otherwise the player keeps the window frame around it.
+#[tauri::command]
+pub async fn page_fullscreen(
+    app: AppHandle,
+    webview: tauri::Webview,
+    state: State<'_, AppState>,
+    on: bool,
+) -> Result<(), AppError> {
+    let owner = window_of_tab(webview.label()).to_string();
+    {
+        let mut set = state.fullscreen.write();
+        if on {
+            set.insert(owner.clone());
+        } else {
+            set.remove(&owner);
+        }
+    }
+    let _ = crate::window::relayout(&app, &owner);
     Ok(())
 }
 
