@@ -132,11 +132,12 @@ function rowFor(visit, repaint) {
   remove.textContent = "✕";
   remove.title = t("Remove");
   remove.addEventListener("click", async () => {
-    await invoke("history_remove", { entries: [[visit.url, visit.at]] }).catch(() => {});
+    // A stale row must not stay visible when the backend refuses the delete.
     visits = visits.filter((item) => keyOf(item) !== keyOf(visit));
     selection.delete(keyOf(visit));
     paintSites();
     repaint();
+    await invoke("history_remove", { entries: [[visit.url, visit.at]] }).catch(() => {});
   });
 
   row.append(box, iconFor(visit), time, title, host, remove);
@@ -336,6 +337,8 @@ async function boot() {
   };
 
   await reload();
+
+
 
   // The page stays open while other tabs record visits, so poll for changes.
   setInterval(reload, 1500);

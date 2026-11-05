@@ -671,6 +671,9 @@ pub async fn tab_navigate(app: AppHandle, window: tauri::Window, state: State<'_
     }
     if let Some(webview) = app.get_webview(&label) {
         webview.navigate(target)?;
+        // Without this the first click after a menu action only activates the
+        // webview; the click never reaches the page.
+        let _ = webview.set_focus();
     }
     Ok(())
 }

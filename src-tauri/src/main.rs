@@ -26,7 +26,7 @@ mod window;
 
 use tauri::Manager;
 
-// embed bump 37
+// embed bump 38
 fn main() {
     let dirs = paths::AppDirs::resolve().ensure();
     logging::init(&dirs.logs);
