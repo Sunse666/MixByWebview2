@@ -336,6 +336,7 @@ async function boot() {
   };
 
   await reload();
+
   // The page stays open while other tabs record visits, so poll for changes.
   setInterval(reload, 1500);
   window.addEventListener("focus", reload);

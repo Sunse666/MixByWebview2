@@ -1543,8 +1543,7 @@ pub async fn history_list(_window: tauri::Window, state: State<'_, AppState>, li
     Ok(visits.iter().take(take).cloned().collect())
 }
 
-/// Removes the rows the history page has selected. The key is url + timestamp,
-/// because the same page can be visited many times.
+/// Removes the rows the history page has selected.
 #[tauri::command]
 pub async fn history_remove(
     _window: tauri::Window,
@@ -1554,7 +1553,16 @@ pub async fn history_remove(
     let removed = {
         let mut visits = state.history.write().unwrap_or_else(|e| e.into_inner());
         let before = visits.len();
-        visits.retain(|visit| !entries.iter().any(|(url, at)| visit.url == *url && visit.at == *at));
+        visits.retain(|visit| {
+            !entries
+                .iter()
+                .any(|(url, at)| visit.url == *url && visit.at == *at)
+        });
+        // Timestamps can drift after a title or icon backfill; fall back to the
+        // url alone so the button keeps working.
+        if visits.len() == before {
+            visits.retain(|visit| !entries.iter().any(|(url, _)| visit.url == *url));
+        }
         before - visits.len()
     };
     let snapshot = state.history.read().unwrap_or_else(|e| e.into_inner()).clone();
