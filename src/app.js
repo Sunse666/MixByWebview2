@@ -311,10 +311,19 @@ function syncAddressIcon(active) {
   }
 }
 
+// Internal pages live on the asset host; show them the way a browser would.
+function prettyUrl(url) {
+  const prefix = "http://tauri.localhost/pages/";
+  if (url.startsWith(prefix)) {
+    return "mix://" + url.slice(prefix.length).replace(/\.html$/, "");
+  }
+  return url;
+}
+
 function syncUrl() {
   if (document.activeElement === urlInput) return;
   const active = tabs.find((tab) => tab.id === selected);
-  const next = active ? active.url : "";
+  const next = active ? prettyUrl(active.url) : "";
   if (next && urlInput.value !== next) urlInput.value = next;
 }
 
