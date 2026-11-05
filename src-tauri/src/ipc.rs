@@ -1473,6 +1473,29 @@ pub async fn app_clear_data(app: AppHandle, window: tauri::Window, _state: State
     Ok(())
 }
 
+/// The document title arrives after the url change that recorded the visit, so
+/// the newest entry for that url still carries the previous page's title.
+pub(crate) fn attach_title(app: &AppHandle, url: &str, title: &str) {
+    if title.trim().is_empty() {
+        return;
+    }
+    let Some(state) = app.try_state::<AppState>() else {
+        return;
+    };
+    let snapshot = {
+        let mut visits = state.history.write().unwrap_or_else(|e| e.into_inner());
+        let Some(visit) = visits.iter_mut().find(|visit| visit.url == url) else {
+            return;
+        };
+        if visit.title == title {
+            return;
+        }
+        visit.title = title.to_string();
+        visits.clone()
+    };
+    let _ = crate::library::save_visits(&state.dirs.history_file, &snapshot);
+}
+
 /// The favicon arrives after the visit is recorded, so patch the newest match.
 pub(crate) fn attach_icon(app: &AppHandle, url: &str, icon: &str) {
     let Some(state) = app.try_state::<AppState>() else {

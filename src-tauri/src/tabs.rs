@@ -593,6 +593,17 @@ pub fn create(
                 id: webview.label().to_string(),
                 title: title.clone(),
             };
+            let tab_url = app
+                .try_state::<crate::ipc::AppState>()
+                .and_then(|state| {
+                    state
+                        .try_read_core(&crate::ipc::window_of_tab(&payload.id))
+                        .and_then(|core| core.tabs.iter().find(|t| t.id == payload.id).map(|t| t.url.clone()))
+                })
+                .unwrap_or_default();
+            if !tab_url.is_empty() {
+                crate::ipc::attach_title(&app, &tab_url, &title);
+            }
             if let Some(state) = app.try_state::<crate::ipc::AppState>() {
                 let window = crate::ipc::window_of_tab(&payload.id);
                 if let Some(mut core) = state.try_write_core(window) {
