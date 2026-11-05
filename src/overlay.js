@@ -220,13 +220,13 @@ async function bootAppMenu() {
         await close();
       });
       row("\u2606", "Bookmarks", "", () => render("bookmarks"), { page: true });
-      row("\u21ba", "History", "", () => render("history"), { page: true });
+      row("\u21ba", "History", "", act(() => invoke("tab_new", { url: "http://tauri.localhost/pages/history.html" })));
       divider();
-      row("\u25a4", "Extensions", "", () => render("extensions"), { page: true });
+      row("\u25a4", "Extensions", "", act(() => invoke("tab_new", { url: "http://tauri.localhost/pages/extensions.html" })));
       row("\u2699", "Userscripts", "", () => render("scripts"), { page: true });
       row("\u2261", "More tools", "", () => render("tools"), { page: true });
       divider();
-      row("\u2699", "Settings", "", () => render("settings"), { page: true });
+      row("\u2699", "Settings", "", act(() => invoke("tab_new", { url: "http://tauri.localhost/pages/settings.html" })));
       row("\u003f", "Help", "", () => render("help"), { page: true });
 
       const about = document.createElement("div");
@@ -235,53 +235,6 @@ async function bootAppMenu() {
       appMenu.append(about);
 
       row("\u23fb", "Quit", "Ctrl+Q", () => invoke("app_quit"), { danger: true });
-    },
-
-    extensions: async () => {
-      header("Extensions");
-      const list = await invoke("ext_list");
-      const settings = await invoke("settings_get");
-      const hidden = new Set(settings.hidden_extensions || []);
-      if (!list.length) {
-        const empty = document.createElement("div");
-        empty.className = "menu-note";
-        empty.textContent = "No extensions loaded. Drop folders or .crx files into crx/ and restart.";
-        appMenu.append(empty);
-      }
-      for (const ext of list) {
-        const item = document.createElement("div");
-        item.className = "menu-entry entry-row";
-        const text = document.createElement("div");
-        text.className = "entry-text";
-        const name = document.createElement("div");
-        name.className = "entry-name";
-        name.textContent = ext.version ? ext.name + " " + ext.version : ext.name;
-        const state = document.createElement("div");
-        state.className = "entry-note" + (ext.status === "error" ? " bad" : "");
-        state.textContent = t(ext.status) + (ext.reason ? " \u00b7 " + ext.reason : "");
-        text.append(name, state);
-        item.append(text);
-
-        if (ext.status === "loaded") {
-          const shown = !hidden.has(ext.name);
-          const toggle = document.createElement("button");
-          toggle.className = "entry-toggle" + (shown ? " on" : "");
-          toggle.title = shown ? "Hide from the toolbar" : "Show in the toolbar";
-          toggle.textContent = shown ? "\u25c9" : "\u25cb";
-          toggle.addEventListener("click", async (event) => {
-            event.stopPropagation();
-            const next = new Set(hidden);
-            if (next.has(ext.name)) next.delete(ext.name);
-            else next.add(ext.name);
-            await invoke("settings_set", { patch: { hidden_extensions: [...next] } });
-            render("extensions");
-          });
-          item.append(toggle);
-        }
-        appMenu.append(item);
-      }
-      divider();
-      row("\u25a4", "Open extensions folder", "", act(() => invoke("open_dir", { which: "crx" })));
     },
 
     scripts: async () => {
@@ -357,44 +310,6 @@ async function bootAppMenu() {
       }
     },
 
-    history: async () => {
-      header("History");
-      const list = await invoke("history_list", { limit: 60 });
-      if (!list.length) {
-        const empty = document.createElement("div");
-        empty.className = "menu-note";
-        empty.textContent = "Nothing recorded yet.";
-        appMenu.append(empty);
-      }
-      for (const visit of list) {
-        const item = document.createElement("button");
-        item.className = "row";
-        const icon = document.createElement("span");
-        icon.className = "ico";
-        icon.textContent = "\u21ba";
-        const label = document.createElement("span");
-        label.className = "label";
-        label.textContent = visit.title || visit.url;
-        label.title = visit.url;
-        const when = document.createElement("span");
-        when.className = "hint";
-        when.textContent = new Date(visit.at * 1000).toLocaleDateString();
-        item.append(icon, label, when);
-        item.addEventListener("click", async () => {
-          await invoke("tab_new", { url: visit.url });
-          await close();
-        });
-        appMenu.append(item);
-      }
-      if (list.length) {
-        divider();
-        row("\u2717", "Clear history", "", async () => {
-          await invoke("history_clear");
-          render("history");
-        });
-      }
-    },
-
     tools: async () => {
       header("More tools");
       row("\u2318", "Developer tools", "F12", act(() => invoke("shortcut", { action: "devtools" })));
@@ -467,17 +382,17 @@ async function bootAppMenu() {
     },
 
     settings: async () => {
-      header("Settings");
+      header("Appearance");
       row("\u25d0", "Appearance", "", () =>
         invoke("overlay_open", { kind: "settings&section=appearance" }), { page: true });
       row("\u25b6", "Startup", "", () =>
         invoke("overlay_open", { kind: "settings&section=startup" }), { page: true });
-      row("\u25ab", "Toolbar buttons", "", () => render("toolbar"), { page: true });
+      act(() => {});
       row("\u1f310", "Language", "", () => render("language"), { page: true });
       row("\u2398", "Theme file", "", () =>
         invoke("overlay_open", { kind: "settings&section=theme" }), { page: true });
       divider();
-      row("\u25a4", "Extensions", "", () => render("extensions"), { page: true });
+      row("\u25a4", "Extensions", "", act(() => invoke("tab_new", { url: "http://tauri.localhost/pages/extensions.html" })));
       row("\u2699", "Userscripts", "", () => render("scripts"), { page: true });
       divider();
       row("\u2261", "Open profile folder", "", act(() => invoke("open_dir", { which: "userdata" })));
