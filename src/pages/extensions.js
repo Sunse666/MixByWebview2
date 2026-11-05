@@ -29,6 +29,19 @@ async function boot() {
   head.textContent = t("Extensions");
   main.append(head);
 
+  const restartBar = document.createElement("div");
+  restartBar.className = "toolbar";
+  restartBar.hidden = true;
+  const restartHint = document.createElement("span");
+  restartHint.className = "card-note";
+  restartHint.textContent = t("Restart to apply");
+  const restart = document.createElement("button");
+  restart.className = "button";
+  restart.textContent = t("Restart now");
+  restart.addEventListener("click", () => invoke("app_restart").catch(() => {}));
+  restartBar.append(restartHint, restart);
+  main.append(restartBar);
+
   const grid = document.createElement("div");
   grid.className = "grid";
   main.append(grid);
@@ -125,7 +138,7 @@ async function boot() {
       else disabled.delete(ext.source || ext.name);
       disabledNow = [...disabled];
       await invoke("settings_set", { patch: { disabled_extensions: [...disabled] } }).catch(() => {});
-      card.append(note2);
+      restartBar.hidden = false;
     });
     actions.append(toggle);
 

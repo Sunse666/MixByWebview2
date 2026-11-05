@@ -1685,6 +1685,19 @@ pub async fn app_info() -> Result<AppInfo, AppError> {
     })
 }
 
+/// Restarts so extension changes are picked up: WebView2 loads them at startup.
+#[tauri::command]
+pub async fn app_restart(app: AppHandle, _window: tauri::Window) -> Result<(), AppError> {
+    let exe = std::env::current_exe().map_err(|err| AppError::new("restart", err.to_string()))?;
+    let mut command = std::process::Command::new(exe);
+    if let Ok(dir) = std::env::current_dir() {
+        command.current_dir(dir);
+    }
+    command.spawn().map_err(|err| AppError::new("restart", err.to_string()))?;
+    app.exit(0);
+    Ok(())
+}
+
 /// Quits for real: the window close button only hides to the tray.
 #[tauri::command]
 pub async fn app_quit(app: AppHandle, _window: tauri::Window) -> Result<(), AppError> {

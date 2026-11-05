@@ -1,3 +1,5 @@
+[hidden] { display: none !important; }
+
 /* Internal pages: the full window layouts, not the small overlay popups. */
 :root {
   --bg: #1b1b1b;
@@ -237,3 +239,16 @@ main h2 {
   height: 15px;
   accent-color: var(--accent);
 }
+
+.hex, .num {
+  width: 120px;
+  height: 28px;
+  padding: 0 8px;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font: inherit;
+}
+
+.num { width: 80px; }

@@ -71,6 +71,7 @@ fn main() {
         "bookmark_remove",
         "diag_export",
         "app_info",
+        "app_restart",
         "app_quit",
         "download_list",
         "download_open_dir",

@@ -29,6 +29,103 @@ function row(title, detail, control) {
   return line;
 }
 
+function themePreview() {
+  const holder = document.createElement("div");
+  holder.className = "card-actions";
+  const edit = document.createElement("button");
+  edit.className = "button";
+  edit.textContent = t("Edit");
+  edit.addEventListener("click", () => openThemeEditor(holder));
+  holder.append(edit);
+  return holder;
+}
+
+async function openThemeEditor(holder) {
+  const theme = await invoke("theme_get").catch(() => null);
+  if (!theme) return;
+
+  holder.replaceChildren();
+
+  const draft = {
+    colors: { ...theme.colors },
+    radius: theme.radius,
+    tab_radius: theme.tab_radius,
+    font_size: theme.font_size,
+    font_family: theme.font_family,
+  };
+
+  const fields = [
+    ["Background", "bg"],
+    ["Chrome", "chrome"],
+    ["Accent", "accent"],
+    ["Text", "text"],
+    ["Border", "border"],
+    ["Tab", "tab"],
+    ["URL field", "url_bg"],
+  ];
+
+  for (const [label, key] of fields) {
+    const input = document.createElement("input");
+    input.type = "text";
+    input.className = "hex";
+    input.value = draft.colors[key] || "";
+    input.placeholder = "#RRGGBB";
+    input.addEventListener("input", () => {
+      draft.colors[key] = input.value.trim();
+    });
+    holder.append(row(label, "", input));
+  }
+
+  for (const [label, key, min, max] of [
+    ["Corner radius", "radius", 0, 20],
+    ["Tab radius", "tab_radius", 0, 20],
+    ["Font size", "font_size", 11, 20],
+  ]) {
+    const input = document.createElement("input");
+    input.type = "number";
+    input.className = "num";
+    input.min = String(min);
+    input.max = String(max);
+    input.value = String(draft[key]);
+    input.addEventListener("input", () => {
+      draft[key] = Number(input.value);
+    });
+    holder.append(row(label, "", input));
+  }
+
+  const save = document.createElement("button");
+  save.className = "button";
+  save.textContent = t("Save");
+  save.addEventListener("click", async () => {
+    await invoke("theme_apply", { theme: draft, persist: true }).catch(() => {});
+    holder.replaceChildren(save);
+    holder.firstChild.remove();
+    holder.append(editButton(holder));
+  });
+
+  const reset = document.createElement("button");
+  reset.className = "button";
+  reset.textContent = t("Cancel");
+  reset.addEventListener("click", () => holder.replaceChildren(editButton(holder)));
+
+  const actions = document.createElement("div");
+  actions.className = "card-actions";
+  actions.append(save, reset);
+  holder.append(actions);
+
+  // live preview while editing: applied but not written to theme.json yet
+  const preview = () => invoke("theme_apply", { theme: draft, persist: false }).catch(() => {});
+  holder.addEventListener("input", preview);
+}
+
+function editButton(holder) {
+  const edit = document.createElement("button");
+  edit.className = "button";
+  edit.textContent = t("Edit");
+  edit.addEventListener("click", () => openThemeEditor(holder));
+  return edit;
+}
+
 function toggle(on, onChange) {
   const button = document.createElement("button");
   button.className = "switch";
@@ -107,16 +204,7 @@ async function boot() {
     ),
   );
 
-  const bar = document.createElement("div");
-  bar.className = "card-actions";
-  const theme = document.createElement("button");
-  theme.className = "button";
-  theme.textContent = t("Appearance & theme");
-  theme.addEventListener("click", () =>
-    invoke("overlay_open", { kind: "app_menu&page=settings" }).catch(() => {}),
-  );
-  bar.append(theme);
-  card.append(bar);
+  card.append(row("Appearance & theme", "", themePreview()));
 
   card.append(row("Language", "Choose the language of the interface", language));
 

@@ -67,6 +67,7 @@
     "allow-bookmark-remove",
     "allow-diag-export",
     "allow-app-info",
+    "allow-app-restart",
     "allow-app-quit",
     "allow-download-list",
     "allow-download-open-dir",
