@@ -157,6 +157,7 @@ pub struct SettingsPatch {
     pub baidu_appid: Option<String>,
     pub baidu_secret: Option<String>,
     pub translate_to: Option<String>,
+    pub new_tab_page: Option<bool>,
     pub menu_bar: Option<bool>,
     pub language: Option<String>,
     pub hidden_extensions: Option<Vec<String>>,
@@ -557,7 +558,14 @@ pub async fn tab_new(
             }
             input
         }
-        None => state.settings.read().start_url.clone(),
+        None => {
+            let settings = state.settings.read();
+            if settings.new_tab_page {
+                "http://tauri.localhost/pages/newtab.html".to_string()
+            } else {
+                settings.start_url.clone()
+            }
+        }
     };
         core.tick += 1;
         let tick = core.tick;
@@ -1148,6 +1156,9 @@ pub async fn settings_set(
         }
         if let Some(value) = patch.baidu_secret {
             guard.baidu_secret = value.trim().to_string();
+        }
+        if let Some(value) = patch.new_tab_page {
+            guard.new_tab_page = value;
         }
         if let Some(value) = patch.menu_bar {
             guard.menu_bar = value;

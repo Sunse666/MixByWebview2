@@ -23,6 +23,8 @@ pub struct Settings {
     pub baidu_appid: String,
     pub baidu_secret: String,
     pub translate_to: String,
+    /// New tabs open the built-in page instead of the start url.
+    pub new_tab_page: bool,
     /// Shows the menu bar row above the address field.
     pub menu_bar: bool,
     /// Interface language: "en" or "zh".
@@ -51,6 +53,7 @@ impl Default for Settings {
             baidu_appid: String::new(),
             baidu_secret: String::new(),
             translate_to: "zh".into(),
+            new_tab_page: true,
             menu_bar: true,
             language: "en".into(),
             max_live_tabs: 12,

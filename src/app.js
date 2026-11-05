@@ -350,6 +350,7 @@ function prettyUrl(url) {
   if (url.startsWith(prefix)) {
     return "mix://" + url.slice(prefix.length).replace(/\.html$/, "");
   }
+  if (url === "about:blank") return "";
   return url;
 }
 

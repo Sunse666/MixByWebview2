@@ -97,6 +97,36 @@ async function boot() {
       });
 
       row.append(title, host, remove);
+      row.draggable = true;
+      row.dataset.url = item.url;
+      row.addEventListener("dragstart", (event) => {
+        event.dataTransfer.setData("text/plain", item.url);
+        event.dataTransfer.effectAllowed = "move";
+        row.style.opacity = "0.5";
+      });
+      row.addEventListener("dragend", () => {
+        row.style.opacity = "";
+      });
+      row.addEventListener("dragover", (event) => {
+        event.preventDefault();
+        row.style.borderTop = "2px solid var(--accent)";
+      });
+      row.addEventListener("dragleave", () => {
+        row.style.borderTop = "";
+      });
+      row.addEventListener("drop", async (event) => {
+        event.preventDefault();
+        row.style.borderTop = "";
+        const from = event.dataTransfer.getData("text/plain");
+        if (!from || from === item.url) return;
+        const index = items.findIndex((entry) => entry.url === item.url);
+        if (index < 0) return;
+        await invoke("bookmark_move", { from, to: index }).catch(() => {});
+        const moved = items.find((entry) => entry.url === from);
+        items = items.filter((entry) => entry.url !== from);
+        items.splice(index, 0, moved);
+        paint();
+      });
       row.addEventListener("dblclick", () => invoke("tab_new", { url: item.url }).catch(() => {}));
       list.append(row);
     }

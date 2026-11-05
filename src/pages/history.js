@@ -90,6 +90,7 @@ function rowFor(visit, repaint) {
     await invoke("history_remove", { entries: [[visit.url, visit.at]] }).catch(() => {});
     visits = visits.filter((item) => keyOf(item) !== keyOf(visit));
     selection.delete(keyOf(visit));
+    paintSites();
     repaint();
   });
 
@@ -155,12 +156,72 @@ async function boot() {
   removeSelected.textContent = t("Delete selected");
   actions.append(selectAll, removeSelected);
 
+  const sites = document.createElement("div");
+  sites.className = "toolbar";
+  sites.id = "sites";
+
+  const datalist = document.createElement("datalist");
+  datalist.id = "history-suggest";
+  search.setAttribute("list", "history-suggest");
+
   const list = document.createElement("div");
-  main.append(bar, actions, list);
+  main.append(bar, sites, datalist, actions, list);
+
+  let siteFilter = "";
 
   const visible = () => {
     const needle = search.value.trim().toLowerCase();
-    return visits.filter((visit) => matches(visit, needle));
+    return visits
+      .filter((visit) => matches(visit, needle))
+      .filter((visit) => !siteFilter || hostOf(visit.url) === siteFilter);
+  };
+
+  const paintSites = () => {
+    const counts = new Map();
+    for (const visit of visits) {
+      const host = hostOf(visit.url);
+      if (!host || host.startsWith("tauri.localhost")) continue;
+      counts.set(host, (counts.get(host) || 0) + 1);
+    }
+    const top = [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8);
+
+    sites.replaceChildren();
+    if (!top.length) return;
+
+    const chip = (label, value) => {
+      const button = document.createElement("button");
+      button.className = "button";
+      button.textContent = label;
+      if (value === siteFilter) button.style.borderColor = "var(--accent)";
+      button.addEventListener("click", () => {
+        siteFilter = siteFilter === value ? "" : value;
+        paintSites();
+        paint();
+      });
+      return button;
+    };
+
+    sites.append(chip(t("All sites"), ""));
+    for (const [host, count] of top) sites.append(chip(host + " (" + count + ")", host));
+  };
+
+  const paintSuggestions = () => {
+    const seen = new Set();
+    datalist.replaceChildren(
+      ...visits
+        .filter((visit) => {
+          const key = (visit.title || visit.url).toLowerCase();
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        })
+        .slice(0, 30)
+        .map((visit) => {
+          const option = document.createElement("option");
+          option.value = visit.title || visit.url;
+          return option;
+        }),
+    );
   };
 
   const paint = () => {
@@ -213,6 +274,8 @@ async function boot() {
   });
 
   visits = (await invoke("history_list", { limit: 500 }).catch(() => [])) || [];
+  paintSuggestions();
+  paintSites();
   paint();
 }
 
