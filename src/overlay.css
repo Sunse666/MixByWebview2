@@ -521,3 +521,11 @@ footer { margin-top: auto; display: flex; justify-content: flex-end; gap: 8px; }
   text-align: left;
   padding: 0 10px;
 }
+
+.find-status {
+  flex: 0 0 auto;
+  min-width: 0;
+  font-size: calc(var(--font-size) - 2px);
+  opacity: 0.7;
+  white-space: nowrap;
+}

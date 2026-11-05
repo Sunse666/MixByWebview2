@@ -178,7 +178,24 @@ async fn translate_many(
 }
 
 /// Translates one string per slot; empty results mean "leave it alone".
+/// The Microsoft engine comes first because it auto-detects the language; the
+/// keyless fallback only takes over when the first engine returns nothing.
 pub async fn translate(texts: Vec<String>, to: &str) -> Vec<String> {
+  let wanted = texts.len();
+  let primary = translate_microsoft(texts.clone(), to).await;
+  let done = primary.iter().filter(|text| !text.is_empty()).count();
+  if done > 0 || wanted == 0 {
+    return primary;
+  }
+
+  crate::logging::warn("translator: falling back to the secondary engine");
+  let secondary = translate_fallback(texts, to).await;
+  let recovered = secondary.iter().filter(|text| !text.is_empty()).count();
+  crate::logging::info(&format!("translator: fallback recovered {recovered}/{wanted}"));
+  secondary
+}
+
+async fn translate_microsoft(texts: Vec<String>, to: &str) -> Vec<String> {
   let mut out = vec![String::new(); texts.len()];
   let Ok(client) = client() else {
     return out;
@@ -228,6 +245,81 @@ pub async fn translate(texts: Vec<String>, to: &str) -> Vec<String> {
         }
       }
       Err(err) => crate::logging::warn(&format!("translator chunk failed: {err}")),
+    }
+  }
+
+  out
+}
+
+/// Script based language guess; MyMemory refuses an "auto" source language.
+fn guess_source(text: &str) -> Option<&'static str> {
+  let mut latin = 0;
+  for ch in text.chars() {
+    match ch {
+      '\u{4e00}'..='\u{9fff}' => return None,
+      '\u{0400}'..='\u{04FF}' => return Some("ru"),
+      '\u{0600}'..='\u{06FF}' => return Some("ar"),
+      '\u{3040}'..='\u{30FF}' => return Some("ja"),
+      '\u{AC00}'..='\u{D7AF}' => return Some("ko"),
+      _ => {
+        if ch.is_ascii_alphabetic() {
+          latin += 1;
+        }
+      }
+    }
+  }
+  if latin == 0 {
+    return None;
+  }
+  Some("en")
+}
+
+fn fallback_target(to: &str) -> &str {
+  if to.starts_with("zh") {
+    "zh-CN"
+  } else {
+    to
+  }
+}
+
+async fn translate_fallback(texts: Vec<String>, to: &str) -> Vec<String> {
+  let mut out = vec![String::new(); texts.len()];
+  let Ok(client) = client() else {
+    return out;
+  };
+  let target = fallback_target(to);
+  let mut budget = 3200usize;
+
+  for (index, text) in texts.iter().enumerate() {
+    let trimmed = text.trim();
+    if trimmed.len() < 2 || budget < trimmed.len() {
+      continue;
+    }
+    let Some(source) = guess_source(trimmed) else {
+      continue;
+    };
+    budget -= trimmed.len();
+
+    let url = format!(
+      "https://api.mymemory.translated.net/get?q={}&langpair={source}|{target}",
+      crate::permissions::encode(trimmed)
+    );
+    let Ok(response) = client.get(&url).send().await else {
+      continue;
+    };
+    let body: serde_json::Value = response.json().await.unwrap_or_default();
+    let translated = body
+      .get("responseData")
+      .and_then(|data| data.get("translatedText"))
+      .and_then(|value| value.as_str())
+      .unwrap_or_default()
+      .to_string();
+    if translated.contains("MYMEMORY WARNING") {
+      crate::logging::warn("translator: secondary engine quota reached");
+      break;
+    }
+    if !translated.is_empty() && translated != trimmed {
+      out[index] = translated;
     }
   }
 

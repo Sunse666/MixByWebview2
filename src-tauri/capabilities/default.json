@@ -38,6 +38,8 @@
     "allow-suggest-refresh",
     "allow-overlay-toggle",
     "allow-download-url",
+    "allow-find-result",
+    "allow-find-status",
     "allow-find-in-page",
     "allow-translate-page-inplace",
     "allow-translate-state",

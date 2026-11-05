@@ -54,6 +54,8 @@ pub struct AppState {
     pub translated_tabs: parking_lot::RwLock<std::collections::HashSet<String>>,
     /// Windows whose page is showing a fullscreen element; the chrome hides.
     pub fullscreen: parking_lot::RwLock<std::collections::HashSet<String>>,
+    /// Whether the last in-page search matched anything.
+    pub find_hit: parking_lot::RwLock<bool>,
     /// Tab id -> the url whose error page is already showing.
     pub error_shown: RwLock<std::collections::HashMap<String, String>>,
     pub bookmarks: RwLock<Vec<Bookmark>>,
@@ -94,6 +96,7 @@ impl AppState {
             translate_result: parking_lot::RwLock::new((0, None)),
             translated_tabs: parking_lot::RwLock::new(std::collections::HashSet::new()),
             fullscreen: parking_lot::RwLock::new(std::collections::HashSet::new()),
+            find_hit: parking_lot::RwLock::new(true),
             error_shown: RwLock::new(std::collections::HashMap::new()),
             bookmarks: RwLock::new(bookmarks),
             scripts,
@@ -2042,9 +2045,24 @@ pub async fn find_in_page(
     let query = serde_json::to_string(&text).unwrap_or_else(|_| "\"\"".into());
     let back = forward.map(|value| !value).unwrap_or(false);
     let again = restart.unwrap_or(false);
-    let script = format!("window.find({query}, false, {back}, true, {again}, false, false);");
+    let script = format!(
+        "(function(){{var hit=window.find({query}, false, {back}, true, {again}, false, false);\
+window.__TAURI_INTERNALS__.invoke('find_result', {{ hit: Boolean(hit) }}).catch(function(){{}});}})()"
+    );
     let _ = webview.eval(&script);
     Ok(())
+}
+
+/// The page reports the outcome of a find, because eval cannot return a value.
+#[tauri::command]
+pub async fn find_result(state: State<'_, AppState>, hit: bool) -> Result<(), AppError> {
+    *state.find_hit.write() = hit;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn find_status(state: State<'_, AppState>) -> Result<bool, AppError> {
+    Ok(*state.find_hit.read())
 }
 
 

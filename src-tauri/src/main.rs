@@ -26,7 +26,7 @@ mod window;
 
 use tauri::Manager;
 
-// embed bump 13
+// embed bump 16
 fn main() {
     let dirs = paths::AppDirs::resolve().ensure();
     logging::init(&dirs.logs);
@@ -94,6 +94,8 @@ fn main() {
             ipc::overlay_toggle,
             ipc::download_url,
             ipc::find_in_page,
+            ipc::find_result,
+            ipc::find_status,
             ipc::translate_page_inplace,
             ipc::translate_state,
             ipc::translate_status,

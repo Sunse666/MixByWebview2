@@ -43,6 +43,8 @@ fn main() {
         "overlay_toggle",
         "download_url",
         "find_in_page",
+        "find_result",
+        "find_status",
         "translate_page_inplace",
         "translate_state",
         "translate_status",

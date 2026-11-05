@@ -162,6 +162,7 @@ async function bootAppMenu() {
     root: async () => {
       row("+", "New tab", "Ctrl+T", act(() => invoke("tab_new", {})));
       row("\u25a2", "New window", "Ctrl+N", act(() => invoke("window_new")));
+      row("\u2315", "Find in page", "Ctrl+F", () => invoke("overlay_toggle", { kind: "find" }));
       row("\u25d1", "New incognito tab", "Ctrl+Shift+N", act(() => invoke("tab_new", { incognito: true })));
       row("\u21ba", "Reopen closed tab", "Ctrl+Shift+T", async () => {
         await invoke("tab_reopen");
@@ -257,7 +258,7 @@ async function bootAppMenu() {
         name.textContent = ext.version ? ext.name + " " + ext.version : ext.name;
         const state = document.createElement("div");
         state.className = "entry-note" + (ext.status === "error" ? " bad" : "");
-        state.textContent = ext.status + (ext.reason ? " \u00b7 " + ext.reason : "");
+        state.textContent = t(ext.status) + (ext.reason ? " \u00b7 " + ext.reason : "");
         text.append(name, state);
         item.append(text);
 
@@ -300,7 +301,7 @@ async function bootAppMenu() {
         name.textContent = script.name;
         const state = document.createElement("div");
         state.className = "entry-note";
-        state.textContent = script.run_at + " \u00b7 " + script.matches.join(", ");
+        state.textContent = t(script.run_at) + " \u00b7 " + script.matches.join(", ");
         item.append(name, state);
         appMenu.append(item);
       }
@@ -644,7 +645,7 @@ async function bootFind() {
   bar.className = "find-bar";
   const input = document.createElement("input");
   input.type = "text";
-  input.placeholder = "Find in page";
+  input.placeholder = t("Find in page");
   input.className = "find-input";
   const prev = document.createElement("button");
   prev.className = "find-step";
@@ -655,9 +656,16 @@ async function bootFind() {
   bar.append(input, prev, next);
   menu.append(bar);
 
+  const status = document.createElement("span");
+  status.className = "find-status";
+  bar.append(status);
+
   const search = async (forward, restart) => {
     if (!input.value) return;
     await invoke("find_in_page", { text: input.value, forward, restart }).catch(() => {});
+    await new Promise((resolve) => setTimeout(resolve, 120));
+    const hit = await invoke("find_status").catch(() => true);
+    status.textContent = hit ? "" : t("No matches");
   };
 
   input.addEventListener("input", () => search(true, true));
@@ -708,7 +716,7 @@ async function bootExtInfo() {
   note(ext.description || "");
   note(ext.popup ? `Popup: ${ext.popup}` : "No toolbar popup");
   if (ext.permissions && ext.permissions.length) {
-    note(`Permissions: ${ext.permissions.slice(0, 8).join(", ")}`);
+    note(`${t("Permissions")}: ${ext.permissions.slice(0, 8).join(", ")}`);
   }
 
   const divider = () =>
