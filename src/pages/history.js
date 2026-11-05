@@ -133,23 +133,11 @@ function rowFor(visit, repaint) {
   remove.className = "remove";
   remove.textContent = "✕";
   remove.title = t("Remove");
-  remove.addEventListener("click", async (event) => {
-    // Without this the row's click handler would also navigate away.
-    event.stopPropagation();
-    event.preventDefault();
 
-    tombstones.add(keyOf(visit));
-    visits = visits.filter((item) => keyOf(item) !== keyOf(visit));
-    selection.delete(keyOf(visit));
-    paintSites();
-    repaint();
 
-    const removed = await invoke("history_remove", { entries: [[visit.url, visit.at]] }).catch(
-      (error) => "error: " + String(error),
-    );
-    await invoke("ui_log", { message: "history remove -> " + String(removed) }).catch(() => {});
-  });
-
+  row.dataset.url = visit.url;
+  row.dataset.at = String(visit.at);
+  remove.dataset.action = "remove";
   row.append(box, iconFor(visit), time, title, host, remove);
   // A single click opens the entry, like the address list in a desktop browser.
   row.addEventListener("click", (event) => {
@@ -304,6 +292,34 @@ async function boot() {
     list.append(groupRows(rows, paint));
   };
 
+  list.addEventListener("click", async (event) => {
+    const button = event.target.closest("[data-action='remove']");
+    if (!button) return;
+    event.stopPropagation();
+    event.preventDefault();
+
+    const row = button.closest(".entry");
+    if (!row) return;
+    const key = (row.dataset.url || "") + "|" + (row.dataset.at || "0");
+
+    // Same path as the checkbox: select the row, then run the bulk delete.
+    selection.add(key);
+    tombstones.add(key);
+
+    const entries = [...selection].map((item) => {
+      const [url, at] = item.split("|");
+      return [url, Number(at)];
+    });
+    const removed = await invoke("history_remove", { entries }).catch((error) => "error: " + String(error));
+
+    selection.delete(key);
+    visits = visits.filter((item) => keyOf(item) !== key);
+    paintSites();
+    paint();
+  });
+
+
+
   search.addEventListener("input", paint);
 
   selectAll.addEventListener("click", () => {
@@ -350,6 +366,8 @@ async function boot() {
   };
 
   await reload();
+
+
 
 
 
