@@ -74,6 +74,7 @@ fn main() {
         "download_list",
         "download_open_dir",
         "shortcut",
+        "overlay_open_at",
         "page_fullscreen",
         "clipboard_read",
         "clipboard_write",

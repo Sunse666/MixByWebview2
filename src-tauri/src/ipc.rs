@@ -157,6 +157,7 @@ pub struct SettingsPatch {
     pub baidu_appid: Option<String>,
     pub baidu_secret: Option<String>,
     pub translate_to: Option<String>,
+    pub menu_bar: Option<bool>,
     pub language: Option<String>,
     pub hidden_extensions: Option<Vec<String>>,
     pub start_url: Option<String>,
@@ -223,12 +224,17 @@ pub fn focused_window(app: &AppHandle) -> Option<tauri::Window> {
         .or_else(|| app.get_window("w1"))
 }
 
+/// The menu bar sits between the tab strip and the address field.
+pub const MENU_BAR_HEIGHT: f64 = 26.0;
+
 /// Height of the chrome strip: the base plus the optional bookmarks row.
 pub fn chrome_height(app: &AppHandle) -> f64 {
     match app.try_state::<AppState>() {
         Some(state) => {
             let settings = state.settings.read();
-            settings.chrome_height + if settings.show_bookmarks { 30.0 } else { 0.0 }
+            settings.chrome_height
+        + if settings.show_bookmarks { 30.0 } else { 0.0 }
+        + if settings.menu_bar { MENU_BAR_HEIGHT } else { 0.0 }
         }
         None => crate::window::CHROME_H,
     }
@@ -1142,6 +1148,9 @@ pub async fn settings_set(
         if let Some(value) = patch.baidu_secret {
             guard.baidu_secret = value.trim().to_string();
         }
+        if let Some(value) = patch.menu_bar {
+            guard.menu_bar = value;
+        }
         if let Some(value) = patch.language {
             guard.language = match value.as_str() {
                 "zh" => "zh".to_string(),
@@ -1795,6 +1804,24 @@ pub async fn tab_scroll(
             tab.scroll = y.max(0.0);
         }
     }
+    Ok(())
+}
+
+/// Opens an overlay at a point the caller measured, used by the menu bar.
+#[tauri::command]
+pub async fn overlay_open_at(
+    app: AppHandle,
+    window: tauri::Window,
+    kind: String,
+    x: f64,
+    y: f64,
+) -> Result<(), AppError> {
+    let (menu_w, menu_h) = if kind.contains("group=file") || kind.contains("group=tools") {
+        (240.0, 330.0)
+    } else {
+        (240.0, 260.0)
+    };
+    let _ = crate::overlay::open_at(&app, &window, &kind, x, y, menu_w, menu_h);
     Ok(())
 }
 

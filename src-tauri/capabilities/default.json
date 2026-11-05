@@ -70,6 +70,7 @@
     "allow-download-list",
     "allow-download-open-dir",
     "allow-shortcut",
+    "allow-overlay-open-at",
     "allow-page-fullscreen",
     "allow-clipboard-read",
     "allow-clipboard-write",

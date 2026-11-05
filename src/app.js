@@ -170,6 +170,39 @@ async function toggleTranslate() {
   renderToolbar(currentExtensions);
 }
 
+// Top level menus; each opens its own dropdown in an overlay window because the
+// strip is too short to hold a popup.
+const MENU_BAR = [
+  { id: "file", label: "File" },
+  { id: "edit", label: "Edit" },
+  { id: "view", label: "View" },
+  { id: "history", label: "History" },
+  { id: "bookmarks", label: "Bookmarks" },
+  { id: "tools", label: "Tools" },
+  { id: "help", label: "Help" },
+];
+
+function renderMenuBar() {
+  const bar = document.getElementById("menubar");
+  if (!bar) return;
+  bar.hidden = !(settings.menu_bar !== false);
+  bar.replaceChildren(
+    ...MENU_BAR.map((entry) => {
+      const button = document.createElement("button");
+      button.textContent = t(entry.label);
+      button.addEventListener("click", () => {
+        const box = button.getBoundingClientRect();
+        invoke("overlay_open_at", {
+          kind: `menubar_menu&group=${entry.id}`,
+          x: Math.round(box.left),
+          y: Math.round(box.bottom + 2),
+        }).catch(() => {});
+      });
+      return button;
+    }),
+  );
+}
+
 const TOOLBAR_ITEMS = {
   translate: { glyph: "\u6587", label: "Translate this page", where: "inside", run: () => toggleTranslate() },
   zoom: { glyph: "\u2315", label: "Zoom", where: "inside", run: () => invoke("overlay_toggle", { kind: "zoom" }) },
@@ -496,6 +529,7 @@ async function boot() {
   applyTheme(await invoke("theme_get"));
   settings = await invoke("settings_get");
   setLanguage(settings.language || "en");
+  renderMenuBar();
 
   // Listeners first: the backend may emit while this page is still starting.
   await listen("tabs:changed", (event) => {
@@ -515,6 +549,7 @@ async function boot() {
   await listen("ext:changed", async () => renderToolbar(await invoke("ext_list")));
   await listen("settings:changed", async () => {
     settings = await invoke("settings_get");
+    renderMenuBar();
     renderBookmarks(await invoke("bookmark_list"));
     renderToolbar(await invoke("ext_list"));
 

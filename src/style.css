@@ -429,3 +429,29 @@ button {
 }
 
 .toast[hidden] { display: none; }
+
+.menubar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 26px;
+  padding: 0 6px;
+  border-bottom: 1px solid var(--border);
+}
+
+.menubar button {
+  height: 22px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: calc(var(--font-size) - 2px);
+  opacity: 0.85;
+}
+
+.menubar button:hover, .menubar button[aria-expanded="true"] {
+  background: var(--hover);
+  opacity: 1;
+}
