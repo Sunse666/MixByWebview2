@@ -58,6 +58,7 @@
     "allow-tab-reopen",
     "allow-window-new",
     "allow-history-list",
+    "allow-history-remove",
     "allow-history-clear",
     "allow-bookmark-list",
     "allow-bookmark-toggle",

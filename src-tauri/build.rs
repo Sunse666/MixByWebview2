@@ -62,6 +62,7 @@ fn main() {
         "tab_reopen",
         "window_new",
         "history_list",
+        "history_remove",
         "history_clear",
         "bookmark_list",
         "bookmark_toggle",

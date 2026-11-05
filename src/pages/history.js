@@ -4,23 +4,37 @@ const { invoke } = window.__TAURI__.core;
 
 const nav = document.getElementById("nav");
 const main = document.getElementById("main");
-let language = "en";
 
-function navItem(glyph, label, active) {
+const PAGES = {
+  bookmarks: "http://tauri.localhost/pages/bookmarks.html",
+  extensions: "http://tauri.localhost/pages/extensions.html",
+  settings: "http://tauri.localhost/pages/settings.html",
+};
+
+let visits = [];
+const selection = new Set();
+
+function keyOf(visit) {
+  return visit.url + "|" + visit.at;
+}
+
+function navItem(glyph, label, active, page) {
   const item = document.createElement("div");
   item.className = "nav-item" + (active ? " active" : "");
-  item.innerHTML = `<span>${glyph}</span><span></span>`;
-  item.lastElementChild.textContent = t(label);
+  const icon = document.createElement("span");
+  icon.textContent = glyph;
+  const text = document.createElement("span");
+  text.textContent = t(label);
+  item.append(icon, text);
+  if (page) item.addEventListener("click", () => invoke("tab_navigate", { url: page }).catch(() => {}));
   nav.append(item);
-  return item;
 }
 
 function dayLabel(at) {
   const date = new Date(at * 1000);
-  const today = new Date();
-  const sameDay = date.toDateString() === today.toDateString();
-  if (sameDay) return t("Today") + " - " + date.toLocaleDateString();
-  return date.toLocaleDateString();
+  return date.toDateString() === new Date().toDateString()
+    ? t("Today") + " - " + date.toLocaleDateString()
+    : date.toLocaleDateString();
 }
 
 function hostOf(url) {
@@ -31,8 +45,90 @@ function hostOf(url) {
   }
 }
 
-function render(visits, filter) {
-  main.replaceChildren();
+function matches(visit, needle) {
+  return (
+    !needle ||
+    visit.url.toLowerCase().includes(needle) ||
+    (visit.title || "").toLowerCase().includes(needle)
+  );
+}
+
+function rowFor(visit, repaint) {
+  const row = document.createElement("div");
+  row.className = "entry";
+
+  const box = document.createElement("input");
+  box.type = "checkbox";
+  box.className = "pick";
+  box.checked = selection.has(keyOf(visit));
+  box.addEventListener("change", () => {
+    if (box.checked) selection.add(keyOf(visit));
+    else selection.delete(keyOf(visit));
+    repaint();
+  });
+
+  const time = document.createElement("span");
+  time.className = "time";
+  time.textContent = new Date(visit.at * 1000).toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
+  const title = document.createElement("span");
+  title.className = "title";
+  title.textContent = visit.title || visit.url;
+
+  const host = document.createElement("span");
+  host.className = "host";
+  host.textContent = hostOf(visit.url);
+
+  const remove = document.createElement("button");
+  remove.className = "remove";
+  remove.textContent = "✕";
+  remove.title = t("Remove");
+  remove.addEventListener("click", async () => {
+    await invoke("history_remove", { entries: [[visit.url, visit.at]] }).catch(() => {});
+    visits = visits.filter((item) => keyOf(item) !== keyOf(visit));
+    selection.delete(keyOf(visit));
+    repaint();
+  });
+
+  row.append(box, time, title, host, remove);
+  row.addEventListener("dblclick", () => invoke("tab_new", { url: visit.url }).catch(() => {}));
+  return row;
+}
+
+function groupRows(rows, repaint) {
+  const holder = document.createElement("div");
+  let current = null;
+  let bucket = null;
+
+  for (const visit of rows) {
+    const label = dayLabel(visit.at);
+    if (label !== current) {
+      current = label;
+      const day = document.createElement("div");
+      day.className = "day";
+      const head = document.createElement("h3");
+      head.textContent = label;
+      bucket = document.createElement("div");
+      day.append(head, bucket);
+      holder.append(day);
+    }
+    bucket.append(rowFor(visit, repaint));
+  }
+
+  return holder;
+}
+
+async function boot() {
+  const settings = await invoke("settings_get").catch(() => null);
+  setLanguage((settings && settings.language) || "en");
+
+  navItem("⟲", "History", true, null);
+  navItem("☆", "Bookmarks", false, PAGES.bookmarks);
+  navItem("⧉", "Extensions", false, PAGES.extensions);
+  navItem("⚙", "Settings", false, PAGES.settings);
 
   const head = document.createElement("h2");
   head.textContent = t("History");
@@ -42,99 +138,82 @@ function render(visits, filter) {
   bar.className = "toolbar";
   const search = document.createElement("input");
   search.placeholder = t("Search history");
-  search.value = filter || "";
-  const clear = document.createElement("button");
-  clear.className = "button";
-  clear.textContent = t("Clear browsing data");
-  bar.append(search, clear);
-  main.append(bar);
+  const clearAll = document.createElement("button");
+  clearAll.className = "button";
+  clearAll.textContent = t("Clear browsing data");
+  bar.append(search, clearAll);
 
-  search.addEventListener("input", () => paint(visits, search.value));
-  clear.addEventListener("click", async () => {
-    await invoke("history_clear").catch(() => {});
-    paint([], "");
-  });
+  const actions = document.createElement("div");
+  actions.className = "toolbar";
+  actions.style.marginTop = "-6px";
+  const selectAll = document.createElement("button");
+  selectAll.className = "button";
+  selectAll.textContent = t("Select all");
+  const removeSelected = document.createElement("button");
+  removeSelected.className = "button";
+  removeSelected.disabled = true;
+  removeSelected.textContent = t("Delete selected");
+  actions.append(selectAll, removeSelected);
 
   const list = document.createElement("div");
-  list.id = "list";
-  main.append(list);
-  paint(visits, filter || "");
-}
+  main.append(bar, actions, list);
 
-function paint(all, filter) {
-  const list = document.getElementById("list");
-  if (!list) return;
-  list.replaceChildren();
+  const visible = () => {
+    const needle = search.value.trim().toLowerCase();
+    return visits.filter((visit) => matches(visit, needle));
+  };
 
-  const needle = filter.trim().toLowerCase();
-  const rows = all.filter(
-    (visit) =>
-      !needle ||
-      visit.url.toLowerCase().includes(needle) ||
-      (visit.title || "").toLowerCase().includes(needle),
-  );
+  const paint = () => {
+    list.replaceChildren();
+    removeSelected.disabled = selection.size === 0;
+    removeSelected.textContent =
+      selection.size > 0
+        ? t("Delete selected") + " (" + selection.size + ")"
+        : t("Delete selected");
 
-  if (!rows.length) {
-    const empty = document.createElement("div");
-    empty.className = "empty";
-    empty.textContent = t("Nothing recorded yet.");
-    list.append(empty);
-    return;
-  }
-
-  let current = null;
-  let bucket = null;
-  for (const visit of rows) {
-    const label = dayLabel(visit.at);
-    if (label !== current) {
-      current = label;
-      const day = document.createElement("div");
-      day.className = "day";
-      const title = document.createElement("h3");
-      title.textContent = label;
-      bucket = document.createElement("div");
-      day.append(title, bucket);
-      list.append(day);
+    const rows = visible();
+    if (!rows.length) {
+      const empty = document.createElement("div");
+      empty.className = "empty";
+      empty.textContent = t("Nothing recorded yet.");
+      list.append(empty);
+      return;
     }
+    list.append(groupRows(rows, paint));
+  };
 
-    const row = document.createElement("div");
-    row.className = "entry";
-    const time = document.createElement("span");
-    time.className = "time";
-    time.textContent = new Date(visit.at * 1000).toLocaleTimeString([], {
-      hour: "2-digit",
-      minute: "2-digit",
+  search.addEventListener("input", paint);
+
+  selectAll.addEventListener("click", () => {
+    const rows = visible();
+    const allSelected = rows.length > 0 && rows.every((visit) => selection.has(keyOf(visit)));
+    for (const visit of rows) {
+      if (allSelected) selection.delete(keyOf(visit));
+      else selection.add(keyOf(visit));
+    }
+    paint();
+  });
+
+  removeSelected.addEventListener("click", async () => {
+    const entries = [...selection].map((item) => {
+      const [url, at] = item.split("|");
+      return [url, Number(at)];
     });
-    const title = document.createElement("span");
-    title.className = "title";
-    title.textContent = visit.title || visit.url;
-    const host = document.createElement("span");
-    host.className = "host";
-    host.textContent = hostOf(visit.url);
-    const remove = document.createElement("button");
-    remove.className = "remove";
-    remove.textContent = "✕";
-    remove.title = t("Remove");
-    remove.addEventListener("click", () => row.remove());
+    await invoke("history_remove", { entries }).catch(() => {});
+    visits = visits.filter((visit) => !selection.has(keyOf(visit)));
+    selection.clear();
+    paint();
+  });
 
-    row.append(time, title, host, remove);
-    row.addEventListener("dblclick", () => invoke("tab_new", { url: visit.url }).catch(() => {}));
-    bucket.append(row);
-  }
-}
+  clearAll.addEventListener("click", async () => {
+    await invoke("history_clear").catch(() => {});
+    visits = [];
+    selection.clear();
+    paint();
+  });
 
-async function boot() {
-  const settings = await invoke("settings_get").catch(() => null);
-  language = (settings && settings.language) || "en";
-  setLanguage(language);
-
-  navItem("⟲", "History", true);
-  navItem("☆", "Bookmarks", false);
-  navItem("⧉", "Extensions", false);
-  navItem("⚙", "Settings", false);
-
-  const visits = await invoke("history_list", { limit: 500 }).catch(() => []);
-  render(visits || [], "");
+  visits = (await invoke("history_list", { limit: 500 }).catch(() => [])) || [];
+  paint();
 }
 
 boot();

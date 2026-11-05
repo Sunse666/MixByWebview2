@@ -39,7 +39,9 @@ struct Manifest {
 
 /// Unpack every crx in the drop folder. Unpacked copies are a cache: they are
 /// rebuilt whenever the source file is newer.
-pub fn scan(dirs: &AppDirs) -> Vec<ExtInfo> {
+/// Disabled extensions are neither copied nor reported: WebView2 only loads what
+/// sits in the extensions folder, so removing the copy is what turns one off.
+pub fn scan(dirs: &AppDirs, disabled: &[String]) -> Vec<ExtInfo> {
     let Ok(entries) = std::fs::read_dir(&dirs.crx) else {
         return Vec::new();
     };
@@ -67,6 +69,11 @@ pub fn scan(dirs: &AppDirs) -> Vec<ExtInfo> {
             .unwrap_or("extension")
             .to_string();
         let target = dirs.extensions.join(slug(&label));
+        if disabled.iter().any(|name| name == &label || name == &slug(&label)) {
+            crate::logging::info(&format!("extension {label}: disabled, skipped"));
+            let _ = std::fs::remove_dir_all(&target);
+            continue;
+        }
         // A name that slugifies to nothing must never resolve to the shared root.
         if target == dirs.extensions {
             crate::logging::warn(&format!("extension {label}: unusable file name, skipped"));

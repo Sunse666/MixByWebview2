@@ -160,6 +160,7 @@ pub struct SettingsPatch {
     pub menu_bar: Option<bool>,
     pub language: Option<String>,
     pub hidden_extensions: Option<Vec<String>>,
+    pub disabled_extensions: Option<Vec<String>>,
     pub start_url: Option<String>,
     pub max_live_tabs: Option<usize>,
 }
@@ -1173,6 +1174,9 @@ pub async fn settings_set(
         if let Some(value) = patch.hidden_extensions {
             guard.hidden_extensions = value;
         }
+        if let Some(value) = patch.disabled_extensions {
+            guard.disabled_extensions = value;
+        }
         if let Some(value) = patch.start_url {
             if !value.trim().is_empty() {
                 guard.start_url = value;
@@ -1475,6 +1479,26 @@ pub async fn history_list(_window: tauri::Window, state: State<'_, AppState>, li
     let visits = state.history.read().unwrap_or_else(|e| e.into_inner());
     let take = limit.unwrap_or(500).min(visits.len());
     Ok(visits.iter().take(take).cloned().collect())
+}
+
+/// Removes the rows the history page has selected. The key is url + timestamp,
+/// because the same page can be visited many times.
+#[tauri::command]
+pub async fn history_remove(
+    _window: tauri::Window,
+    state: State<'_, AppState>,
+    entries: Vec<(String, u64)>,
+) -> Result<usize, AppError> {
+    let removed = {
+        let mut visits = state.history.write().unwrap_or_else(|e| e.into_inner());
+        let before = visits.len();
+        visits.retain(|visit| !entries.iter().any(|(url, at)| visit.url == *url && visit.at == *at));
+        before - visits.len()
+    };
+    let snapshot = state.history.read().unwrap_or_else(|e| e.into_inner()).clone();
+    crate::library::save_visits(&state.dirs.history_file, &snapshot)?;
+    crate::logging::info(&format!("history: removed {removed} entries"));
+    Ok(removed)
 }
 
 #[tauri::command]

@@ -26,7 +26,7 @@ mod window;
 
 use tauri::Manager;
 
-// embed bump 25
+// embed bump 28
 fn main() {
     let dirs = paths::AppDirs::resolve().ensure();
     logging::init(&dirs.logs);
@@ -51,7 +51,8 @@ fn main() {
         .setup(move |app| {
             let settings = state::Settings::load(&dirs.settings_file);
             let theme = theme::Theme::load(&dirs.theme_file);
-            let ext_infos = extensions::scan(&dirs);
+            let disabled_extensions = crate::state::Settings::load(&dirs.settings_file).disabled_extensions;
+    let ext_infos = extensions::scan(&dirs, &disabled_extensions);
             let scripts = userscripts::scan(&dirs.scripts);
             app.manage(ipc::AppState::new(
                 dirs.clone(),
@@ -113,6 +114,7 @@ fn main() {
             ipc::tab_reopen,
             ipc::window_new,
             ipc::history_list,
+            ipc::history_remove,
             ipc::history_clear,
             ipc::bookmark_list,
             ipc::bookmark_toggle,

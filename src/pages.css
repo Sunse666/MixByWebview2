@@ -230,3 +230,10 @@ main h2 {
   color: var(--dim);
   text-align: center;
 }
+
+.entry .pick {
+  flex: 0 0 auto;
+  width: 15px;
+  height: 15px;
+  accent-color: var(--accent);
+}

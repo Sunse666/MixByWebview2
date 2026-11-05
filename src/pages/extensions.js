@@ -45,10 +45,14 @@ async function boot() {
   }
 
   const hidden = new Set(settings.hidden_extensions || []);
+  let disabledNow = [...(settings.disabled_extensions || [])];
 
   for (const ext of loaded) {
     const card = document.createElement("div");
     card.className = "card";
+    const note2 = document.createElement("div");
+    note2.className = "card-note";
+    note2.textContent = t("Restart to apply");
 
     const top = document.createElement("div");
     top.className = "card-head";
@@ -94,19 +98,34 @@ async function boot() {
     spacer.className = "spacer";
     actions.append(spacer);
 
+    const bar = document.createElement("button");
+    bar.className = "button";
+    const syncBar = () => {
+      bar.textContent = hidden.has(ext.name) ? t("Show in the toolbar") : t("Hide from the toolbar");
+    };
+    syncBar();
+    bar.addEventListener("click", async () => {
+      if (hidden.has(ext.name)) hidden.delete(ext.name);
+      else hidden.add(ext.name);
+      syncBar();
+      await invoke("settings_set", { patch: { hidden_extensions: [...hidden] } }).catch(() => {});
+    });
+    actions.append(bar);
+
     const toggle = document.createElement("button");
     toggle.className = "switch";
     toggle.setAttribute("role", "switch");
-    toggle.setAttribute("aria-checked", String(!hidden.has(ext.name)));
-    toggle.title = t("Show in the toolbar");
+    toggle.setAttribute("aria-checked", "true");
+    toggle.title = t("Enabled");
     toggle.addEventListener("click", async () => {
-      const on = toggle.getAttribute("aria-checked") !== "true";
-      toggle.setAttribute("aria-checked", String(on));
-      if (on) hidden.delete(ext.name);
-      else hidden.add(ext.name);
-      await invoke("settings_set", {
-        patch: { hidden_extensions: [...hidden] },
-      }).catch(() => {});
+      const on = toggle.getAttribute("aria-checked") === "true";
+      toggle.setAttribute("aria-checked", String(!on));
+      const disabled = new Set(disabledNow);
+      if (on) disabled.add(ext.source || ext.name);
+      else disabled.delete(ext.source || ext.name);
+      disabledNow = [...disabled];
+      await invoke("settings_set", { patch: { disabled_extensions: [...disabled] } }).catch(() => {});
+      card.append(note2);
     });
     actions.append(toggle);
 
