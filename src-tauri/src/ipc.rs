@@ -166,6 +166,9 @@ pub struct SettingsPatch {
     pub custom_search: Option<String>,
     pub gestures: Option<bool>,
     pub super_drag: Option<bool>,
+    pub drag_hint: Option<bool>,
+    pub drag_threshold: Option<u32>,
+    pub drag_map: Option<std::collections::BTreeMap<String, String>>,
     pub gesture_trail: Option<bool>,
     pub gesture_color: Option<String>,
     pub gesture_width: Option<u32>,
@@ -1552,6 +1555,15 @@ pub async fn settings_set(
         }
         if let Some(value) = patch.baidu_secret {
             guard.baidu_secret = value.trim().to_string();
+        }
+        if let Some(value) = patch.drag_hint {
+            guard.drag_hint = value;
+        }
+        if let Some(value) = patch.drag_threshold {
+            guard.drag_threshold = value.clamp(8, 120);
+        }
+        if let Some(value) = patch.drag_map {
+            guard.drag_map = value;
         }
         if let Some(value) = patch.super_drag {
             guard.super_drag = value;

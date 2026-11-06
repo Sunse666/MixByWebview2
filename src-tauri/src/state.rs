@@ -29,6 +29,12 @@ pub struct Settings {
     pub gestures: bool,
     /// Drag a link, image or text to act on it.
     pub super_drag: bool,
+    /// Show the little badge while dragging.
+    pub drag_hint: bool,
+    /// Pixels before a drag counts.
+    pub drag_threshold: u32,
+    /// Direction -> action, e.g. "L" -> "open", "U" -> "copy".
+    pub drag_map: std::collections::BTreeMap<String, String>,
     /// Draw the trail line while a gesture is in progress.
     pub gesture_trail: bool,
     /// Trail colour, any css colour.
@@ -96,6 +102,9 @@ impl Default for Settings {
             translate_to: "zh".into(),
             gestures: true,
             super_drag: true,
+            drag_hint: true,
+            drag_threshold: 28,
+            drag_map: std::collections::BTreeMap::new(),
             gesture_trail: true,
             gesture_color: "#4c8dff".into(),
             gesture_width: 3,

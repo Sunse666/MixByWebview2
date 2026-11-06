@@ -29,7 +29,7 @@ mod window;
 
 use tauri::Manager;
 
-// embed bump 82
+// embed bump 83
 fn main() {
     let dirs = paths::AppDirs::resolve().ensure();
     logging::init(&dirs.logs);
@@ -90,6 +90,20 @@ fn main() {
                 crate::tabs::set_gestures(crate::tabs::GestureSetup {
                     enabled: settings.gestures,
                     super_drag: settings.super_drag,
+                    drag_js: {
+                        let map: std::collections::BTreeMap<String, String> =
+                            if settings.drag_map.is_empty() {
+                                crate::tabs::default_drag()
+                            } else {
+                                settings.drag_map.clone()
+                            };
+                        let drag = serde_json::json!({
+                            "hint": settings.drag_hint,
+                            "threshold": settings.drag_threshold,
+                            "map": map,
+                        });
+                        serde_json::to_string(&drag).unwrap_or_else(|_| "{}".to_string())
+                    },
                     js: serde_json::to_string(&config).unwrap_or_else(|_| "{}".to_string()),
                 });
             }

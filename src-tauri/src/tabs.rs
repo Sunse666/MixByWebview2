@@ -26,6 +26,8 @@ pub struct GestureSetup {
     pub enabled: bool,
     pub super_drag: bool,
     pub js: String,
+    /// Serialised drag hint, threshold and direction map.
+    pub drag_js: String,
 }
 
 pub fn set_gestures(setup: GestureSetup) {
@@ -59,8 +61,8 @@ fn shortcut_prefix() -> String {
     let json = serde_json::to_string(map).unwrap_or_else(|_| "{}".to_string());
     let gestures = GESTURES.get().cloned().unwrap_or_default();
     format!(
-        "window.__mixShortcuts = {json};\nwindow.__mixGestures = {};\nwindow.__mixGestureConfig = {};\nwindow.__mixSuperDrag = {};\n",
-        gestures.enabled, gestures.js, gestures.super_drag
+        "window.__mixShortcuts = {json};\nwindow.__mixGestures = {};\nwindow.__mixGestureConfig = {};\nwindow.__mixSuperDrag = {};\nwindow.__mixDragConfig = {};\n",
+        gestures.enabled, gestures.js, gestures.super_drag, gestures.drag_js
     )
 }
 /// The mapping used until the user edits it.
@@ -83,6 +85,19 @@ pub fn default_gestures() -> std::collections::BTreeMap<String, String> {
     .map(|(pattern, action)| (pattern.to_string(), action.to_string()))
     .collect()
 }
+/// Default drag directions: left opens, up copies, right searches.
+pub fn default_drag() -> std::collections::BTreeMap<String, String> {
+    [
+        ("L", "open"),
+        ("R", "search"),
+        ("U", "copy"),
+        ("D", "save"),
+    ]
+    .iter()
+    .map(|(dir, action)| (dir.to_string(), action.to_string()))
+    .collect()
+}
+
 const SHORTCUT_FORWARDER: &str = r#"
   // Clicking anywhere in the page closes an open overlay (menu or context menu).
   let __mixDismiss = false;
@@ -609,7 +624,10 @@ const SHORTCUT_FORWARDER: &str = r#"
   window.__mixSuperDragEngine = true;
   if (window.__mixSuperDrag === false) return;
 
-  var STEP = 28;
+  var cfg = window.__mixDragConfig || {};
+  var STEP = cfg.threshold || 28;
+  var HINT = cfg.hint !== false;
+  var MAP = cfg.map || { L: 'open', R: 'search', U: 'copy', D: 'save' };
   var pending = null;
   var badge = null;
 
@@ -671,10 +689,12 @@ const SHORTCUT_FORWARDER: &str = r#"
     if (!pending.moved) {
       if (Math.abs(dx) < STEP && Math.abs(dy) < STEP) return;
       pending.moved = true;
-      showBadge(pending.text ? '\uD83D\udd0d' : '\u2197');
+      if (HINT) showBadge(pending.text ? '\uD83D\udd0d' : '\u2197');
     }
-    badge.style.left = event.clientX + 12 + 'px';
-    badge.style.top = event.clientY + 12 + 'px';
+    if (badge) {
+      badge.style.left = event.clientX + 12 + 'px';
+      badge.style.top = event.clientY + 12 + 'px';
+    }
   }, true);
 
   window.addEventListener('mouseup', function (event) {
@@ -685,13 +705,31 @@ const SHORTCUT_FORWARDER: &str = r#"
     if (!item.moved) return;
     event.preventDefault();
     event.stopPropagation();
-    if (item.text) {
-      invoke('search_new_tab', { text: item.text });
+
+    var dx = event.clientX - item.x;
+    var dy = event.clientY - item.y;
+    var dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'R' : 'L') : dy > 0 ? 'D' : 'U';
+    var action = MAP[dir] || 'none';
+    if (action === 'none') return;
+
+    var text = item.text;
+    var url = item.url;
+    if (action === 'search') {
+      invoke('search_new_tab', { text: text || url || '' });
       return;
     }
-    if (item.url) {
-      invoke('tab_new', { url: item.url });
+    if (action === 'copy') {
+      var value = text || url || '';
+      if (value) invoke('clipboard_write', { text: value });
+      return;
     }
+    if (action === 'save') {
+      if (url) invoke('download_url', { url: url, fileName: null });
+      return;
+    }
+    // "open": links and images open, text searches.
+    if (url) invoke('tab_new', { url: url });
+    else if (text) invoke('search_new_tab', { text: text });
   }, true);
 
   window.addEventListener('blur', function () {
