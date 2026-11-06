@@ -666,7 +666,24 @@ const SHORTCUT_FORWARDER: &str = r#"
 
   function linkOf(node) {
     if (!node || !node.closest) return null;
-    return node.closest('a[href]');
+    // Many sites wrap cards in an <a> without href and navigate from JS.
+    var anchor = node.closest('a');
+    if (anchor) {
+      var href = anchor.href || anchor.getAttribute('data-href') || anchor.getAttribute('href') || '';
+      return { element: anchor, href: href };
+    }
+    var holder = node.closest('[data-href],[data-url],[data-link]');
+    if (holder) {
+      return {
+        element: holder,
+        href:
+          holder.getAttribute('data-href') ||
+          holder.getAttribute('data-url') ||
+          holder.getAttribute('data-link') ||
+          '',
+      };
+    }
+    return null;
   }
 
   function imageOf(node) {
@@ -696,7 +713,14 @@ const SHORTCUT_FORWARDER: &str = r#"
   function pickSource(target) {
     var link = linkOf(target);
     if (link) {
-      return { url: link.href, text: '', linkText: String(link.textContent || '').trim() };
+      var label = String(link.element.textContent || '').trim().slice(0, 300);
+      if (link.href) {
+        return { url: link.href, text: '', linkText: label };
+      }
+      // No address on the element: treat the label as the drag source.
+      if (label) {
+        return { url: '', text: label, linkText: label };
+      }
     }
     var image = imageOf(target);
     if (image) {
@@ -705,6 +729,28 @@ const SHORTCUT_FORWARDER: &str = r#"
     var selected = String(window.getSelection ? window.getSelection() : '').trim();
     if (selected) {
       return { url: '', text: selected, linkText: '' };
+    }
+
+    // Sites that build cards from divs offer no address, but they do look
+    // clickable; the visible text is still worth dragging.
+    var node = target;
+    for (var depth = 0; depth < 6 && node && node.nodeType === 1; depth += 1) {
+      var style = null;
+      try {
+        style = window.getComputedStyle(node);
+      } catch (error) {}
+      var looksClickable =
+        (style && style.cursor === 'pointer') ||
+        node.getAttribute('role') === 'link' ||
+        node.hasAttribute('tabindex') ||
+        node.hasAttribute('onclick');
+      if (looksClickable) {
+        var label = String(node.textContent || '').trim().slice(0, 120);
+        if (label) {
+          return { url: '', text: label, linkText: label };
+        }
+      }
+      node = node.parentElement;
     }
     return null;
   }
