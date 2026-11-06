@@ -165,6 +165,12 @@ pub struct SettingsPatch {
     pub shortcuts: Option<std::collections::BTreeMap<String, String>>,
     pub custom_search: Option<String>,
     pub gestures: Option<bool>,
+    pub gesture_trail: Option<bool>,
+    pub gesture_color: Option<String>,
+    pub gesture_width: Option<u32>,
+    pub gesture_threshold: Option<u32>,
+    pub gesture_map: Option<std::collections::BTreeMap<String, String>>,
+    pub gesture_blocked: Option<String>,
     pub tab_double_click_close: Option<bool>,
     pub tab_show_close: Option<bool>,
     pub tab_close_goes_left: Option<bool>,
@@ -1407,6 +1413,24 @@ pub async fn settings_set(
         }
         if let Some(value) = patch.baidu_secret {
             guard.baidu_secret = value.trim().to_string();
+        }
+        if let Some(value) = patch.gesture_trail {
+            guard.gesture_trail = value;
+        }
+        if let Some(value) = patch.gesture_color {
+            guard.gesture_color = value.trim().to_string();
+        }
+        if let Some(value) = patch.gesture_width {
+            guard.gesture_width = value.clamp(1, 10);
+        }
+        if let Some(value) = patch.gesture_threshold {
+            guard.gesture_threshold = value.clamp(10, 200);
+        }
+        if let Some(value) = patch.gesture_map {
+            guard.gesture_map = value;
+        }
+        if let Some(value) = patch.gesture_blocked {
+            guard.gesture_blocked = value.trim().to_string();
         }
         if let Some(value) = patch.gestures {
             guard.gestures = value;

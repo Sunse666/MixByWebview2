@@ -29,7 +29,7 @@ mod window;
 
 use tauri::Manager;
 
-// embed bump 77
+// embed bump 78
 fn main() {
     let dirs = paths::AppDirs::resolve().ensure();
     logging::init(&dirs.logs);
@@ -72,7 +72,26 @@ fn main() {
             let disabled_extensions = crate::state::Settings::load(&dirs.settings_file).disabled_extensions;
     let ext_infos = extensions::scan(&dirs, &disabled_extensions);
             let scripts = userscripts::scan(&dirs.scripts);
-            crate::tabs::set_gestures(crate::state::Settings::load(&dirs.settings_file).gestures);
+            {
+                let settings = crate::state::Settings::load(&dirs.settings_file);
+                let map: std::collections::BTreeMap<String, String> = if settings.gesture_map.is_empty() {
+                    crate::tabs::default_gestures()
+                } else {
+                    settings.gesture_map.clone()
+                };
+                let config = serde_json::json!({
+                    "trail": settings.gesture_trail,
+                    "color": settings.gesture_color,
+                    "width": settings.gesture_width,
+                    "threshold": settings.gesture_threshold,
+                    "map": map,
+                    "blocked": settings.gesture_blocked,
+                });
+                crate::tabs::set_gestures(crate::tabs::GestureSetup {
+                    enabled: settings.gestures,
+                    js: serde_json::to_string(&config).unwrap_or_else(|_| "{}".to_string()),
+                });
+            }
             crate::tabs::set_custom_css(
                 std::fs::read_to_string(dirs.user_data.join("custom.css"))
                     .unwrap_or_default()

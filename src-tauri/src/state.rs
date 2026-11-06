@@ -27,6 +27,18 @@ pub struct Settings {
     pub custom_search: String,
     /// Right button gestures such as L for back.
     pub gestures: bool,
+    /// Draw the trail line while a gesture is in progress.
+    pub gesture_trail: bool,
+    /// Trail colour, any css colour.
+    pub gesture_color: String,
+    /// Trail width in pixels.
+    pub gesture_width: u32,
+    /// Minimum movement before a direction counts, in pixels.
+    pub gesture_threshold: u32,
+    /// Pattern -> action, e.g. "UD" -> "reload".
+    pub gesture_map: std::collections::BTreeMap<String, String>,
+    /// Comma or space separated hosts where gestures are off.
+    pub gesture_blocked: String,
     /// Double click on a tab closes it.
     pub tab_double_click_close: bool,
     /// Show the close button on each tab.
@@ -81,6 +93,12 @@ impl Default for Settings {
             baidu_secret: String::new(),
             translate_to: "zh".into(),
             gestures: true,
+            gesture_trail: true,
+            gesture_color: "#4c8dff".into(),
+            gesture_width: 3,
+            gesture_threshold: 34,
+            gesture_map: std::collections::BTreeMap::new(),
+            gesture_blocked: String::new(),
             tab_double_click_close: true,
             tab_show_close: true,
             tab_close_goes_left: true,

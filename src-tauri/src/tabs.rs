@@ -18,10 +18,17 @@ pub fn set_shortcuts(map: std::collections::BTreeMap<String, String>) {
 }
 
 /// Right button gestures, on by default like every gesture browser.
-static GESTURES: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+static GESTURES: std::sync::OnceLock<GestureSetup> = std::sync::OnceLock::new();
 
-pub fn set_gestures(enabled: bool) {
-    let _ = GESTURES.set(enabled);
+/// Everything the injected engine needs, pre-serialised for the page.
+#[derive(Default, Clone)]
+pub struct GestureSetup {
+    pub enabled: bool,
+    pub js: String,
+}
+
+pub fn set_gestures(setup: GestureSetup) {
+    let _ = GESTURES.set(setup);
 }
 
 /// Contents of UserData/custom.css, applied to every page.
@@ -49,8 +56,31 @@ fn shortcut_prefix() -> String {
     let empty = std::collections::BTreeMap::new();
     let map = SHORTCUTS.get().unwrap_or(&empty);
     let json = serde_json::to_string(map).unwrap_or_else(|_| "{}".to_string());
-    let gestures = GESTURES.get().copied().unwrap_or(true);
-    format!("window.__mixShortcuts = {json};\nwindow.__mixGestures = {gestures};\n")
+    let gestures = GESTURES.get().cloned().unwrap_or_default();
+    format!(
+        "window.__mixShortcuts = {json};\nwindow.__mixGestures = {};\nwindow.__mixGestureConfig = {};\n",
+        gestures.enabled, gestures.js
+    )
+}
+/// The mapping used until the user edits it.
+pub fn default_gestures() -> std::collections::BTreeMap<String, String> {
+    [
+        ("L", "back"),
+        ("R", "forward"),
+        ("U", "scroll_top"),
+        ("D", "scroll_bottom"),
+        ("UD", "reload"),
+        ("DU", "reopen_tab"),
+        ("LR", "next_tab"),
+        ("RL", "prev_tab"),
+        ("UL", "bookmark"),
+        ("DR", "downloads"),
+        ("UR", "new_tab"),
+        ("DL", "close_tab"),
+    ]
+    .iter()
+    .map(|(pattern, action)| (pattern.to_string(), action.to_string()))
+    .collect()
 }
 const SHORTCUT_FORWARDER: &str = r#"
   // Clicking anywhere in the page closes an open overlay (menu or context menu).
@@ -474,19 +504,22 @@ const SHORTCUT_FORWARDER: &str = r#"
   if (window.__mixGestureEngine) return;
   window.__mixGestureEngine = true;
 
-  var MAP = {
-    L: "back",
-    R: "forward",
-    U: "reload",
-    D: "new_tab",
-    UD: "close_tab",
-    DU: "reopen_tab",
-    LR: "next_tab",
-    RL: "prev_tab",
-    UL: "bookmark",
-    DR: "downloads",
-  };
-  var STEP = 34;
+  var cfg = window.__mixGestureConfig || {};
+  var MAP = cfg.map || {};
+  var THRESHOLD = cfg.threshold || 34;
+  var COLOR = cfg.color || '#4c8dff';
+  var WIDTH = cfg.width || 3;
+  var TRAIL = cfg.trail !== false;
+  var BLOCKED = String(cfg.blocked || '')
+    .split(/[,\s]+/)
+    .filter(Boolean);
+  var host = location.hostname.replace(/^www\./, '').toLowerCase();
+  var disabled =
+    window.__mixGestures === false ||
+    BLOCKED.some(function (entry) {
+      var name = entry.replace(/^www\./, '').toLowerCase();
+      return host === name || host.endsWith('.' + name);
+    });
   var drawing = false;
   var dirs = [];
   var last = null;
@@ -502,8 +535,8 @@ const SHORTCUT_FORWARDER: &str = r#"
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
     context = canvas.getContext("2d");
-    context.strokeStyle = '#4c8dff';
-    context.lineWidth = 3;
+    context.strokeStyle = COLOR;
+    context.lineWidth = WIDTH;
     context.lineCap = "round";
     document.documentElement.appendChild(canvas);
   }
@@ -515,14 +548,14 @@ const SHORTCUT_FORWARDER: &str = r#"
   }
 
   window.addEventListener("mousedown", function (event) {
-    if (window.__mixGestures === false) return;
+    if (disabled) return;
     if (event.button !== 2) return;
     drawing = true;
     dirs = [];
     last = null;
     fromX = event.clientX;
     fromY = event.clientY;
-    trail();
+    if (TRAIL) trail();
     if (context) { context.beginPath(); context.moveTo(fromX, fromY); }
   }, true);
 
@@ -531,7 +564,7 @@ const SHORTCUT_FORWARDER: &str = r#"
     if (context) { context.lineTo(event.clientX, event.clientY); context.stroke(); }
     var dx = event.clientX - fromX;
     var dy = event.clientY - fromY;
-    if (Math.abs(dx) < STEP && Math.abs(dy) < STEP) return;
+    if (Math.abs(dx) < THRESHOLD && Math.abs(dy) < THRESHOLD) return;
     var dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? "R" : "L") : dy > 0 ? "D" : "U";
     if (dir !== last) { dirs.push(dir); last = dir; }
     fromX = event.clientX;
@@ -548,7 +581,17 @@ const SHORTCUT_FORWARDER: &str = r#"
     event.stopPropagation();
     window.__mixGesturePending = true;
     var action = MAP[pattern];
-    if (action) send(action);
+    if (!action || action === "none") return;
+    // Scrolling stays in the page: no round trip needed.
+    if (action === "scroll_top") {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+    if (action === "scroll_bottom") {
+      window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
+      return;
+    }
+    send(action);
   }, true);
 
   window.addEventListener("blur", function () { drawing = false; clearTrail(); });
