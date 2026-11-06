@@ -17,6 +17,26 @@ pub fn set_shortcuts(map: std::collections::BTreeMap<String, String>) {
     let _ = SHORTCUTS.set(map);
 }
 
+/// Contents of UserData/custom.css, applied to every page.
+static CUSTOM_CSS: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+
+pub fn set_custom_css(css: String) {
+    let _ = CUSTOM_CSS.set(css);
+}
+
+/// Wraps the user stylesheet so pages pick it up without a round trip.
+fn custom_css_script() -> String {
+    let css = CUSTOM_CSS.get().cloned().unwrap_or_default();
+    crate::logging::info(&format!("custom css bytes: {}", css.len()));
+    if css.trim().is_empty() {
+        return String::new();
+    }
+    let json = serde_json::to_string(&css).unwrap_or_else(|_| "\"\"".to_string());
+    format!(
+        "(function(){{var css={json};function put(){{var s=document.createElement('style');s.textContent=css;(document.head||document.documentElement).appendChild(s);}}if(document.head){{put();}}else{{document.addEventListener('DOMContentLoaded',put);}}}})();\n"
+    )
+}
+
 /// Small script that hands the overrides to the forwarder below.
 fn shortcut_prefix() -> String {
     let empty = std::collections::BTreeMap::new();
@@ -566,6 +586,7 @@ pub fn create(
             let _ = app.emit_to(owner.clone(), "ui:open-url", url.to_string());
             tauri::webview::NewWindowResponse::Deny
         })
+        .initialization_script(&custom_css_script())
         .initialization_script(&shortcut_prefix())
         .initialization_script(SHORTCUT_FORWARDER)
         // Remember what we are loading, so a failed load can say which url died.

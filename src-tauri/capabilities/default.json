@@ -25,6 +25,7 @@
     "allow-theme-revert",
     "allow-overlay-open",
     "allow-overlay-close",
+    "allow-custom-css-open",
     "allow-open-dir",
     "allow-ext-list",
     "allow-script-set-enabled",

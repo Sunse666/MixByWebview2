@@ -219,8 +219,14 @@ function looksLikeAddress(text) {
 function addressFor(text) {
   const direct = looksLikeAddress(text);
   if (direct) return direct;
+  const query = (text || "").trim();
+  // A template with %s wins, so any engine can be added without new code.
+  const template = (settings.custom_search || "").trim();
+  if (template.includes("%s")) {
+    return template.replace("%s", encodeURIComponent(query));
+  }
   const base = SEARCH_ENGINES[settings.search_engine] || SEARCH_ENGINES.baidu;
-  return base + encodeURIComponent((text || "").trim());
+  return base + encodeURIComponent(query);
 }
 
 // Command palette: one search box over actions, history and bookmarks.

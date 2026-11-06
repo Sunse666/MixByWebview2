@@ -163,6 +163,7 @@ pub struct SettingsPatch {
     pub new_tab_page: Option<bool>,
     pub search_engine: Option<String>,
     pub shortcuts: Option<std::collections::BTreeMap<String, String>>,
+    pub custom_search: Option<String>,
     pub newtab_show_search: Option<bool>,
     pub newtab_show_sites: Option<bool>,
     pub newtab_url: Option<String>,
@@ -1391,6 +1392,9 @@ pub async fn settings_set(
         }
         if let Some(value) = patch.baidu_secret {
             guard.baidu_secret = value.trim().to_string();
+        }
+        if let Some(value) = patch.custom_search {
+            guard.custom_search = value.trim().to_string();
         }
         if let Some(value) = patch.newtab_show_search {
             guard.newtab_show_search = value;
@@ -2918,6 +2922,17 @@ pub async fn overlay_close(app: AppHandle, window: tauri::Window) -> Result<(), 
 
 
 
+/// Creates the user stylesheet if missing, then reveals the folder.
+#[tauri::command]
+pub async fn custom_css_open(_window: tauri::Window, state: State<'_, AppState>) -> Result<String, AppError> {
+    let path = state.dirs.user_data.join("custom.css");
+    if !path.exists() {
+        let starter = "/* Styles here are applied to every page. */\n\n/*\n.example {\n  outline: 1px solid #4c8dff;\n}\n*/\n";
+        std::fs::write(&path, starter).map_err(|err| AppError::new("css", err.to_string()))?;
+    }
+    reveal_path(&path)?;
+    Ok(path.display().to_string())
+}
 #[tauri::command]
 pub async fn open_dir(_window: tauri::Window, state: State<'_, AppState>, which: String) -> Result<(), AppError> {
     let dirs = &state.dirs;

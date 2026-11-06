@@ -23,6 +23,8 @@ pub struct Settings {
     pub baidu_appid: String,
     pub baidu_secret: String,
     pub translate_to: String,
+    /// A search template with %s; wins over search_engine when set.
+    pub custom_search: String,
     /// New tab page: show the search field.
     pub newtab_show_search: bool,
     /// New tab page: show the frequent site tiles.
@@ -70,6 +72,7 @@ impl Default for Settings {
             baidu_appid: String::new(),
             baidu_secret: String::new(),
             translate_to: "zh".into(),
+            custom_search: String::new(),
             newtab_show_search: true,
             newtab_show_sites: true,
             newtab_url: String::new(),

@@ -29,6 +29,7 @@ fn main() {
         "theme_revert",
         "overlay_open",
         "overlay_close",
+        "custom_css_open",
         "open_dir",
         "ext_list",
         "script_set_enabled",

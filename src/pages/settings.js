@@ -221,6 +221,39 @@ async function boot() {
   });
   card.append(row("Search engine", "Used when the address bar is not a url", engine));
 
+  const customSearch = document.createElement("input");
+  customSearch.className = "hex";
+  customSearch.style.width = "320px";
+  customSearch.placeholder = "https://example.com/search?q=%s";
+  customSearch.value = settings.custom_search || "";
+  customSearch.addEventListener("change", async () => {
+    await invoke("settings_set", { patch: { custom_search: customSearch.value } }).catch(() => {});
+  });
+  card.append(
+    row(
+      "Custom search url",
+      "Overrides the engine above; %s is the query",
+      customSearch,
+    ),
+  );
+
+  const cssButton = document.createElement("button");
+  cssButton.className = "button";
+  cssButton.textContent = t("Edit custom CSS");
+  const cssNote = document.createElement("span");
+  cssNote.className = "card-note";
+  cssButton.addEventListener("click", async () => {
+    const path = await invoke("custom_css_open").catch((error) => "error: " + String(error));
+    cssNote.textContent = String(path);
+  });
+  const cssRow = document.createElement("div");
+  cssRow.className = "card-actions";
+  cssRow.append(cssButton, cssNote);
+  card.append(
+    row("Custom CSS", "UserData/custom.css is applied to every page; restart to reload"),
+    cssRow,
+  );
+
   card.append(row("Language", "Choose the language of the interface", language));
 
   const dataHead = document.createElement("h2");
