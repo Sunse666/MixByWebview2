@@ -750,6 +750,22 @@ const SHORTCUT_FORWARDER: &str = r#"
   }
 
   // Exactly one source: a link, an image, or the selected text.
+  /// Shadow DOM retargets events to the host, so the real link only shows up
+  /// in composedPath().
+  function sourceFromEvent(event) {
+    var path = [];
+    try {
+      path = event.composedPath ? event.composedPath() : [];
+    } catch (error) {}
+    for (var index = 0; index < path.length; index += 1) {
+      var node = path[index];
+      if (!node || node.nodeType !== 1) continue;
+      var found = pickSource(node, true);
+      if (found) return found;
+    }
+    return sourceAtPoint(event.clientX, event.clientY, event.target);
+  }
+
   /// Sites often stack a container above the cards; the stack still holds them.
   function sourceAtPoint(x, y, fallbackTarget) {
     var stack = [];
@@ -811,7 +827,7 @@ const SHORTCUT_FORWARDER: &str = r#"
 
   window.addEventListener('pointerdown', function (event) {
     if (event.button !== 0) return;
-    var source = sourceAtPoint(event.clientX, event.clientY, event.target);
+    var source = sourceFromEvent(event);
     if (!source) return;
     drag = {
       url: source.url,
