@@ -196,7 +196,7 @@ pub struct AppError {
 }
 
 impl AppError {
-    fn new(code: &str, message: impl Into<String>) -> Self {
+    pub(crate) fn new(code: &str, message: impl Into<String>) -> Self {
         Self {
             code: code.into(),
             message: message.into(),
@@ -779,6 +779,18 @@ fn broadcast_theme(app: &AppHandle, theme: &Theme) {
 #[tauri::command]
 pub async fn download_list(_window: tauri::Window, state: State<'_, AppState>) -> Result<Vec<crate::downloads::DownloadTask>, AppError> {
     Ok(state.downloads.read().unwrap_or_else(|e| e.into_inner()).clone())
+}
+
+/// Makes Mix a candidate default browser, then opens the Windows picker: the
+/// app must never take handlers away from the user silently.
+#[tauri::command]
+pub async fn register_browser() -> Result<String, AppError> {
+    let exe = crate::browser_reg::register()?;
+    #[cfg(windows)]
+    let _ = std::process::Command::new("cmd")
+        .args(["/C", "start", "", "ms-settings:defaultapps"])
+        .spawn();
+    Ok(exe)
 }
 
 /// Reveals a file in Explorer, or opens its folder when it is missing.

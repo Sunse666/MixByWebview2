@@ -78,6 +78,7 @@
     "allow-shortcut",
     "allow-overlay-open-at",
     "allow-page-fullscreen",
+    "allow-register-browser",
     "allow-clipboard-read",
     "allow-clipboard-write",
     "allow-focus-page",

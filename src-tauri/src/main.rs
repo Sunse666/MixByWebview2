@@ -2,6 +2,7 @@
 
 // assets: frontend files are embedded at compile time, so editing src/*.js
 // only takes effect after the crate is rebuilt.
+mod browser_reg;
 mod diag;
 mod zoom;
 mod downloads;
@@ -27,7 +28,7 @@ mod window;
 
 use tauri::Manager;
 
-// embed bump 48
+// embed bump 49
 fn main() {
     let dirs = paths::AppDirs::resolve().ensure();
     logging::init(&dirs.logs);
@@ -39,9 +40,24 @@ fn main() {
 
     tauri::Builder::default()
         // Registered first so a second launch is caught before anything else starts.
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
             crate::logging::info("second instance forwarded to the running window");
             crate::window::show_or_focus(app);
+            // The shell hands over a url when Mix is the default browser.
+            let url = args
+                .iter()
+                .find(|arg| arg.starts_with("http://") || arg.starts_with("https://"))
+                .cloned();
+            if let Some(url) = url {
+                let handle = app.clone();
+                tauri::async_runtime::spawn(async move {
+                    let state = handle.state::<ipc::AppState>();
+                    let Some(window) = handle.get_window(crate::window::PRIMARY) else {
+                        return;
+                    };
+                    let _ = ipc::tab_new(handle.clone(), window, state, Some(url), None).await;
+                });
+            }
         }))
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_autostart::init(
@@ -133,6 +149,7 @@ fn main() {
             ipc::shortcut,
             ipc::overlay_open_at,
             ipc::page_fullscreen,
+            ipc::register_browser,
             ipc::clipboard_read,
             ipc::clipboard_write,
             ipc::focus_page,

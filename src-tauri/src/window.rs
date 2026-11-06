@@ -43,6 +43,17 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
         )
     };
 
+    // A url on the command line wins: that is what a default browser receives.
+    let shell_urls = initial_urls();
+    if !shell_urls.is_empty() {
+        let tabs: Vec<(String, f64)> = shell_urls.into_iter().map(|url| (url, 0.0)).collect();
+        open_window(app.handle(), PRIMARY, tabs, 0, None)?;
+        crate::downloads::start_progress_watch(app.handle().clone());
+        crate::snap::install_hotkeys(app.handle());
+        crate::tray::install(&app.handle().clone())?;
+        return Ok(());
+    }
+
     let restored = if restore {
         crate::session::Session::load(&session_file)
     } else {
@@ -323,6 +334,15 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
 }
 
 /// Creates a window with its chrome strip and one webview per url.
+/// A url handed over on the command line, e.g. when the app is the default
+/// browser and the shell runs "mix.exe https://example.com".
+pub fn initial_urls() -> Vec<String> {
+    std::env::args()
+        .skip(1)
+        .filter(|arg| arg.starts_with("http://") || arg.starts_with("https://"))
+        .collect()
+}
+
 pub fn open_window(
     app: &tauri::AppHandle,
     label: &str,

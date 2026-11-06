@@ -84,6 +84,7 @@ fn main() {
         "shortcut",
         "overlay_open_at",
         "page_fullscreen",
+        "register_browser",
         "clipboard_read",
         "clipboard_write",
         "focus_page",
