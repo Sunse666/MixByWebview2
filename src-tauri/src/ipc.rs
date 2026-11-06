@@ -2039,6 +2039,44 @@ fn move_bookmark(bookmarks: &mut Vec<Bookmark>, from: &str, to: usize) -> bool {
     true
 }
 
+/// Renames a bookmark, and optionally re-points it at another url.
+#[tauri::command]
+pub async fn bookmark_update(
+    app: AppHandle,
+    _window: tauri::Window,
+    state: State<'_, AppState>,
+    url: String,
+    title: String,
+    new_url: Option<String>,
+) -> Result<bool, AppError> {
+    let changed = {
+        let mut list = state.bookmarks.write().unwrap_or_else(|e| e.into_inner());
+        let Some(item) = list.iter_mut().find(|item| item.url == url) else {
+            return Err(AppError::new("not_found", "no such bookmark"));
+        };
+        let trimmed = title.trim().to_string();
+        let mut changed = false;
+        if !trimmed.is_empty() && item.title != trimmed {
+            item.title = trimmed;
+            changed = true;
+        }
+        if let Some(next) = new_url {
+            let next = next.trim().to_string();
+            if !next.is_empty() && item.url != next {
+                item.url = next;
+                changed = true;
+            }
+        }
+        changed
+    };
+
+    if changed {
+        let snapshot = state.bookmarks.read().unwrap_or_else(|e| e.into_inner()).clone();
+        crate::library::save_bookmarks(&state.dirs.bookmarks_file, &snapshot)?;
+        let _ = app.emit("bookmarks:changed", false);
+    }
+    Ok(changed)
+}
 #[tauri::command]
 pub async fn bookmark_remove(
     app: AppHandle,

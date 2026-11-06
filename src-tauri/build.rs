@@ -74,6 +74,7 @@ fn main() {
         "bookmark_toggle",
         "bookmark_add",
         "bookmark_move",
+        "bookmark_update",
         "bookmark_remove",
         "diag_export",
         "app_info",

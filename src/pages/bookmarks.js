@@ -115,6 +115,37 @@ async function boot() {
       host.className = "host";
       host.textContent = hostOf(item.url);
 
+      const startRename = () => {
+        const input = document.createElement("input");
+        input.className = "hex";
+        input.value = title.textContent;
+        input.style.width = "320px";
+        const finish = async (save) => {
+          if (!save) {
+            input.replaceWith(title);
+            return;
+          }
+          const next = input.value.trim();
+          input.replaceWith(title);
+          if (!next || next === title.textContent) return;
+          await invoke("bookmark_update", { url: item.url, title: next }).catch(() => {});
+          title.textContent = next;
+        };
+        input.addEventListener("keydown", (event) => {
+          if (event.key === "Enter") finish(true);
+          if (event.key === "Escape") finish(false);
+        });
+        input.addEventListener("blur", () => finish(true));
+        title.replaceWith(input);
+        input.focus();
+        input.select();
+      };
+      title.title = t("Double click to rename");
+      title.addEventListener("dblclick", (event) => {
+        event.stopPropagation();
+        startRename();
+      });
+
       const remove = document.createElement("button");
       remove.className = "remove";
       remove.textContent = "✕";
@@ -166,6 +197,7 @@ async function boot() {
 
   search.addEventListener("input", paint);
   paint();
+
 }
 
 boot();

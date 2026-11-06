@@ -70,6 +70,7 @@
     "allow-bookmark-toggle",
     "allow-bookmark-add",
     "allow-bookmark-move",
+    "allow-bookmark-update",
     "allow-bookmark-remove",
     "allow-diag-export",
     "allow-app-info",

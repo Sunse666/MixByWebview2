@@ -29,7 +29,7 @@ mod window;
 
 use tauri::Manager;
 
-// embed bump 52
+// embed bump 54
 fn main() {
     let dirs = paths::AppDirs::resolve().ensure();
     logging::init(&dirs.logs);
@@ -144,6 +144,7 @@ fn main() {
             ipc::bookmark_toggle,
             ipc::bookmark_add,
             ipc::bookmark_move,
+            ipc::bookmark_update,
             ipc::bookmark_remove,
             ipc::diag_export,
             ipc::app_info,
