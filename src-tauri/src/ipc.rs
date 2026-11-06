@@ -1764,7 +1764,7 @@ pub async fn clear_data(
     if kinds.iter().any(|kind| kind == "zoom") {
         let mut zoom = state.zoom.write();
         zoom.forget_all();
-        zoom.save(&state.dirs.zoom_file);
+        let _ = zoom.save(&state.dirs.zoom_file);
         done.push("zoom".to_string());
     }
 
