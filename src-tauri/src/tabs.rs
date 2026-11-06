@@ -629,31 +629,28 @@ const SHORTCUT_FORWARDER: &str = r#"
   var STEP = cfg.threshold || 28;
   var HINT = cfg.hint !== false;
   var MAP = cfg.map || { L: 'open', R: 'search', U: 'copy', D: 'save' };
-  var pending = null;
+  var drag = null;
   var badge = null;
-
+  var lastAction = 0;
 
   function invoke(command, args) {
     if (!window.__TAURI_INTERNALS__ || !window.__TAURI_INTERNALS__.invoke) return;
     window.__TAURI_INTERNALS__.invoke(command, args).catch(function () {});
   }
 
-  function urlOf(node) {
+  function linkOf(node) {
     if (!node || !node.closest) return null;
-    var link = node.closest('a[href]');
-    if (link) return link.href;
-    var image = node.closest('img');
-    if (image && image.src) return image.src;
-    return null;
+    return node.closest('a[href]');
   }
 
-  function linkTextOf(node) {
-    if (!node || !node.closest) return '';
-    var link = node.closest('a[href]');
-    return link ? String(link.textContent || '').trim() : '';
+  function imageOf(node) {
+    if (!node || !node.closest) return null;
+    var image = node.closest('img');
+    return image && image.src ? image : null;
   }
 
   function showBadge(mark) {
+    if (!HINT) return;
     if (!badge) {
       badge = document.createElement('div');
       badge.style.cssText =
@@ -661,7 +658,7 @@ const SHORTCUT_FORWARDER: &str = r#"
         'background:#4c8dff;color:#fff;font:12px sans-serif;opacity:.92;';
       document.documentElement.appendChild(badge);
     }
-    badge.textContent = mark || '';
+    badge.textContent = mark;
   }
 
   function hideBadge() {
@@ -669,51 +666,76 @@ const SHORTCUT_FORWARDER: &str = r#"
     badge = null;
   }
 
-  window.addEventListener('mousedown', function (event) {
+  // Exactly one source: a link, an image, or the selected text.
+  function pickSource(target) {
+    var link = linkOf(target);
+    if (link) {
+      return { url: link.href, text: '', linkText: String(link.textContent || '').trim() };
+    }
+    var image = imageOf(target);
+    if (image) {
+      return { url: image.src, text: '', linkText: '' };
+    }
+    var selected = String(window.getSelection ? window.getSelection() : '').trim();
+    if (selected) {
+      return { url: '', text: selected, linkText: '' };
+    }
+    return null;
+  }
+
+  window.addEventListener('pointerdown', function (event) {
     if (event.button !== 0) return;
-    var target = event.target;
-    var url = urlOf(target);
-    var text = String(window.getSelection ? window.getSelection() : '').trim();
-    var selection = text && target && target.closest && target.closest('a,img') === null && text.length > 0;
-    if (!url && !selection) return;
-    pending = {
-      url: url,
-      linkText: linkTextOf(target),
-      text: selection ? text : '',
+    var source = pickSource(event.target);
+    if (!source) return;
+    drag = {
+      url: source.url,
+      text: source.text,
+      linkText: source.linkText,
       x: event.clientX,
       y: event.clientY,
       moved: false,
+      pointer: event.pointerId,
+      element: event.target,
     };
-    // Native drag and selection steal the pointer once they start.
+    // Keep the pointer while dragging: the browser would otherwise start its
+    // own drag and stop delivering moves.
+    try {
+      if (event.target.setPointerCapture) event.target.setPointerCapture(event.pointerId);
+    } catch (error) {}
     event.preventDefault();
   }, true);
 
-  window.addEventListener('dragstart', function (event) {
-    // Native dragging would fight the badge, so it is cancelled while armed.
-    if (pending) event.preventDefault();
-  }, true);
-
-  window.addEventListener('mousemove', function (event) {
-    if (!pending) return;
-    var dx = event.clientX - pending.x;
-    var dy = event.clientY - pending.y;
-    if (!pending.moved) {
+  window.addEventListener('pointermove', function (event) {
+    if (!drag) return;
+    var dx = event.clientX - drag.x;
+    var dy = event.clientY - drag.y;
+    if (!drag.moved) {
       if (Math.abs(dx) < STEP && Math.abs(dy) < STEP) return;
-      pending.moved = true;
-      if (HINT) showBadge(pending.text ? '\uD83D\udd0d' : '\u2197');
+      drag.moved = true;
+      showBadge(drag.text ? '\uD83D\udd0d' : '\u2197');
     }
     if (badge) {
-      badge.style.left = event.clientX + 12 + 'px';
-      badge.style.top = event.clientY + 12 + 'px';
+      badge.style.left = event.clientX + 14 + 'px';
+      badge.style.top = event.clientY + 14 + 'px';
     }
   }, true);
 
-  window.addEventListener('mouseup', function (event) {
-    if (!pending) return;
-    var item = pending;
-    pending = null;
+  function finish(event) {
+    if (!drag) return;
+    var item = drag;
+    drag = null;
     hideBadge();
+    try {
+      if (item.element && item.element.releasePointerCapture) {
+        item.element.releasePointerCapture(item.pointer);
+      }
+    } catch (error) {}
     if (!item.moved) return;
+    // One action per drag, even if several events arrive.
+    var now = Date.now();
+    if (now - lastAction < 400) return;
+    lastAction = now;
+
     event.preventDefault();
     event.stopPropagation();
 
@@ -726,12 +748,13 @@ const SHORTCUT_FORWARDER: &str = r#"
     var text = item.text;
     var url = item.url;
     var linkText = item.linkText || '';
+
     if (action === 'search') {
       invoke('search_new_tab', { text: text || linkText || url || '' });
       return;
     }
     if (action === 'copy') {
-      var value = text || linkText || url || '';
+      var value = text || url || linkText;
       if (value) invoke('clipboard_write', { text: value });
       return;
     }
@@ -740,7 +763,7 @@ const SHORTCUT_FORWARDER: &str = r#"
       return;
     }
     if (action === 'copy_link_both') {
-      if (linkText && url) invoke('clipboard_write', { text: linkText + '\n' + url });
+      if (url) invoke('clipboard_write', { text: (linkText ? linkText + '\n' : '') + url });
       return;
     }
     if (action === 'save') {
@@ -752,13 +775,19 @@ const SHORTCUT_FORWARDER: &str = r#"
       else if (text) invoke('search_new_tab', { text: text });
       return;
     }
-    // "open": links and images open in front, text searches.
+    // "open": a link or image opens, text searches.
     if (url) invoke('tab_new', { url: url });
     else if (text) invoke('search_new_tab', { text: text });
+  }
+
+  window.addEventListener('pointerup', finish, true);
+  window.addEventListener('pointercancel', function () {
+    drag = null;
+    hideBadge();
   }, true);
 
   window.addEventListener('blur', function () {
-    pending = null;
+    drag = null;
     hideBadge();
   });
 })();
