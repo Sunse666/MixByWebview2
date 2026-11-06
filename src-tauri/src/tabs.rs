@@ -513,6 +513,11 @@ const SHORTCUT_FORWARDER: &str = r#"
   var BLOCKED = String(cfg.blocked || '')
     .split(/[,\s]+/)
     .filter(Boolean);
+  function send(action) {
+    if (!window.__TAURI_INTERNALS__ || !window.__TAURI_INTERNALS__.invoke) return;
+    window.__TAURI_INTERNALS__.invoke("shortcut", { action: action }).catch(function () {});
+  }
+
   var host = location.hostname.replace(/^www\./, '').toLowerCase();
   var disabled =
     window.__mixGestures === false ||

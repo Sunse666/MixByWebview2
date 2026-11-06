@@ -86,6 +86,7 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
     crate::downloads::start_progress_watch(app.handle().clone());
     crate::snap::install_hotkeys(app.handle());
     debug_ext_toggle(app.handle());
+    debug_gesture_test(app.handle());
     crate::tray::install(&app.handle().clone())?;
     // Debug helper: MIX_OPEN_ON_START=settings opens that overlay shortly after
     // startup. Opening it inside setup deadlocks the page: the main thread is
@@ -661,6 +662,39 @@ fn debug_ext_toggle(app: &tauri::AppHandle) {
         let after = crate::ext_live::list(&webview);
         if let Some(seen) = after.iter().find(|item| item.id == target.id) {
             crate::logging::info(&format!("ext toggle after: enabled={}", seen.enabled));
+        }
+    });
+}
+
+/// Debug hook: runs a synthetic left gesture in the active tab and logs which
+/// action reached the backend. Inert unless MIX_DEBUG is set.
+fn debug_gesture_test(app: &tauri::AppHandle) {
+    if !debug_hooks() {
+        return;
+    }
+    if std::env::var("MIX_GESTURE_TEST").is_err() {
+        return;
+    }
+    let handle = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_secs(4));
+        let Some(webview) = handle.get_webview("w1-tab-1") else {
+            return;
+        };
+        let script = r#"(function(){
+          function fire(type, x, y) {
+            var event = new MouseEvent(type, { bubbles: true, cancelable: true, button: 2, buttons: 2, clientX: x, clientY: y });
+            window.dispatchEvent(event);
+          }
+          fire('mousedown', 600, 400);
+          fire('mousemove', 520, 400);
+          fire('mousemove', 440, 400);
+          fire('mouseup', 380, 400);
+          return 'gesture synthetic done';
+        })();"#;
+        match webview.eval(script) {
+            Ok(()) => crate::logging::info("gesture test: synthetic left drag sent"),
+            Err(err) => crate::logging::warn(&format!("gesture test failed: {err}")),
         }
     });
 }
