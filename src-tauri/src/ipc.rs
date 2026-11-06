@@ -164,6 +164,9 @@ pub struct SettingsPatch {
     pub search_engine: Option<String>,
     pub shortcuts: Option<std::collections::BTreeMap<String, String>>,
     pub custom_search: Option<String>,
+    pub tab_double_click_close: Option<bool>,
+    pub tab_show_close: Option<bool>,
+    pub tab_close_goes_left: Option<bool>,
     pub newtab_show_search: Option<bool>,
     pub newtab_show_sites: Option<bool>,
     pub newtab_url: Option<String>,
@@ -680,10 +683,21 @@ pub async fn tab_close(app: AppHandle, window: tauri::Window, state: State<'_, A
                 }
             }
         }
+        let closed_at = core.tabs.iter().position(|tab| tab.id == id);
         core.tabs.retain(|tab| tab.id != id);
         core.mru.retain(|entry| entry != &id);
         if core.selected.as_deref() == Some(id.as_str()) {
-            core.selected = core.tabs.last().map(|tab| tab.id.clone());
+            let go_left = state.settings.read().tab_close_goes_left;
+            core.selected = match closed_at {
+                // Step to the neighbour on the chosen side, staying in range.
+                Some(index) if go_left => core
+                    .tabs
+                    .get(index.saturating_sub(1))
+                    .map(|tab| tab.id.clone()),
+                Some(index) => core.tabs.get(index).map(|tab| tab.id.clone()),
+                None => None,
+            }
+            .or_else(|| core.tabs.last().map(|tab| tab.id.clone()));
         }
         (core.tabs.len(), state.settings.read().start_url.clone())
     };
@@ -1392,6 +1406,15 @@ pub async fn settings_set(
         }
         if let Some(value) = patch.baidu_secret {
             guard.baidu_secret = value.trim().to_string();
+        }
+        if let Some(value) = patch.tab_double_click_close {
+            guard.tab_double_click_close = value;
+        }
+        if let Some(value) = patch.tab_show_close {
+            guard.tab_show_close = value;
+        }
+        if let Some(value) = patch.tab_close_goes_left {
+            guard.tab_close_goes_left = value;
         }
         if let Some(value) = patch.custom_search {
             guard.custom_search = value.trim().to_string();

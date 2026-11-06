@@ -96,6 +96,10 @@ function renderTabs() {
       invoke("tab_close", { id: tab.id });
     });
 
+    if (settings.tab_show_close === false) {
+      icon.title = tab.url;
+    }
+
     if (tab.pinned) {
       // A pinned tab shows a glyph instead of the close button.
       const pin = document.createElement("span");
@@ -103,12 +107,21 @@ function renderTabs() {
       pin.textContent = "\u25C6";
       pin.title = "Pinned";
       el.append(icon, label, pin);
+    } else if (settings.tab_show_close === false) {
+      el.append(icon, label);
     } else {
       el.append(icon, label, close);
     }
     el.addEventListener("mousedown", (event) => {
       if (event.target.closest("button")) return;
       invoke("tab_select", { id: tab.id });
+    });
+
+    // Double click closes a tab when the preference is on.
+    el.addEventListener("dblclick", (event) => {
+      if (settings.tab_double_click_close === false) return;
+      event.preventDefault();
+      invoke("tab_close", { id: tab.id }).catch(() => {});
     });
 
     // Middle click pins or releases a tab.

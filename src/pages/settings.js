@@ -363,6 +363,52 @@ async function boot() {
   themeCard.append(themeText, themeRow);
   main.append(themeCard);
 
+  const tabsHead = document.createElement("h2");
+  tabsHead.textContent = t("Tab settings");
+  tabsHead.style.margin = "18px 0 10px";
+  main.append(tabsHead);
+
+  const tabsCard = document.createElement("div");
+  tabsCard.className = "card";
+  tabsCard.style.maxWidth = "720px";
+
+  const tabToggle = (label, note, value, key) => {
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.className = "pick";
+    input.checked = value !== false;
+    input.addEventListener("change", async () => {
+      await invoke("settings_set", { patch: { [key]: input.checked } }).catch(() => {});
+    });
+    const holder = document.createElement("div");
+    holder.style.display = "flex";
+    holder.style.alignItems = "center";
+    holder.append(input);
+    return row(t(label), t(note), holder);
+  };
+
+  tabsCard.append(
+    tabToggle(
+      "Double click closes a tab",
+      "Off means a double click only selects it",
+      settings.tab_double_click_close,
+      "tab_double_click_close",
+    ),
+    tabToggle(
+      "Show the close button",
+      "Tabs can still be closed with Ctrl+W or the middle click",
+      settings.tab_show_close,
+      "tab_show_close",
+    ),
+    tabToggle(
+      "Activate the tab on the left after closing",
+      "Off selects the tab on the right",
+      settings.tab_close_goes_left,
+      "tab_close_goes_left",
+    ),
+  );
+  main.append(tabsCard);
+
   const newtabHead = document.createElement("h2");
   newtabHead.textContent = t("New tab page");
   newtabHead.style.margin = "18px 0 10px";
@@ -671,6 +717,7 @@ function groupSections() {
 
   const preferred = [
     "Startup",
+    "Tab settings",
     "New tab page",
     "Theme file",
     "Toolbar buttons",

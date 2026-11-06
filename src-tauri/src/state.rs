@@ -25,6 +25,12 @@ pub struct Settings {
     pub translate_to: String,
     /// A search template with %s; wins over search_engine when set.
     pub custom_search: String,
+    /// Double click on a tab closes it.
+    pub tab_double_click_close: bool,
+    /// Show the close button on each tab.
+    pub tab_show_close: bool,
+    /// After closing, activate the tab to the left instead of the right.
+    pub tab_close_goes_left: bool,
     /// New tab page: show the search field.
     pub newtab_show_search: bool,
     /// New tab page: show the frequent site tiles.
@@ -72,6 +78,9 @@ impl Default for Settings {
             baidu_appid: String::new(),
             baidu_secret: String::new(),
             translate_to: "zh".into(),
+            tab_double_click_close: true,
+            tab_show_close: true,
+            tab_close_goes_left: true,
             custom_search: String::new(),
             newtab_show_search: true,
             newtab_show_sites: true,
