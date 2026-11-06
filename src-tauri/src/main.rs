@@ -29,7 +29,7 @@ mod window;
 
 use tauri::Manager;
 
-// embed bump 59
+// embed bump 61
 fn main() {
     let dirs = paths::AppDirs::resolve().ensure();
     logging::init(&dirs.logs);
@@ -72,6 +72,9 @@ fn main() {
             let disabled_extensions = crate::state::Settings::load(&dirs.settings_file).disabled_extensions;
     let ext_infos = extensions::scan(&dirs, &disabled_extensions);
             let scripts = userscripts::scan(&dirs.scripts);
+            crate::tabs::set_shortcuts(
+                crate::state::Settings::load(&dirs.settings_file).shortcuts,
+            );
             app.manage(ipc::AppState::new(
                 dirs.clone(),
                 settings,

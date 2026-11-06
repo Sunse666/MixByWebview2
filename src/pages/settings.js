@@ -339,6 +339,87 @@ async function boot() {
   themeCard.append(themeText, themeRow);
   main.append(themeCard);
 
+  const keysHead = document.createElement("h2");
+  keysHead.textContent = t("Shortcuts");
+  keysHead.style.margin = "18px 0 10px";
+  main.append(keysHead);
+
+  const keysCard = document.createElement("div");
+  keysCard.className = "card";
+  keysCard.style.maxWidth = "720px";
+
+  const ACTIONS = {
+    new_tab: "New tab",
+    close_tab: "Close tab",
+    reopen_tab: "Reopen tab",
+    next_tab: "Next tab",
+    prev_tab: "Previous tab",
+    focus_url: "Focus address bar",
+    reload: "Reload",
+    fullscreen: "Fullscreen",
+    zoom_in: "Zoom in",
+    zoom_out: "Zoom out",
+    zoom_reset: "Reset zoom",
+    downloads: "Downloads",
+    bookmark: "Bookmark this page",
+    devtools: "Dev tools",
+  };
+  const DEFAULTS = {
+    new_tab: "ctrl+t",
+    close_tab: "ctrl+w",
+    reopen_tab: "ctrl+shift+t",
+    next_tab: "ctrl+tab",
+    prev_tab: "ctrl+shift+tab",
+    focus_url: "ctrl+l",
+    reload: "ctrl+r",
+    fullscreen: "f11",
+    zoom_in: "ctrl+=",
+    zoom_out: "ctrl+-",
+    zoom_reset: "ctrl+0",
+    downloads: "ctrl+j",
+    bookmark: "ctrl+d",
+    devtools: "f12",
+  };
+  const current = { ...DEFAULTS, ...(settings.shortcuts || {}) };
+  const saved = { ...(settings.shortcuts || {}) };
+
+  const conflict = document.createElement("div");
+  conflict.className = "card-note";
+
+  const checkConflicts = () => {
+    const seen = new Map();
+    const dupes = new Set();
+    for (const [action, combo] of Object.entries(current)) {
+      if (!combo) continue;
+      if (seen.has(combo)) dupes.add(combo);
+      seen.set(combo, action);
+    }
+    conflict.textContent = dupes.size
+      ? t("These combos are used twice") + ": " + [...dupes].join(", ")
+      : "";
+  };
+
+  for (const [action, label] of Object.entries(ACTIONS)) {
+    const input = document.createElement("input");
+    input.className = "hex";
+    input.style.width = "160px";
+    input.value = current[action] || "";
+    input.placeholder = DEFAULTS[action] || "";
+    input.addEventListener("change", async () => {
+      const combo = input.value.trim().toLowerCase();
+      current[action] = combo;
+      if (combo && combo !== DEFAULTS[action]) saved[action] = combo;
+      else delete saved[action];
+      checkConflicts();
+      await invoke("settings_set", { patch: { shortcuts: saved } }).catch(() => {});
+    });
+    keysCard.append(row(t(label), DEFAULTS[action] || "", input));
+  }
+
+  keysCard.append(conflict);
+  main.append(keysCard);
+  checkConflicts();
+
   const backupHead = document.createElement("h2");
   backupHead.textContent = t("Backup");
   backupHead.style.margin = "18px 0 10px";

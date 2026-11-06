@@ -162,6 +162,7 @@ pub struct SettingsPatch {
     pub translate_to: Option<String>,
     pub new_tab_page: Option<bool>,
     pub search_engine: Option<String>,
+    pub shortcuts: Option<std::collections::BTreeMap<String, String>>,
     pub menu_bar: Option<bool>,
     pub language: Option<String>,
     pub hidden_extensions: Option<Vec<String>>,
@@ -193,6 +194,29 @@ pub struct MenuRequest {
 pub struct AppError {
     pub code: String,
     pub message: String,
+}
+
+/// Keys arrive in different spellings; store one form: "ctrl+shift+t".
+fn normalize_combo(raw: &str) -> String {
+    let mut parts: Vec<String> = raw
+        .split('+')
+        .map(|part| part.trim().to_ascii_lowercase())
+        .filter(|part| !part.is_empty())
+        .map(|part| match part.as_str() {
+            "control" => "ctrl".to_string(),
+            "esc" => "escape".to_string(),
+            "del" => "delete".to_string(),
+            other => other.to_string(),
+        })
+        .collect();
+    parts.sort_by_key(|part| match part.as_str() {
+        "ctrl" => 0,
+        "alt" => 1,
+        "shift" => 2,
+        "meta" => 3,
+        _ => 4,
+    });
+    parts.join("+")
 }
 
 impl AppError {
@@ -1358,6 +1382,13 @@ pub async fn settings_set(
         }
         if let Some(value) = patch.baidu_secret {
             guard.baidu_secret = value.trim().to_string();
+        }
+        if let Some(value) = patch.shortcuts {
+            guard.shortcuts = value
+                .into_iter()
+                .filter(|(_, combo)| !combo.trim().is_empty())
+                .map(|(action, combo)| (action, normalize_combo(&combo)))
+                .collect();
         }
         if let Some(value) = patch.search_engine {
             guard.search_engine = match value.as_str() {

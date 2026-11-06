@@ -8,6 +8,24 @@ use crate::paths::AppDirs;
 
 /// Runs in every page. Frames cannot see chrome keydown, so shortcuts are
 /// forwarded from the page to Rust and dispatched there.
+/// Action -> combo overrides, filled once at startup from settings.
+static SHORTCUTS: std::sync::OnceLock<std::collections::BTreeMap<String, String>> =
+    std::sync::OnceLock::new();
+
+/// Called at startup; later changes apply to pages opened afterwards.
+pub fn set_shortcuts(map: std::collections::BTreeMap<String, String>) {
+    let _ = SHORTCUTS.set(map);
+}
+
+/// Small script that hands the overrides to the forwarder below.
+fn shortcut_prefix() -> String {
+    let empty = std::collections::BTreeMap::new();
+    let map = SHORTCUTS.get().unwrap_or(&empty);
+    let json = serde_json::to_string(map).unwrap_or_else(|_| "{}".to_string());
+    format!("window.__mixShortcuts = {json};
+")
+}
+
 const SHORTCUT_FORWARDER: &str = r#"
   // Clicking anywhere in the page closes an open overlay (menu or context menu).
   let __mixDismiss = false;
@@ -279,7 +297,31 @@ const SHORTCUT_FORWARDER: &str = r#"
     window.__TAURI_INTERNALS__.invoke("shortcut", { action: action }).catch(function () {});
   };
 
+  var comboOf = function (event) {
+    var parts = [];
+    if (event.ctrlKey || event.metaKey) parts.push("ctrl");
+    if (event.altKey) parts.push("alt");
+    if (event.shiftKey) parts.push("shift");
+    var key = event.key.length === 1 ? event.key.toLowerCase() : event.key.toLowerCase();
+    if (key === " ") key = "space";
+    parts.push(key);
+    return parts.join("+");
+  };
+
+  var custom = function () {
+    var map = window.__mixShortcuts || null;
+    if (!map) return {};
+    var byCombo = {};
+    for (var action in map) byCombo[map[action]] = action;
+    return byCombo;
+  };
+
   var actionFor = function (event) {
+    var overrides = custom();
+    if (overrides) {
+      var hit = overrides[comboOf(event)];
+      if (hit) return hit;
+    }
     if (event.key === "F5") return "reload";
     if (event.key === "F11") return "fullscreen";
     if (event.key === "F12") return "devtools";
@@ -524,6 +566,7 @@ pub fn create(
             let _ = app.emit_to(owner.clone(), "ui:open-url", url.to_string());
             tauri::webview::NewWindowResponse::Deny
         })
+        .initialization_script(&shortcut_prefix())
         .initialization_script(SHORTCUT_FORWARDER)
         // Remember what we are loading, so a failed load can say which url died.
         .on_navigation({
