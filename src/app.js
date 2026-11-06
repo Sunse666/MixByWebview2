@@ -532,6 +532,10 @@ function syncAddressIcon(active) {
 
 // Internal pages live on the asset host; show them the way a browser would.
 function prettyUrl(url) {
+  const section = url.match(/pages\/([a-z]+)\.html#(.+)$/i);
+  if (section) {
+    return "mix://" + section[1].toLowerCase();
+  }
   const prefix = "http://tauri.localhost/pages/";
   if (url.startsWith(prefix)) {
     return "mix://" + url.slice(prefix.length).replace(/\.html$/, "");

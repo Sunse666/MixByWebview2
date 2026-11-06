@@ -143,6 +143,20 @@ function toggle(on, onChange) {
   return button;
 }
 
+/** Shared pill switch, so no row falls back to a bare checkbox. */
+function switchEl(checked, onChange) {
+  const button = document.createElement("button");
+  button.className = "switch";
+  button.setAttribute("role", "switch");
+  button.setAttribute("aria-checked", String(Boolean(checked)));
+  button.addEventListener("click", () => {
+    const next = button.getAttribute("aria-checked") !== "true";
+    button.setAttribute("aria-checked", String(next));
+    onChange(next);
+  });
+  return button;
+}
+
 async function boot() {
   let settings = await invoke("settings_get").catch(() => null);
   setLanguage((settings && settings.language) || "en");
@@ -373,18 +387,10 @@ async function boot() {
   tabsCard.style.maxWidth = "720px";
 
   const tabToggle = (label, note, value, key) => {
-    const input = document.createElement("input");
-    input.type = "checkbox";
-    input.className = "pick";
-    input.checked = value !== false;
-    input.addEventListener("change", async () => {
-      await invoke("settings_set", { patch: { [key]: input.checked } }).catch(() => {});
+    const control = switchEl(value !== false, async (next) => {
+      await invoke("settings_set", { patch: { [key]: next } }).catch(() => {});
     });
-    const holder = document.createElement("div");
-    holder.style.display = "flex";
-    holder.style.alignItems = "center";
-    holder.append(input);
-    return row(t(label), t(note), holder);
+    return row(t(label), t(note), control);
   };
 
   tabsCard.append(
@@ -425,22 +431,10 @@ async function boot() {
   newtabCard.style.maxWidth = "720px";
 
   const toggleRow = (label, value, key) => {
-    const input = document.createElement("input");
-    input.type = "checkbox";
-    input.className = "pick";
-    input.checked = value !== false;
-    input.addEventListener("change", async () => {
-      await invoke("settings_set", { patch: { [key]: input.checked } }).catch(() => {});
+    const control = switchEl(value !== false, async (next) => {
+      await invoke("settings_set", { patch: { [key]: next } }).catch(() => {});
     });
-    const line = document.createElement("div");
-    line.className = "entry";
-    const text = document.createElement("span");
-    text.className = "title";
-    text.textContent = t(label);
-    const spacer = document.createElement("div");
-    spacer.className = "spacer";
-    line.append(text, spacer, input);
-    return line;
+    return row(t(label), "", control);
   };
 
   newtabCard.append(
@@ -752,7 +746,9 @@ function groupSections() {
     nav.append(link);
   }
 
-  if (panels.length) show(panels[0].dataset.key);
+  const wanted = decodeURIComponent((location.hash || "").replace(/^#/, ""));
+  const match = panels.find((panel) => panel.dataset.key === wanted);
+  if (panels.length) show(match ? match.dataset.key : panels[0].dataset.key);
 }
 
 boot().then(() => {
