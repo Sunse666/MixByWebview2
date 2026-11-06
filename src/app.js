@@ -347,7 +347,10 @@ const MENU_BAR = [
 ];
 
 function renderMenuBar() {
+  // The top menu bar is gone: the ≡ menu and Ctrl+Shift+P cover the same actions.
   const bar = document.getElementById("menubar");
+  if (bar) bar.remove();
+  return;
   if (!bar) return;
   bar.hidden = !(settings.menu_bar !== false);
   bar.replaceChildren(

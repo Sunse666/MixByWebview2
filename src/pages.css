@@ -1,7 +1,28 @@
+/* A light scrollbar on a dark page reads as a rendering bug. */
+::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+::-webkit-scrollbar-track {
+  background: #17181a;
+}
+::-webkit-scrollbar-thumb {
+  background: #3c4043;
+  border-radius: 6px;
+  border: 2px solid #17181a;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #52565a;
+}
+::-webkit-scrollbar-corner {
+  background: #17181a;
+}
+
 [hidden] { display: none !important; }
 
 /* Internal pages: the full window layouts, not the small overlay popups. */
 :root {
+  color-scheme: dark;
   --bg: #1b1b1b;
   --panel: #202020;
   --text: #e8e8e8;

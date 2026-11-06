@@ -199,15 +199,6 @@ async function boot() {
     setLanguage(language.value);
     location.reload();
   });
-  card.append(
-    row(
-      "Menu bar",
-      "Show the menu bar row",
-      toggle(settings.menu_bar !== false, async (value) => {
-        await invoke("settings_set", { patch: { menu_bar: value } }).catch(() => {});
-      }),
-    ),
-  );
 
   card.append(row("Appearance & theme", "", themePreview()));
 
