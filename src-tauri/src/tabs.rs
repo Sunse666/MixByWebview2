@@ -633,9 +633,35 @@ const SHORTCUT_FORWARDER: &str = r#"
   var badge = null;
   var lastAction = 0;
 
+  function toast(text) {
+    var pill = document.createElement('div');
+    pill.textContent = text;
+    pill.style.cssText =
+      'position:fixed;left:50%;bottom:32px;transform:translateX(-50%);z-index:2147483647;' +
+      'padding:6px 14px;border-radius:14px;background:#202124;color:#e8eaed;' +
+      'border:1px solid #4c8dff;font:12px sans-serif;pointer-events:none;';
+    document.documentElement.appendChild(pill);
+    setTimeout(function () {
+      if (pill.parentNode) pill.parentNode.removeChild(pill);
+    }, 2200);
+  }
+
   function invoke(command, args) {
-    if (!window.__TAURI_INTERNALS__ || !window.__TAURI_INTERNALS__.invoke) return;
-    window.__TAURI_INTERNALS__.invoke(command, args).catch(function () {});
+    if (!window.__TAURI_INTERNALS__ || !window.__TAURI_INTERNALS__.invoke) {
+      toast('super drag: no bridge');
+      return;
+    }
+    var pending = window.__TAURI_INTERNALS__.invoke(command, args);
+    if (pending && pending.catch) {
+      pending.catch(function (error) {
+        toast('super drag failed: ' + command);
+        if (window.__TAURI_INTERNALS__.invoke) {
+          window.__TAURI_INTERNALS__.invoke('ui_log', {
+            message: 'super drag failed: ' + command + ' -> ' + String(error),
+          }).catch(function () {});
+        }
+      });
+    }
   }
 
   function linkOf(node) {
@@ -696,13 +722,28 @@ const SHORTCUT_FORWARDER: &str = r#"
       moved: false,
       pointer: event.pointerId,
       element: event.target,
+      armedAt: Date.now(),
     };
+    // A visible dot on press: it shows the drag was recognised.
+    showBadge('\u00b7');
+    if (badge) {
+      badge.style.left = event.clientX + 14 + 'px';
+      badge.style.top = event.clientY + 14 + 'px';
+    }
     // Keep the pointer while dragging: the browser would otherwise start its
     // own drag and stop delivering moves.
     try {
       if (event.target.setPointerCapture) event.target.setPointerCapture(event.pointerId);
     } catch (error) {}
     event.preventDefault();
+  }, true);
+
+  window.addEventListener('dragstart', function (event) {
+    // Native drag would cancel the pointer stream.
+    if (drag) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
   }, true);
 
   window.addEventListener('pointermove', function (event) {
@@ -781,6 +822,13 @@ const SHORTCUT_FORWARDER: &str = r#"
   }
 
   window.addEventListener('pointerup', finish, true);
+
+  // Some WebView2 builds drop pointer events for native drags; the mouse pair
+  // is a cheap safety net and shares the same state.
+  window.addEventListener('mouseup', function (event) {
+    if (!drag) return;
+    finish(event);
+  }, true);
   window.addEventListener('pointercancel', function () {
     drag = null;
     hideBadge();
