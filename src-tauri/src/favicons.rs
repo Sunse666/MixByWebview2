@@ -55,6 +55,52 @@ impl Favicons {
     }
 }
 
+/// Cached icon file for a host, when one was downloaded.
+pub fn cache_path(dir: &Path, host: &str) -> Option<std::path::PathBuf> {
+    for extension in ["png", "ico", "svg", "jpg", "webp"] {
+        let candidate = dir.join(format!("{host}.{extension}"));
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+    }
+    None
+}
+
+/// Writes the icon bytes and returns the file it landed in.
+pub fn store_icon(dir: &Path, host: &str, bytes: &[u8], content_type: &str) -> Option<std::path::PathBuf> {
+    if bytes.is_empty() || bytes.len() > 256 * 1024 {
+        return None;
+    }
+    let extension = if content_type.contains("svg") || bytes.starts_with(b"<svg") {
+        "svg"
+    } else if content_type.contains("jpeg") || content_type.contains("jpg") {
+        "jpg"
+    } else if content_type.contains("webp") {
+        "webp"
+    } else if content_type.contains("icon") || host.is_empty() {
+        "ico"
+    } else {
+        "png"
+    };
+    std::fs::create_dir_all(dir).ok()?;
+    let path = dir.join(format!("{host}.{extension}"));
+    std::fs::write(&path, bytes).ok()?;
+    Some(path)
+}
+
+/// Data url for a cached icon, so pages need no extra round trip.
+pub fn data_url(path: &Path) -> Option<String> {
+    let bytes = std::fs::read(path).ok()?;
+    let mime = match path.extension().and_then(|ext| ext.to_str()) {
+        Some("svg") => "image/svg+xml",
+        Some("ico") => "image/x-icon",
+        Some("jpg") => "image/jpeg",
+        Some("webp") => "image/webp",
+        _ => "image/png",
+    };
+    Some(format!("data:{mime};base64,{}", crate::extensions::base64(&bytes)))
+}
+
 /// Host part of a url, without a leading "www." so both forms share an entry.
 pub fn host_of(url: &str) -> String {
     let rest = url.split("://").nth(1).unwrap_or(url);

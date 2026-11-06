@@ -1479,6 +1479,65 @@ pub async fn app_clear_data(app: AppHandle, window: tauri::Window, _state: State
     Ok(())
 }
 
+/// Icons are fetched once and stored as files: the site may change or vanish,
+/// and pages should not depend on a remote URL staying alive.
+fn cache_icon(app: &AppHandle, host: &str, url: &str) {
+    if host.is_empty() || !url.starts_with("http") {
+        return;
+    }
+    let Some(state) = app.try_state::<AppState>() else {
+        return;
+    };
+    let dir = state.dirs.favicons_dir.clone();
+    if crate::favicons::cache_path(&dir, host).is_some() {
+        return;
+    }
+    crate::logging::info(&format!("favicon download: {host} <- {url}"));
+    let handle = app.clone();
+    let host = host.to_string();
+    let url = url.to_string();
+    tauri::async_runtime::spawn(async move {
+        if crate::favicons::cache_path(&dir, &host).is_some() {
+            return;
+        }
+        let Ok(client) = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(10))
+            .build()
+        else {
+            return;
+        };
+        let response = match client.get(&url).send().await {
+            Ok(response) => response,
+            Err(err) => {
+                crate::logging::warn(&format!("favicon fetch failed: {host}: {err}"));
+                return;
+            }
+        };
+        let content_type = response
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok())
+            .unwrap_or_default()
+            .to_string();
+        let bytes = match response.bytes().await {
+            Ok(bytes) => bytes,
+            Err(err) => {
+                crate::logging::warn(&format!("favicon body failed: {host}: {err}"));
+                return;
+            }
+        };
+        match crate::favicons::store_icon(&dir, &host, &bytes, &content_type) {
+            Some(path) => crate::logging::info(&format!("favicon cached: {}", path.display())),
+            None => crate::logging::warn(&format!(
+                "favicon not stored: {host} ({} bytes, {content_type})",
+                bytes.len()
+            )),
+        }
+        // The refresh of the page happens on the next open; no event needed.
+        let _ = handle;
+    });
+}
+
 /// The document title arrives after the url change that recorded the visit, so
 /// the newest entry for that url still carries the previous page's title.
 pub(crate) fn attach_title(app: &AppHandle, url: &str, title: &str) {
@@ -1546,7 +1605,14 @@ pub(crate) fn record_visit(app: &AppHandle, url: &str, title: &str) {
 #[tauri::command]
 pub async fn favicon_map(state: State<'_, AppState>) -> Result<std::collections::BTreeMap<String, String>, AppError> {
     let icons = state.favicons.read().unwrap_or_else(|e| e.into_inner());
-    Ok(icons.hosts.clone())
+    let mut out = std::collections::BTreeMap::new();
+    for (host, remote) in icons.hosts.iter() {
+        let value = crate::favicons::cache_path(&state.dirs.favicons_dir, host)
+            .and_then(|path| crate::favicons::data_url(&path))
+            .unwrap_or_else(|| remote.clone());
+        out.insert(host.clone(), value);
+    }
+    Ok(out)
 }
 
 #[tauri::command]
@@ -2312,6 +2378,9 @@ pub async fn tab_icon(
                     .save(&state.dirs.favicons_file);
             }
         }
+        // Outside the branch: the map may already know this host but the file
+        // cache can still be missing (fresh profile, deleted folder).
+        cache_icon(&app, &host, &icon);
     }
 
     let owner = window_of_tab(&id).to_string();
