@@ -2908,6 +2908,7 @@ mod tab_order_tests {
             url: "https://a.test".into(),
             title: id.to_string(),
             zoom: 1.0,
+            pinned: false,
             incognito: false,
             icon: None,
             loading: false,

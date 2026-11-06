@@ -481,3 +481,50 @@ body.incognito #tab-strip::after {
   color: #8ab4f8;
   margin-left: 4px;
 }
+
+.palette-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding-top: 80px;
+  z-index: 40;
+}
+.palette {
+  width: 560px;
+  max-height: 420px;
+  display: flex;
+  flex-direction: column;
+  background: #202124;
+  border: 1px solid #3c4043;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.5);
+}
+.palette-input {
+  border: 0;
+  outline: none;
+  padding: 14px 16px;
+  font-size: 14px;
+  color: #e8eaed;
+  background: #202124;
+  border-bottom: 1px solid #3c4043;
+}
+.palette-list {
+  overflow-y: auto;
+}
+.palette-row {
+  padding: 9px 16px;
+  font-size: 13px;
+  color: #cfd3d8;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.palette-row.active, .palette-row:hover {
+  background: #2d2f31;
+  color: #e8eaed;
+}

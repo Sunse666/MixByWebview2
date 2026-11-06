@@ -223,6 +223,119 @@ function addressFor(text) {
   return base + encodeURIComponent((text || "").trim());
 }
 
+// Command palette: one search box over actions, history and bookmarks.
+function openPalette() {
+  const back = document.createElement("div");
+  back.className = "palette-backdrop";
+
+  const box = document.createElement("div");
+  box.className = "palette";
+
+  const input = document.createElement("input");
+  input.className = "palette-input";
+  input.placeholder = t("Type a command or a site");
+
+  const list = document.createElement("div");
+  list.className = "palette-list";
+
+  box.append(input, list);
+  back.append(box);
+  document.body.append(back);
+  input.focus();
+
+  const actions = MENU_BAR.flatMap((group) =>
+    (group.items || []).map((item) => ({
+      label: group.name + " · " + t(item.label || item.name || ""),
+      run: () => item.run && item.run(),
+    })),
+  );
+
+  const close = () => back.remove();
+
+  const paint = async (query) => {
+    const text = (query || "").trim().toLowerCase();
+    list.replaceChildren();
+
+    const matchedActions = actions
+      .filter((action) => !text || action.label.toLowerCase().includes(text))
+      .slice(0, 8);
+
+    for (const action of matchedActions) {
+      const row = document.createElement("div");
+      row.className = "palette-row";
+      row.textContent = action.label;
+      row.addEventListener("click", () => {
+        close();
+        action.run();
+      });
+      list.append(row);
+    }
+
+    if (text.length >= 2) {
+      const history = (await invoke("history_list", { limit: 200 }).catch(() => [])) || [];
+      const seen = new Set();
+      const sites = history
+        .filter((visit) => !seen.has(visit.url) && seen.add(visit.url))
+        .filter((visit) => (visit.url + " " + (visit.title || "")).toLowerCase().includes(text))
+        .slice(0, 8);
+
+      for (const visit of sites) {
+        const row = document.createElement("div");
+        row.className = "palette-row";
+        row.textContent = (visit.title || visit.url) + " — " + visit.url;
+        row.addEventListener("click", () => {
+          close();
+          invoke("tab_navigate", { url: visit.url }).catch(() => {});
+        });
+        list.append(row);
+      }
+
+      const bookmarks = (await invoke("bookmark_list").catch(() => [])) || [];
+      for (const item of bookmarks
+        .filter((entry) => (entry.url + " " + entry.title).toLowerCase().includes(text))
+        .slice(0, 5)) {
+        const row = document.createElement("div");
+        row.className = "palette-row";
+        row.textContent = "☆ " + item.title + " — " + item.url;
+        row.addEventListener("click", () => {
+          close();
+          invoke("tab_navigate", { url: item.url }).catch(() => {});
+        });
+        list.append(row);
+      }
+    }
+
+    const first = list.firstElementChild;
+    if (first) first.classList.add("active");
+  };
+
+  input.addEventListener("input", () => paint(input.value));
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") close();
+    if (event.key === "Enter") {
+      const active = list.querySelector(".palette-row.active") || list.firstElementChild;
+      if (active) active.click();
+    }
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      const rows = [...list.querySelectorAll(".palette-row")];
+      if (!rows.length) return;
+      const current = rows.findIndex((row) => row.classList.contains("active"));
+      const next = event.key === "ArrowDown"
+        ? (current + 1) % rows.length
+        : (current <= 0 ? rows.length - 1 : current - 1);
+      rows.forEach((row) => row.classList.remove("active"));
+      rows[next].classList.add("active");
+      rows[next].scrollIntoView({ block: "nearest" });
+    }
+  });
+  back.addEventListener("mousedown", (event) => {
+    if (event.target === back) close();
+  });
+
+  paint("");
+}
+
 const MENU_BAR = [
   { id: "file", label: "File" },
   { id: "edit", label: "Edit" },
