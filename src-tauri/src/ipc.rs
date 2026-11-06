@@ -266,6 +266,7 @@ pub struct TabMeta {
     title: String,
     alive: bool,
     incognito: bool,
+    pinned: bool,
     icon: Option<String>,
     loading: bool,
 }
@@ -305,6 +306,7 @@ fn snapshot(core: &Core) -> TabList {
                 title: tab.title.clone(),
                 alive: tab.alive,
                 incognito: tab.incognito,
+                pinned: tab.pinned,
                 icon: tab.icon.clone(),
                 loading: tab.loading,
             })
@@ -407,7 +409,11 @@ pub(crate) fn save_sessions(app: &AppHandle) {
             .tabs
             .iter()
             .filter(|tab| !tab.incognito)
-            .map(|tab| crate::session::SessionTab::new(tab.url.clone(), tab.scroll))
+            .map(|tab| crate::session::SessionTab::Full {
+                url: tab.url.clone(),
+                scroll: tab.scroll,
+                pinned: tab.pinned,
+            })
             .collect();
         if tabs.is_empty() {
             continue;
@@ -582,6 +588,7 @@ pub async fn tab_new(
                 "New tab".into()
             },
             zoom: 1.0,
+            pinned: false,
             incognito: incognito.unwrap_or(false),
             icon: None,
             loading: false,
@@ -604,6 +611,23 @@ pub async fn tab_new(
     Ok(id)
 }
 
+/// Pins a tab to the left strip, or releases it.
+#[tauri::command]
+pub async fn tab_pin(
+    window: tauri::Window,
+    state: State<'_, AppState>,
+    id: String,
+    pinned: bool,
+) -> Result<(), AppError> {
+    {
+        let mut core = state.write_core(window.label());
+        if let Some(tab) = core.tabs.iter_mut().find(|tab| tab.id == id) {
+            tab.pinned = pinned;
+        }
+    }
+    crate::logging::info(&format!("tab {id} pinned={pinned}"));
+    Ok(())
+}
 #[tauri::command]
 pub async fn tab_close(app: AppHandle, window: tauri::Window, state: State<'_, AppState>, id: String) -> Result<(), AppError> {
     if let Some(webview) = app.get_webview(&id) {
@@ -2040,6 +2064,35 @@ fn move_bookmark(bookmarks: &mut Vec<Bookmark>, from: &str, to: usize) -> bool {
 }
 
 /// Renames a bookmark, and optionally re-points it at another url.
+/// Moves a bookmark into a folder; an empty name means the top level.
+#[tauri::command]
+pub async fn bookmark_set_folder(
+    app: AppHandle,
+    _window: tauri::Window,
+    state: State<'_, AppState>,
+    url: String,
+    folder: String,
+) -> Result<bool, AppError> {
+    let changed = {
+        let mut list = state.bookmarks.write().unwrap_or_else(|e| e.into_inner());
+        let Some(item) = list.iter_mut().find(|item| item.url == url) else {
+            return Err(AppError::new("not_found", "no such bookmark"));
+        };
+        let next = folder.trim().to_string();
+        if item.folder == next {
+            false
+        } else {
+            item.folder = next;
+            true
+        }
+    };
+    if changed {
+        let snapshot = state.bookmarks.read().unwrap_or_else(|e| e.into_inner()).clone();
+        crate::library::save_bookmarks(&state.dirs.bookmarks_file, &snapshot)?;
+        let _ = app.emit("bookmarks:changed", false);
+    }
+    Ok(changed)
+}
 #[tauri::command]
 pub async fn bookmark_update(
     app: AppHandle,
@@ -2763,7 +2816,7 @@ pub async fn window_new(app: AppHandle, state: State<'_, AppState>) -> Result<St
     };
 
     let url = state.settings.read().start_url.clone();
-    crate::window::open_window(&app, &label, vec![(url, 0.0)], 0, None)?;
+    crate::window::open_window(&app, &label, vec![(url, 0.0, false)], 0, None)?;
     crate::logging::info(&format!("window {label} opened"));
     Ok(label)
 }

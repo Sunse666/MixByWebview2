@@ -68,6 +68,7 @@ function renderTabs() {
     if (tab.id === selected) classes.push("active");
     if (!tab.alive) classes.push("suspended");
     if (tab.incognito) classes.push("incognito");
+    if (tab.pinned) classes.push("pinned");
     el.className = classes.join(" ");
     el.title = tab.url;
 
@@ -95,10 +96,33 @@ function renderTabs() {
       invoke("tab_close", { id: tab.id });
     });
 
-    el.append(icon, label, close);
+    if (tab.pinned) {
+      // A pinned tab shows a glyph instead of the close button.
+      const pin = document.createElement("span");
+      pin.className = "tab-pin";
+      pin.textContent = "\u25C6";
+      pin.title = "Pinned";
+      el.append(icon, label, pin);
+    } else {
+      el.append(icon, label, close);
+    }
     el.addEventListener("mousedown", (event) => {
       if (event.target.closest("button")) return;
       invoke("tab_select", { id: tab.id });
+    });
+
+    // Middle click pins or releases a tab.
+    el.addEventListener("auxclick", (event) => {
+      if (event.button !== 1) return;
+      event.preventDefault();
+      invoke("tab_pin", { id: tab.id, pinned: !tab.pinned }).catch(() => {});
+      setTimeout(() => invoke("tab_list").catch(() => {}), 60);
+    });
+
+    el.addEventListener("contextmenu", (event) => {
+      event.preventDefault();
+      invoke("tab_pin", { id: tab.id, pinned: !tab.pinned }).catch(() => {});
+      setTimeout(() => invoke("tab_list").catch(() => {}), 60);
     });
 
     // Drag to reorder. The strip only sends the index, Rust does the move.

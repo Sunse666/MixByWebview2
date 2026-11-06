@@ -468,3 +468,16 @@ body.incognito #tab-strip::after {
   font-size: 11px;
   letter-spacing: 1px;
 }
+
+.tab.pinned {
+  min-width: 44px;
+  max-width: 120px;
+}
+.tab.pinned .tab-title {
+  display: none;
+}
+.tab-pin {
+  font-size: 9px;
+  color: #8ab4f8;
+  margin-left: 4px;
+}

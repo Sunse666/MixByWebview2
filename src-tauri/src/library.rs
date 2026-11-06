@@ -19,6 +19,9 @@ pub struct Bookmark {
     pub url: String,
     pub title: String,
     pub at: u64,
+    /// Optional folder name; an empty string means the top level.
+    #[serde(default)]
+    pub folder: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -110,6 +113,7 @@ pub fn toggle_bookmark(bookmarks: &mut Vec<Bookmark>, url: &str, title: &str) ->
                 title.to_string()
             },
             at: now(),
+            folder: String::new(),
         },
     );
     true

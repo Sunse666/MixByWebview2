@@ -46,7 +46,8 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
     // A url on the command line wins: that is what a default browser receives.
     let shell_urls = initial_urls();
     if !shell_urls.is_empty() {
-        let tabs: Vec<(String, f64)> = shell_urls.into_iter().map(|url| (url, 0.0)).collect();
+        let tabs: Vec<(String, f64, bool)> =
+            shell_urls.into_iter().map(|url| (url, 0.0, false)).collect();
         open_window(app.handle(), PRIMARY, tabs, 0, None)?;
         crate::downloads::start_progress_watch(app.handle().clone());
         crate::snap::install_hotkeys(app.handle());
@@ -69,16 +70,16 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
                     format!("w{}", index + 1)
                 };
                 let selected = window.selected.min(window.tabs.len().saturating_sub(1));
-                let tabs: Vec<(String, f64)> = window
+                let tabs: Vec<(String, f64, bool)> = window
                     .tabs
                     .iter()
-                    .map(|tab| (tab.url().to_string(), tab.scroll()))
+                    .map(|tab| (tab.url().to_string(), tab.scroll(), tab.pinned()))
                     .collect();
                 open_window(app.handle(), &label, tabs, selected, window.window.clone())?;
             }
         }
         None => {
-            open_window(app.handle(), PRIMARY, vec![(start_url, 0.0)], 0, None)?;
+            open_window(app.handle(), PRIMARY, vec![(start_url, 0.0, false)], 0, None)?;
         }
     }
 
@@ -148,7 +149,7 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
                 let state = target.state::<AppState>();
                 let url = state.settings.read().start_url.clone();
                 drop(state);
-                match crate::window::open_window(&target, "w2", vec![(url, 0.0)], 0, None) {
+                match crate::window::open_window(&target, "w2", vec![(url, 0.0, false)], 0, None) {
                     Ok(_) => crate::logging::info("debug: second window opened"),
                     Err(err) => crate::logging::warn(&format!("debug window failed: {err}")),
                 }
@@ -347,7 +348,7 @@ pub fn initial_urls() -> Vec<String> {
 pub fn open_window(
     app: &tauri::AppHandle,
     label: &str,
-    urls: Vec<(String, f64)>,
+    urls: Vec<(String, f64, bool)>,
     selected: usize,
     geometry: Option<crate::session::WindowGeometry>,
 ) -> tauri::Result<Window> {
@@ -394,11 +395,12 @@ pub fn open_window(
         core.tabs = urls
             .iter()
             .enumerate()
-            .map(|(index, (url, scroll))| tabs::Tab {
+            .map(|(index, (url, scroll, pinned))| tabs::Tab {
                 id: crate::ipc::tab_label(label, index + 1),
                 url: url.clone(),
                 title: "New tab".into(),
                 zoom: 1.0,
+                pinned: *pinned,
                 incognito: false,
                 icon: None,
                 loading: false,
@@ -440,7 +442,7 @@ pub fn open_window(
         LogicalSize::new(width, chrome_h),
     )?;
 
-    for (index, (url, _scroll)) in urls.iter().enumerate() {
+    for (index, (url, _scroll, _pinned)) in urls.iter().enumerate() {
         let id = crate::ipc::tab_label(label, index + 1);
         tabs::create(&win, &id, url, width, height - chrome_h, &opts, false)?;
     }

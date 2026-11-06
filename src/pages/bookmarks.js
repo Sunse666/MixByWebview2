@@ -68,6 +68,9 @@ async function boot() {
 
   let items = (await invoke("bookmark_list").catch(() => [])) || [];
 
+  // Folder names are derived from the bookmarks themselves, so no extra store.
+  const foldersOf = (list) => [...new Set(list.map((item) => item.folder || ""))].filter(Boolean);
+
   const paint = () => {
     list.replaceChildren();
     const needle = search.value.trim().toLowerCase();
@@ -146,6 +149,30 @@ async function boot() {
         startRename();
       });
 
+      const folderSelect = document.createElement("select");
+      folderSelect.className = "button";
+      folderSelect.style.minWidth = "96px";
+      const none = document.createElement("option");
+      none.value = "";
+      none.textContent = t("No folder");
+      folderSelect.append(none);
+      for (const name of foldersOf(items)) {
+        const option = document.createElement("option");
+        option.value = name;
+        option.textContent = name;
+        if ((item.folder || "") === name) option.selected = true;
+        folderSelect.append(option);
+      }
+      folderSelect.addEventListener("click", (event) => event.stopPropagation());
+      folderSelect.addEventListener("change", async () => {
+        await invoke("bookmark_set_folder", {
+          url: item.url,
+          folder: folderSelect.value,
+        }).catch(() => {});
+        item.folder = folderSelect.value;
+        paintName();
+      });
+
       const remove = document.createElement("button");
       remove.className = "remove";
       remove.textContent = "✕";
@@ -156,7 +183,13 @@ async function boot() {
         paint();
       });
 
-      row.append(mark, title, host, remove);
+      const paintName = () => {
+        const group = item.folder || "";
+        host.textContent = group ? group + " · " + hostOf(item.url) : hostOf(item.url);
+      };
+      paintName();
+
+      row.append(mark, title, host, folderSelect, remove);
       row.draggable = true;
       row.dataset.url = item.url;
       row.addEventListener("dragstart", (event) => {
@@ -194,6 +227,25 @@ async function boot() {
       list.append(row);
     }
   };
+
+  const newFolder = document.createElement("input");
+  newFolder.className = "hex";
+  newFolder.style.width = "160px";
+  newFolder.placeholder = t("New folder");
+  newFolder.addEventListener("keydown", async (event) => {
+    if (event.key !== "Enter") return;
+    const name = newFolder.value.trim();
+    if (!name) return;
+    // Folders exist once a bookmark joins them, so move the first visible row.
+    const first = items[0];
+    if (first) {
+      await invoke("bookmark_set_folder", { url: first.url, folder: name }).catch(() => {});
+      first.folder = name;
+      newFolder.value = "";
+      paint();
+    }
+  });
+  main.insertBefore(newFolder, list);
 
   search.addEventListener("input", paint);
   paint();

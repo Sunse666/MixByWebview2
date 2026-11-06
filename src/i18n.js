@@ -150,6 +150,8 @@ const DICT = {
     "theme.json can be shared with the same folder layout": "theme.json 可以直接分享给同样目录结构的人",
     "Loaded by the browser": "浏览器已加载",
     "Double click to rename": "双击重命名",
+    "No folder": "无文件夹",
+    "New folder": "新建文件夹",
     "New tab": "新标签页",
     "New incognito tab": "新建无痕标签页",
     "Reopen closed tab": "重新打开关闭的标签页",

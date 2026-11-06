@@ -20,7 +20,12 @@ pub struct WindowGeometry {
 #[serde(untagged)]
 pub enum SessionTab {
     Url(String),
-    Full { url: String, scroll: f64 },
+    Full {
+        url: String,
+        scroll: f64,
+        #[serde(default)]
+        pinned: bool,
+    },
 }
 
 impl SessionTab {
@@ -38,8 +43,20 @@ impl SessionTab {
         }
     }
 
+    #[allow(dead_code)]
     pub fn new(url: String, scroll: f64) -> Self {
-        SessionTab::Full { url, scroll }
+        SessionTab::Full {
+            url,
+            scroll,
+            pinned: false,
+        }
+    }
+
+    pub fn pinned(&self) -> bool {
+        match self {
+            SessionTab::Url(_) => false,
+            SessionTab::Full { pinned, .. } => *pinned,
+        }
     }
 }
 

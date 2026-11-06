@@ -454,6 +454,8 @@ pub struct Tab {
     pub url: String,
     pub title: String,
     pub zoom: f64,
+    /// Pinned tabs stay at the left and keep a narrow strip.
+    pub pinned: bool,
     /// Incognito tabs never touch the shared profile and are not restored.
     pub incognito: bool,
     /// Favicon url reported by the page, if any.
