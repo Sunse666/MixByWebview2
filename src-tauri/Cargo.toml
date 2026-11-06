@@ -22,6 +22,7 @@ reqwest = { version = "0.13.3", default-features = false, features = ["rustls", 
 md-5 = "0.10.6"
 arboard = "3.7.0"
 winreg = "0.56.0"
+rfd = { version = "0.17.2", default-features = false }
 
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.62", features = [

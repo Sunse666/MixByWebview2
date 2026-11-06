@@ -781,6 +781,109 @@ pub async fn download_list(_window: tauri::Window, state: State<'_, AppState>) -
     Ok(state.downloads.read().unwrap_or_else(|e| e.into_inner()).clone())
 }
 
+/// Zips the whole profile so it can be restored on another machine.
+#[tauri::command]
+pub async fn backup_export(_window: tauri::Window, state: State<'_, AppState>) -> Result<String, AppError> {
+    let default_name = format!(
+        "Mix-backup-{}.zip",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|value| value.as_secs())
+            .unwrap_or(0)
+    );
+    let Some(target) = rfd::FileDialog::new()
+        .set_file_name(&default_name)
+        .add_filter("zip", &["zip"])
+        .save_file()
+    else {
+        return Err(AppError::new("cancelled", "no file chosen"));
+    };
+
+    let file = std::fs::File::create(&target).map_err(|err| AppError::new("backup", err.to_string()))?;
+    let mut zip = zip::ZipWriter::new(file);
+    let options = zip::write::SimpleFileOptions::default()
+        .compression_method(zip::CompressionMethod::Deflated);
+
+    // Only data, never the WebView2 profile: it is huge and machine specific.
+    let skip = ["profile", "profile-ui", "logs", "diag", "extensions", "downloads"];
+    let mut count = 0;
+    let mut stack = vec![state.dirs.user_data.clone()];
+
+    while let Some(dir) = stack.pop() {
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let name = path.file_name().and_then(|value| value.to_str()).unwrap_or_default();
+            if path.is_dir() {
+                if dir == state.dirs.user_data && skip.contains(&name) {
+                    continue;
+                }
+                stack.push(path);
+                continue;
+            }
+            let Ok(relative) = path.strip_prefix(&state.dirs.user_data) else {
+                continue;
+            };
+            let entry_name = relative.display().to_string().replace('\\', "/");
+            let Ok(bytes) = std::fs::read(&path) else {
+                continue;
+            };
+            if zip.start_file(entry_name, options).is_err() {
+                continue;
+            }
+            let _ = std::io::Write::write_all(&mut zip, &bytes);
+            count += 1;
+        }
+    }
+
+    zip.finish().map_err(|err| AppError::new("backup", err.to_string()))?;
+    crate::logging::info(&format!("backup written: {} ({count} files)", target.display()));
+    Ok(target.display().to_string())
+}
+
+/// Restores a backup over the current profile; the app restarts afterwards.
+#[tauri::command]
+pub async fn backup_import(_window: tauri::Window, state: State<'_, AppState>) -> Result<String, AppError> {
+    let Some(source) = rfd::FileDialog::new()
+        .add_filter("zip", &["zip"])
+        .pick_file()
+    else {
+        return Err(AppError::new("cancelled", "no file chosen"));
+    };
+
+    let file = std::fs::File::open(&source).map_err(|err| AppError::new("backup", err.to_string()))?;
+    let mut archive = zip::ZipArchive::new(file).map_err(|err| AppError::new("backup", err.to_string()))?;
+
+    let mut restored = 0;
+    for index in 0..archive.len() {
+        let Ok(mut entry) = archive.by_index(index) else {
+            continue;
+        };
+        let Some(name) = entry.enclosed_name() else {
+            continue;
+        };
+        let target = state.dirs.user_data.join(&name);
+        if let Some(parent) = target.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        let mut buffer = Vec::new();
+        if std::io::Read::read_to_end(&mut entry, &mut buffer).is_err() {
+            continue;
+        }
+        if std::fs::write(&target, buffer).is_ok() {
+            restored += 1;
+        }
+    }
+
+    crate::logging::info(&format!(
+        "backup restored: {} ({restored} files)",
+        source.display()
+    ));
+    Ok(format!("{restored} files"))
+}
+
 /// Makes Mix a candidate default browser, then opens the Windows picker: the
 /// app must never take handlers away from the user silently.
 #[tauri::command]

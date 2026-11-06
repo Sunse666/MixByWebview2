@@ -303,6 +303,81 @@ async function boot() {
   startCard.append(row("Start page", "Opened at launch", startUrl));
   main.append(startCard);
 
+  const themeHead = document.createElement("h2");
+  themeHead.textContent = t("Theme file");
+  themeHead.style.margin = "18px 0 10px";
+  main.append(themeHead);
+
+  const themeCard = document.createElement("div");
+  themeCard.className = "card";
+  themeCard.style.maxWidth = "720px";
+  const themeNote = document.createElement("span");
+  themeNote.className = "card-note";
+
+  const themeExport = document.createElement("button");
+  themeExport.className = "button";
+  themeExport.textContent = t("Export theme");
+  themeExport.addEventListener("click", async () => {
+    const path = await invoke("theme_export").catch((error) => "error: " + String(error));
+    themeNote.textContent = String(path);
+  });
+
+  const themeImport = document.createElement("button");
+  themeImport.className = "button";
+  themeImport.textContent = t("Import theme");
+  themeImport.addEventListener("click", async () => {
+    const result = await invoke("theme_import").catch((error) => "error: " + String(error));
+    themeNote.textContent = t("Theme loaded") + ": " + String(result);
+  });
+
+  const themeRow = document.createElement("div");
+  themeRow.className = "card-actions";
+  themeRow.append(themeExport, themeImport, themeNote);
+  const themeText = document.createElement("div");
+  themeText.className = "card-note";
+  themeText.textContent = t("theme.json can be shared with the same folder layout");
+  themeCard.append(themeText, themeRow);
+  main.append(themeCard);
+
+  const backupHead = document.createElement("h2");
+  backupHead.textContent = t("Backup");
+  backupHead.style.margin = "18px 0 10px";
+  main.append(backupHead);
+
+  const backupCard = document.createElement("div");
+  backupCard.className = "card";
+  backupCard.style.maxWidth = "720px";
+
+  const backupNote = document.createElement("span");
+  backupNote.className = "card-note";
+
+  const exportButton = document.createElement("button");
+  exportButton.className = "button";
+  exportButton.textContent = t("Export profile");
+  exportButton.addEventListener("click", async () => {
+    const path = await invoke("backup_export").catch((error) => "error: " + String(error));
+    backupNote.textContent = String(path);
+  });
+
+  const importButton = document.createElement("button");
+  importButton.className = "button";
+  importButton.textContent = t("Import profile");
+  importButton.addEventListener("click", async () => {
+    const result = await invoke("backup_import").catch((error) => "error: " + String(error));
+    backupNote.textContent = t("Restored") + ": " + String(result) + " — " + t("restart to apply");
+  });
+
+  const backupRow = document.createElement("div");
+  backupRow.className = "card-actions";
+  backupRow.append(exportButton, importButton, backupNote);
+  const backupText = document.createElement("div");
+  backupText.className = "card-note";
+  backupText.textContent = t(
+    "Settings, history, bookmarks, theme and icons without the WebView2 profile",
+  );
+  backupCard.append(backupText, backupRow);
+  main.append(backupCard);
+
   const browserHead = document.createElement("h2");
   browserHead.textContent = t("Default browser");
   browserHead.style.margin = "18px 0 10px";

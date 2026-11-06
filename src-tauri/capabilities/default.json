@@ -78,6 +78,8 @@
     "allow-shortcut",
     "allow-overlay-open-at",
     "allow-page-fullscreen",
+    "allow-backup-export",
+    "allow-backup-import",
     "allow-register-browser",
     "allow-clipboard-read",
     "allow-clipboard-write",
