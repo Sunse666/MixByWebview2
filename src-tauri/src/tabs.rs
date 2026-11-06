@@ -24,6 +24,7 @@ static GESTURES: std::sync::OnceLock<GestureSetup> = std::sync::OnceLock::new();
 #[derive(Default, Clone)]
 pub struct GestureSetup {
     pub enabled: bool,
+    pub super_drag: bool,
     pub js: String,
 }
 
@@ -58,8 +59,8 @@ fn shortcut_prefix() -> String {
     let json = serde_json::to_string(map).unwrap_or_else(|_| "{}".to_string());
     let gestures = GESTURES.get().cloned().unwrap_or_default();
     format!(
-        "window.__mixShortcuts = {json};\nwindow.__mixGestures = {};\nwindow.__mixGestureConfig = {};\n",
-        gestures.enabled, gestures.js
+        "window.__mixShortcuts = {json};\nwindow.__mixGestures = {};\nwindow.__mixGestureConfig = {};\nwindow.__mixSuperDrag = {};\n",
+        gestures.enabled, gestures.js, gestures.super_drag
     )
 }
 /// The mapping used until the user edits it.
@@ -600,6 +601,103 @@ const SHORTCUT_FORWARDER: &str = r#"
   }, true);
 
   window.addEventListener("blur", function () { drawing = false; clearTrail(); });
+})();
+
+
+(function () {
+  if (window.__mixSuperDragEngine) return;
+  window.__mixSuperDragEngine = true;
+  if (window.__mixSuperDrag === false) return;
+
+  var STEP = 28;
+  var pending = null;
+  var badge = null;
+
+  function invoke(command, args) {
+    if (!window.__TAURI_INTERNALS__ || !window.__TAURI_INTERNALS__.invoke) return;
+    window.__TAURI_INTERNALS__.invoke(command, args).catch(function () {});
+  }
+
+  function urlOf(node) {
+    if (!node || !node.closest) return null;
+    var link = node.closest('a[href]');
+    if (link) return link.href;
+    var image = node.closest('img');
+    if (image && image.src) return image.src;
+    return null;
+  }
+
+  function showBadge(mark) {
+    if (!badge) {
+      badge = document.createElement('div');
+      badge.style.cssText =
+        'position:fixed;z-index:2147483647;pointer-events:none;padding:2px 8px;border-radius:10px;' +
+        'background:#4c8dff;color:#fff;font:12px sans-serif;opacity:.92;';
+      document.documentElement.appendChild(badge);
+    }
+    badge.textContent = mark || '';
+  }
+
+  function hideBadge() {
+    if (badge && badge.parentNode) badge.parentNode.removeChild(badge);
+    badge = null;
+  }
+
+  window.addEventListener('mousedown', function (event) {
+    if (event.button !== 0) return;
+    var target = event.target;
+    var url = urlOf(target);
+    var text = String(window.getSelection ? window.getSelection() : '').trim();
+    var selection = text && target && target.closest && target.closest('a,img') === null && text.length > 0;
+    if (!url && !selection) return;
+    pending = {
+      url: url,
+      text: selection ? text : '',
+      x: event.clientX,
+      y: event.clientY,
+      moved: false,
+    };
+  }, true);
+
+  window.addEventListener('dragstart', function (event) {
+    // Native dragging would fight the badge, so it is cancelled while armed.
+    if (pending) event.preventDefault();
+  }, true);
+
+  window.addEventListener('mousemove', function (event) {
+    if (!pending) return;
+    var dx = event.clientX - pending.x;
+    var dy = event.clientY - pending.y;
+    if (!pending.moved) {
+      if (Math.abs(dx) < STEP && Math.abs(dy) < STEP) return;
+      pending.moved = true;
+      showBadge(pending.text ? '\uD83D\udd0d' : '\u2197');
+    }
+    badge.style.left = event.clientX + 12 + 'px';
+    badge.style.top = event.clientY + 12 + 'px';
+  }, true);
+
+  window.addEventListener('mouseup', function (event) {
+    if (!pending) return;
+    var item = pending;
+    pending = null;
+    hideBadge();
+    if (!item.moved) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (item.text) {
+      invoke('search_new_tab', { text: item.text });
+      return;
+    }
+    if (item.url) {
+      invoke('tab_new', { url: item.url });
+    }
+  }, true);
+
+  window.addEventListener('blur', function () {
+    pending = null;
+    hideBadge();
+  });
 })();
 
 "#;

@@ -598,10 +598,28 @@ async function boot() {
       "tab_close_goes_left",
     ),
   );
+  const dragHead = document.createElement("h2");
+  dragHead.textContent = t("Super drag");
+  dragHead.style.margin = "18px 0 10px";
+
+  const dragCard = document.createElement("div");
+  dragCard.className = "card";
+  dragCard.style.maxWidth = "720px";
+  const dragSwitch = switchEl(settings.super_drag !== false, async (next) => {
+    await invoke("settings_set", { patch: { super_drag: next } }).catch(() => {});
+  });
+  dragCard.append(
+    row(
+      t("Enable super drag"),
+      t("Drag a link to open it, drag selected text to search it"),
+      dragSwitch,
+    ),
+  );
+
   const gesturesHead = document.createElement("h2");
   gesturesHead.textContent = t("Mouse gestures");
   gesturesHead.style.margin = "18px 0 10px";
-  main.append(tabsCard, gesturesHead, gestureCard);
+  main.append(tabsCard, dragHead, dragCard, gesturesHead, gestureCard);
 
   const newtabHead = document.createElement("h2");
   newtabHead.textContent = t("New tab page");
@@ -900,6 +918,7 @@ function groupSections() {
   const preferred = [
     "Startup",
     "Tab settings",
+    "Super drag",
     "Mouse gestures",
     "New tab page",
     "Theme file",

@@ -81,6 +81,7 @@
     "allow-app-quit",
     "allow-download-list",
     "allow-download-open-dir",
+    "allow-search-new-tab",
     "allow-shortcut",
     "allow-overlay-open-at",
     "allow-page-fullscreen",

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-search-new-tab"
+description = "Enables the search_new_tab command without any pre-configured scope."
+commands.allow = ["search_new_tab"]
+
+[[permission]]
+identifier = "deny-search-new-tab"
+description = "Denies the search_new_tab command without any pre-configured scope."
+commands.deny = ["search_new_tab"]

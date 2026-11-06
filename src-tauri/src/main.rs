@@ -29,7 +29,7 @@ mod window;
 
 use tauri::Manager;
 
-// embed bump 80
+// embed bump 82
 fn main() {
     let dirs = paths::AppDirs::resolve().ensure();
     logging::init(&dirs.logs);
@@ -89,6 +89,7 @@ fn main() {
                 });
                 crate::tabs::set_gestures(crate::tabs::GestureSetup {
                     enabled: settings.gestures,
+                    super_drag: settings.super_drag,
                     js: serde_json::to_string(&config).unwrap_or_else(|_| "{}".to_string()),
                 });
             }
@@ -181,6 +182,7 @@ fn main() {
             ipc::app_info,
             ipc::app_restart,
             ipc::app_quit,
+            ipc::search_new_tab,
             ipc::shortcut,
             ipc::overlay_open_at,
             ipc::page_fullscreen,

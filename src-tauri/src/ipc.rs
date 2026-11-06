@@ -165,6 +165,7 @@ pub struct SettingsPatch {
     pub shortcuts: Option<std::collections::BTreeMap<String, String>>,
     pub custom_search: Option<String>,
     pub gestures: Option<bool>,
+    pub super_drag: Option<bool>,
     pub gesture_trail: Option<bool>,
     pub gesture_color: Option<String>,
     pub gesture_width: Option<u32>,
@@ -211,6 +212,21 @@ pub struct MenuRequest {
 pub struct AppError {
     pub code: String,
     pub message: String,
+}
+
+/// Percent encodes a query the way a search box would.
+pub(crate) fn encode_query(text: &str) -> String {
+    let mut out = String::new();
+    for byte in text.as_bytes() {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                out.push(*byte as char)
+            }
+            b' ' => out.push('+'),
+            other => out.push_str(&format!("%{other:02X}")),
+        }
+    }
+    out
 }
 
 /// Keys arrive in different spellings; store one form: "ctrl+shift+t".
@@ -1042,6 +1058,37 @@ pub async fn download_open_dir(_window: tauri::Window, state: State<'_, AppState
     Ok(())
 }
 
+/// Opens a search in a new tab using the configured engine.
+#[tauri::command]
+pub async fn search_new_tab(
+    app: AppHandle,
+    window: tauri::Window,
+    state: State<'_, AppState>,
+    text: String,
+) -> Result<(), AppError> {
+    let query = text.trim().to_string();
+    if query.is_empty() {
+        return Ok(());
+    }
+    let url = {
+        let settings = state.settings.read();
+        let template = settings.custom_search.trim();
+        if template.contains("%s") {
+            template.replace("%s", &encode_query(&query))
+        } else {
+            let base = match settings.search_engine.as_str() {
+                "bing" => "https://www.bing.com/search?q=",
+                "google" => "https://www.google.com/search?q=",
+                "ddg" => "https://duckduckgo.com/?q=",
+                _ => "https://www.baidu.com/s?wd=",
+            };
+            format!("{base}{}", encode_query(&query))
+        }
+    };
+    crate::logging::info(&format!("search: {query}"));
+    tab_new(app, window, state, Some(url), None).await?;
+    Ok(())
+}
 #[tauri::command]
 pub async fn shortcut(app: AppHandle, window: tauri::Window, state: State<'_, AppState>, action: String) -> Result<(), AppError> {
     if action != "dismiss" {
@@ -1505,6 +1552,9 @@ pub async fn settings_set(
         }
         if let Some(value) = patch.baidu_secret {
             guard.baidu_secret = value.trim().to_string();
+        }
+        if let Some(value) = patch.super_drag {
+            guard.super_drag = value;
         }
         if let Some(value) = patch.gesture_trail {
             guard.gesture_trail = value;

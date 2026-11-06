@@ -27,6 +27,8 @@ pub struct Settings {
     pub custom_search: String,
     /// Right button gestures such as L for back.
     pub gestures: bool,
+    /// Drag a link, image or text to act on it.
+    pub super_drag: bool,
     /// Draw the trail line while a gesture is in progress.
     pub gesture_trail: bool,
     /// Trail colour, any css colour.
@@ -93,6 +95,7 @@ impl Default for Settings {
             baidu_secret: String::new(),
             translate_to: "zh".into(),
             gestures: true,
+            super_drag: true,
             gesture_trail: true,
             gesture_color: "#4c8dff".into(),
             gesture_width: 3,
