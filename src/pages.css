@@ -277,3 +277,13 @@ main h2 {
 }
 
 .tile { border-radius: var(--tile-radius, 14px); }
+
+.nav-divider {
+  height: 1px;
+  background: #2f3133;
+  margin: 10px 12px;
+}
+.nav-section {
+  padding-left: 26px;
+  font-size: 13px;
+}
