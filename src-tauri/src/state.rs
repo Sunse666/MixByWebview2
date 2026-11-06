@@ -25,6 +25,8 @@ pub struct Settings {
     pub translate_to: String,
     /// A search template with %s; wins over search_engine when set.
     pub custom_search: String,
+    /// Right button gestures such as L for back.
+    pub gestures: bool,
     /// Double click on a tab closes it.
     pub tab_double_click_close: bool,
     /// Show the close button on each tab.
@@ -78,6 +80,7 @@ impl Default for Settings {
             baidu_appid: String::new(),
             baidu_secret: String::new(),
             translate_to: "zh".into(),
+            gestures: true,
             tab_double_click_close: true,
             tab_show_close: true,
             tab_close_goes_left: true,

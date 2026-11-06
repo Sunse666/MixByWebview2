@@ -164,6 +164,7 @@ pub struct SettingsPatch {
     pub search_engine: Option<String>,
     pub shortcuts: Option<std::collections::BTreeMap<String, String>>,
     pub custom_search: Option<String>,
+    pub gestures: Option<bool>,
     pub tab_double_click_close: Option<bool>,
     pub tab_show_close: Option<bool>,
     pub tab_close_goes_left: Option<bool>,
@@ -1406,6 +1407,9 @@ pub async fn settings_set(
         }
         if let Some(value) = patch.baidu_secret {
             guard.baidu_secret = value.trim().to_string();
+        }
+        if let Some(value) = patch.gestures {
+            guard.gestures = value;
         }
         if let Some(value) = patch.tab_double_click_close {
             guard.tab_double_click_close = value;

@@ -178,6 +178,8 @@ const DICT = {
     "Tabs can still be closed with Ctrl+W or the middle click": "仍可用 Ctrl+W 或中键关闭",
     "Activate the tab on the left after closing": "关闭后激活左侧标签",
     "Off selects the tab on the right": "关闭时激活右侧标签",
+    "Mouse gestures": "鼠标手势",
+    "Hold the right button: L back, R forward, UD reload, LR next tab": "按住右键划动：左=后退，右=前进，上下=刷新，左右=切换标签",
     "New tab": "新标签页",
     "New incognito tab": "新建无痕标签页",
     "Reopen closed tab": "重新打开关闭的标签页",

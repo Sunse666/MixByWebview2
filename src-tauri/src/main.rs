@@ -29,7 +29,7 @@ mod window;
 
 use tauri::Manager;
 
-// embed bump 74
+// embed bump 75
 fn main() {
     let dirs = paths::AppDirs::resolve().ensure();
     logging::init(&dirs.logs);
@@ -72,6 +72,7 @@ fn main() {
             let disabled_extensions = crate::state::Settings::load(&dirs.settings_file).disabled_extensions;
     let ext_infos = extensions::scan(&dirs, &disabled_extensions);
             let scripts = userscripts::scan(&dirs.scripts);
+            crate::tabs::set_gestures(crate::state::Settings::load(&dirs.settings_file).gestures);
             crate::tabs::set_custom_css(
                 std::fs::read_to_string(dirs.user_data.join("custom.css"))
                     .unwrap_or_default()

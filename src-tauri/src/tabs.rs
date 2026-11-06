@@ -17,6 +17,13 @@ pub fn set_shortcuts(map: std::collections::BTreeMap<String, String>) {
     let _ = SHORTCUTS.set(map);
 }
 
+/// Right button gestures, on by default like every gesture browser.
+static GESTURES: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+
+pub fn set_gestures(enabled: bool) {
+    let _ = GESTURES.set(enabled);
+}
+
 /// Contents of UserData/custom.css, applied to every page.
 static CUSTOM_CSS: std::sync::OnceLock<String> = std::sync::OnceLock::new();
 
@@ -42,10 +49,9 @@ fn shortcut_prefix() -> String {
     let empty = std::collections::BTreeMap::new();
     let map = SHORTCUTS.get().unwrap_or(&empty);
     let json = serde_json::to_string(map).unwrap_or_else(|_| "{}".to_string());
-    format!("window.__mixShortcuts = {json};
-")
+    let gestures = GESTURES.get().copied().unwrap_or(true);
+    format!("window.__mixShortcuts = {json};\nwindow.__mixGestures = {gestures};\n")
 }
-
 const SHORTCUT_FORWARDER: &str = r#"
   // Clicking anywhere in the page closes an open overlay (menu or context menu).
   let __mixDismiss = false;
@@ -374,6 +380,11 @@ const SHORTCUT_FORWARDER: &str = r#"
 
   // Suppress the native menu and let the shell draw its own.
   window.addEventListener("contextmenu", function (event) {
+    if (window.__mixGesturePending) {
+      window.__mixGesturePending = false;
+      event.preventDefault();
+      return;
+    }
     event.preventDefault();
     var link = event.target.closest ? event.target.closest("a") : null;
     var image = event.target.closest ? event.target.closest("img") : null;
@@ -458,6 +469,91 @@ const SHORTCUT_FORWARDER: &str = r#"
     send(action);
   }, true);
 })();
+
+(function () {
+  if (window.__mixGestureEngine) return;
+  window.__mixGestureEngine = true;
+
+  var MAP = {
+    L: "back",
+    R: "forward",
+    U: "reload",
+    D: "new_tab",
+    UD: "close_tab",
+    DU: "reopen_tab",
+    LR: "next_tab",
+    RL: "prev_tab",
+    UL: "bookmark",
+    DR: "downloads",
+  };
+  var STEP = 34;
+  var drawing = false;
+  var dirs = [];
+  var last = null;
+  var fromX = 0;
+  var fromY = 0;
+  var canvas = null;
+  var context = null;
+
+  function trail() {
+    if (canvas) return;
+    canvas = document.createElement("canvas");
+    canvas.style.cssText = "position:fixed;inset:0;width:100%;height:100%;z-index:2147483647;pointer-events:none;";
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    context = canvas.getContext("2d");
+    context.strokeStyle = '#4c8dff';
+    context.lineWidth = 3;
+    context.lineCap = "round";
+    document.documentElement.appendChild(canvas);
+  }
+
+  function clearTrail() {
+    if (canvas && canvas.parentNode) canvas.parentNode.removeChild(canvas);
+    canvas = null;
+    context = null;
+  }
+
+  window.addEventListener("mousedown", function (event) {
+    if (window.__mixGestures === false) return;
+    if (event.button !== 2) return;
+    drawing = true;
+    dirs = [];
+    last = null;
+    fromX = event.clientX;
+    fromY = event.clientY;
+    trail();
+    if (context) { context.beginPath(); context.moveTo(fromX, fromY); }
+  }, true);
+
+  window.addEventListener("mousemove", function (event) {
+    if (!drawing) return;
+    if (context) { context.lineTo(event.clientX, event.clientY); context.stroke(); }
+    var dx = event.clientX - fromX;
+    var dy = event.clientY - fromY;
+    if (Math.abs(dx) < STEP && Math.abs(dy) < STEP) return;
+    var dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? "R" : "L") : dy > 0 ? "D" : "U";
+    if (dir !== last) { dirs.push(dir); last = dir; }
+    fromX = event.clientX;
+    fromY = event.clientY;
+  }, true);
+
+  window.addEventListener("mouseup", function (event) {
+    if (event.button !== 2 || !drawing) return;
+    drawing = false;
+    clearTrail();
+    var pattern = dirs.join("");
+    if (!pattern) return;
+    event.preventDefault();
+    event.stopPropagation();
+    window.__mixGesturePending = true;
+    var action = MAP[pattern];
+    if (action) send(action);
+  }, true);
+
+  window.addEventListener("blur", function () { drawing = false; clearTrail(); });
+})();
+
 "#;
 
 

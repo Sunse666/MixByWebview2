@@ -389,6 +389,12 @@ async function boot() {
 
   tabsCard.append(
     tabToggle(
+      "Mouse gestures",
+      "Hold the right button: L back, R forward, UD reload, LR next tab",
+      settings.gestures,
+      "gestures",
+    ),
+    tabToggle(
       "Double click closes a tab",
       "Off means a double click only selects it",
       settings.tab_double_click_close,
