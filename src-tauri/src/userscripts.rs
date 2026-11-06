@@ -8,6 +8,9 @@ pub struct ScriptInfo {
     pub run_at: String,
     pub matches: Vec<String>,
     pub path: String,
+    /// Disabled scripts are listed but never injected.
+    #[serde(default)]
+    pub disabled: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -29,6 +32,7 @@ impl Userscript {
             run_at: self.run_at.clone(),
             matches: self.matches.clone(),
             path: self.path.clone(),
+            disabled: self.path.ends_with(".user.js.disabled"),
         }
     }
 }
@@ -53,11 +57,12 @@ fn collect(dir: &Path, depth: usize, out: &mut Vec<Userscript>) {
             collect(&path, depth + 1, out);
             continue;
         }
-        let is_script = path
+        let file_name = path
             .file_name()
             .and_then(|name| name.to_str())
-            .map(|name| name.ends_with(".user.js"))
-            .unwrap_or(false);
+            .unwrap_or_default()
+            .to_string();
+        let is_script = file_name.ends_with(".user.js") || file_name.ends_with(".user.js.disabled");
         if !is_script {
             continue;
         }
@@ -66,6 +71,11 @@ fn collect(dir: &Path, depth: usize, out: &mut Vec<Userscript>) {
             Ok(source) => match parse(&source) {
                 Some(mut script) => {
                     script.path = path.display().to_string();
+                    if file_name.ends_with(".user.js.disabled") {
+                        crate::logging::info(&format!("userscript {} (disabled)", script.name));
+                        out.push(script);
+                        continue;
+                    }
                     crate::logging::info(&format!("userscript {} ({})", script.name, script.run_at));
                     out.push(script);
                 }

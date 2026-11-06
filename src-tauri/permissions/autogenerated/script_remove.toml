@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-script-remove"
+description = "Enables the script_remove command without any pre-configured scope."
+commands.allow = ["script_remove"]
+
+[[permission]]
+identifier = "deny-script-remove"
+description = "Denies the script_remove command without any pre-configured scope."
+commands.deny = ["script_remove"]

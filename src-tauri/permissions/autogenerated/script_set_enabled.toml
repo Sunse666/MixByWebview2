@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-script-set-enabled"
+description = "Enables the script_set_enabled command without any pre-configured scope."
+commands.allow = ["script_set_enabled"]
+
+[[permission]]
+identifier = "deny-script-set-enabled"
+description = "Denies the script_set_enabled command without any pre-configured scope."
+commands.deny = ["script_set_enabled"]

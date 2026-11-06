@@ -34,6 +34,11 @@ impl ZoomStore {
         Self { sites: file.sites }
     }
 
+    /// Drops every remembered level, used by the clear-data action.
+    pub fn forget_all(&mut self) {
+        self.sites.clear();
+    }
+
     pub fn save(&self, path: &Path) -> std::io::Result<()> {
         let file = File {
             schema_version: SCHEMA,

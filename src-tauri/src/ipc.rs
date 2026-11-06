@@ -1720,6 +1720,58 @@ pub async fn history_remove(
     Ok(removed)
 }
 
+/// Clears the selected kinds of local data and reports what was cleared.
+#[tauri::command]
+pub async fn clear_data(
+    app: AppHandle,
+    _window: tauri::Window,
+    state: State<'_, AppState>,
+    kinds: Vec<String>,
+) -> Result<Vec<String>, AppError> {
+    let mut done = Vec::new();
+
+    if kinds.iter().any(|kind| kind == "history") {
+        state.history.write().unwrap_or_else(|e| e.into_inner()).clear();
+        crate::library::save_visits(&state.dirs.history_file, &[])?;
+        done.push("history".to_string());
+    }
+
+    if kinds.iter().any(|kind| kind == "bookmarks") {
+        state.bookmarks.write().unwrap_or_else(|e| e.into_inner()).clear();
+        crate::library::save_bookmarks(&state.dirs.bookmarks_file, &[])?;
+        let _ = app.emit("bookmarks:changed", false);
+        done.push("bookmarks".to_string());
+    }
+
+    if kinds.iter().any(|kind| kind == "favicons") {
+        state
+            .favicons
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .hosts
+            .clear();
+        let _ = std::fs::remove_dir_all(&state.dirs.favicons_dir);
+        let empty = state.favicons.read().unwrap_or_else(|e| e.into_inner()).clone();
+        empty.save(&state.dirs.favicons_file);
+        done.push("favicons".to_string());
+    }
+
+    if kinds.iter().any(|kind| kind == "session") {
+        let _ = std::fs::remove_file(&state.dirs.session_file);
+        done.push("session".to_string());
+    }
+
+    if kinds.iter().any(|kind| kind == "zoom") {
+        let mut zoom = state.zoom.write();
+        zoom.forget_all();
+        zoom.save(&state.dirs.zoom_file);
+        done.push("zoom".to_string());
+    }
+
+    crate::logging::info(&format!("cleared: {}", done.join(", ")));
+    Ok(done)
+}
+
 #[tauri::command]
 pub async fn history_clear(_window: tauri::Window, state: State<'_, AppState>) -> Result<(), AppError> {
     {
@@ -1930,6 +1982,50 @@ pub async fn app_quit(app: AppHandle, _window: tauri::Window) -> Result<(), AppE
 #[tauri::command]
 pub async fn ui_log(message: String) -> Result<(), AppError> {
     crate::logging::info(&format!("ui: {message}"));
+    Ok(())
+}
+
+/// Userscripts are files, so disabling means renaming the suffix: the scanner
+/// only picks up names ending in ".user.js".
+#[tauri::command]
+pub async fn script_set_enabled(
+    _window: tauri::Window,
+    path: String,
+    enabled: bool,
+) -> Result<String, AppError> {
+    let source = std::path::PathBuf::from(&path);
+    let name = source
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or_default()
+        .to_string();
+    let target = if enabled {
+        if name.ends_with(".user.js") {
+            source.clone()
+        } else if name.ends_with(".user.js.disabled") {
+            source.with_file_name(name.trim_end_matches(".disabled"))
+        } else {
+            return Err(AppError::new("bad_script", "unexpected file name"));
+        }
+    } else if name.ends_with(".user.js.disabled") {
+        source.clone()
+    } else if name.ends_with(".user.js") {
+        source.with_file_name(format!("{name}.disabled"))
+    } else {
+        return Err(AppError::new("bad_script", "unexpected file name"));
+    };
+
+    if target != source {
+        std::fs::rename(&source, &target).map_err(|err| AppError::new("script", err.to_string()))?;
+    }
+    crate::logging::info(&format!("userscript {} -> {}", source.display(), target.display()));
+    Ok(target.display().to_string())
+}
+
+#[tauri::command]
+pub async fn script_remove(_window: tauri::Window, path: String) -> Result<(), AppError> {
+    std::fs::remove_file(&path).map_err(|err| AppError::new("script", err.to_string()))?;
+    crate::logging::info(&format!("userscript removed: {path}"));
     Ok(())
 }
 
