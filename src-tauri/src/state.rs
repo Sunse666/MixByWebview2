@@ -23,6 +23,18 @@ pub struct Settings {
     pub baidu_appid: String,
     pub baidu_secret: String,
     pub translate_to: String,
+    /// New tab page: show the search field.
+    pub newtab_show_search: bool,
+    /// New tab page: show the frequent site tiles.
+    pub newtab_show_sites: bool,
+    /// Opens instead of the built-in page when set.
+    pub newtab_url: String,
+    /// Tiles shown at most.
+    pub newtab_tiles: u32,
+    /// Grid columns for the tiles.
+    pub newtab_columns: u32,
+    /// Tile corner radius in percent.
+    pub newtab_radius: u32,
     /// Action -> combo, e.g. "new_tab" -> "ctrl+t". Empty means the default.
     #[serde(default)]
     pub shortcuts: std::collections::BTreeMap<String, String>,
@@ -58,6 +70,12 @@ impl Default for Settings {
             baidu_appid: String::new(),
             baidu_secret: String::new(),
             translate_to: "zh".into(),
+            newtab_show_search: true,
+            newtab_show_sites: true,
+            newtab_url: String::new(),
+            newtab_tiles: 12,
+            newtab_columns: 6,
+            newtab_radius: 50,
             shortcuts: std::collections::BTreeMap::new(),
             search_engine: "baidu".into(),
             new_tab_page: true,

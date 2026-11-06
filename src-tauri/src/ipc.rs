@@ -163,6 +163,12 @@ pub struct SettingsPatch {
     pub new_tab_page: Option<bool>,
     pub search_engine: Option<String>,
     pub shortcuts: Option<std::collections::BTreeMap<String, String>>,
+    pub newtab_show_search: Option<bool>,
+    pub newtab_show_sites: Option<bool>,
+    pub newtab_url: Option<String>,
+    pub newtab_tiles: Option<u32>,
+    pub newtab_columns: Option<u32>,
+    pub newtab_radius: Option<u32>,
     pub menu_bar: Option<bool>,
     pub language: Option<String>,
     pub hidden_extensions: Option<Vec<String>>,
@@ -594,7 +600,9 @@ pub async fn tab_new(
         }
         None => {
             let settings = state.settings.read();
-            if settings.new_tab_page {
+            if !settings.newtab_url.is_empty() {
+                settings.newtab_url.clone()
+            } else if settings.new_tab_page {
                 "http://tauri.localhost/pages/newtab.html".to_string()
             } else {
                 settings.start_url.clone()
@@ -1382,6 +1390,24 @@ pub async fn settings_set(
         }
         if let Some(value) = patch.baidu_secret {
             guard.baidu_secret = value.trim().to_string();
+        }
+        if let Some(value) = patch.newtab_show_search {
+            guard.newtab_show_search = value;
+        }
+        if let Some(value) = patch.newtab_show_sites {
+            guard.newtab_show_sites = value;
+        }
+        if let Some(value) = patch.newtab_url {
+            guard.newtab_url = value.trim().to_string();
+        }
+        if let Some(value) = patch.newtab_tiles {
+            guard.newtab_tiles = value.clamp(1, 40);
+        }
+        if let Some(value) = patch.newtab_columns {
+            guard.newtab_columns = value.clamp(1, 12);
+        }
+        if let Some(value) = patch.newtab_radius {
+            guard.newtab_radius = value.min(50);
         }
         if let Some(value) = patch.shortcuts {
             guard.shortcuts = value

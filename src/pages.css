@@ -275,3 +275,5 @@ main h2 {
   background: var(--hover);
   font-weight: 600;
 }
+
+.tile { border-radius: var(--tile-radius, 14px); }

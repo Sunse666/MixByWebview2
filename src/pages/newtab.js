@@ -28,6 +28,10 @@ async function boot() {
   const hour = new Date().getHours();
   greeting.textContent =
     hour < 6 ? t("Good night") : hour < 12 ? t("Good morning") : hour < 18 ? t("Good afternoon") : t("Good evening");
+  if (settings && settings.newtab_show_search === false) {
+    input.closest(".search")?.remove();
+  }
+
   input.placeholder = t("Search or enter address");
   document.getElementById("go").textContent = t("Go");
 
@@ -49,7 +53,19 @@ async function boot() {
   }
 
   const icons = (await invoke("favicon_map").catch(() => ({}))) || {};
-  const top = [...counts.values()].sort((a, b) => b.count - a.count).slice(0, 12);
+  const limit = (settings && settings.newtab_tiles) || 12;
+  const top = [...counts.values()].sort((a, b) => b.count - a.count).slice(0, limit);
+
+  if (settings && settings.newtab_show_sites === false) {
+    tiles.style.display = "none";
+    return;
+  }
+  if (settings && settings.newtab_columns) {
+    tiles.style.gridTemplateColumns = "repeat(" + settings.newtab_columns + ", 1fr)";
+  }
+  if (settings && settings.newtab_radius !== undefined) {
+    tiles.style.setProperty("--tile-radius", settings.newtab_radius + "%");
+  }
   tiles.replaceChildren(
     ...top.map((entry) => {
       const tile = document.createElement("div");
