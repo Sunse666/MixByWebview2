@@ -745,7 +745,20 @@ const SHORTCUT_FORWARDER: &str = r#"
   }
 
   // Exactly one source: a link, an image, or the selected text.
-  function pickSource(target) {
+  /// Sites often stack a container above the cards; the stack still holds them.
+  function sourceAtPoint(x, y, fallbackTarget) {
+    var stack = [];
+    try {
+      stack = document.elementsFromPoint(x, y) || [];
+    } catch (error) {}
+    for (var index = 0; index < stack.length; index += 1) {
+      var found = pickSource(stack[index], true);
+      if (found) return found;
+    }
+    return pickSource(fallbackTarget);
+  }
+
+  function pickSource(target, quiet) {
     var link = linkOf(target);
     if (link) {
       var label = String(link.element.textContent || '').trim().slice(0, 300);
@@ -768,6 +781,7 @@ const SHORTCUT_FORWARDER: &str = r#"
 
     // Sites that build cards from divs offer no address, but they do look
     // clickable; the visible text is still worth dragging.
+    if (quiet) return null;
     var node = target;
     for (var depth = 0; depth < 6 && node && node.nodeType === 1; depth += 1) {
       var style = null;
@@ -792,7 +806,7 @@ const SHORTCUT_FORWARDER: &str = r#"
 
   window.addEventListener('pointerdown', function (event) {
     if (event.button !== 0) return;
-    var source = pickSource(event.target);
+    var source = sourceAtPoint(event.clientX, event.clientY, event.target);
     if (!source) return;
     drag = {
       url: source.url,
