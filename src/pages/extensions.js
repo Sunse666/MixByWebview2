@@ -54,6 +54,51 @@ async function boot() {
   restartBar.append(restartHint, restart);
   main.append(restartBar);
 
+  // Extensions WebView2 actually loaded: toggling here takes effect at once.
+  const live = (await invoke("extension_live_list").catch(() => [])) || [];
+  if (live.length) {
+    const head = document.createElement("h2");
+    head.textContent = t("Loaded by the browser");
+    head.style.margin = "0 0 10px";
+    main.append(head);
+
+    const liveCard = document.createElement("div");
+    liveCard.className = "card";
+    liveCard.style.maxWidth = "720px";
+    liveCard.style.marginBottom = "18px";
+
+    for (const item of live) {
+      const line = document.createElement("div");
+      line.className = "entry";
+      const name = document.createElement("span");
+      name.className = "title";
+      name.textContent = item.name || item.id;
+      const id = document.createElement("span");
+      id.className = "host";
+      id.textContent = item.id;
+
+      const toggle = document.createElement("button");
+      toggle.className = "switch";
+      toggle.setAttribute("role", "switch");
+      toggle.setAttribute("aria-checked", String(Boolean(item.enabled)));
+      toggle.addEventListener("click", async () => {
+        const enable = toggle.getAttribute("aria-checked") !== "true";
+        toggle.setAttribute("aria-checked", String(enable));
+        const ok = await invoke("extension_live_set", { id: item.id, enabled: enable }).catch(
+          () => false,
+        );
+        await invoke("ui_log", {
+          message: "live toggle " + item.id + " -> " + enable + ": " + ok,
+        }).catch(() => {});
+        toggle.setAttribute("aria-checked", String(Boolean(ok) ? enable : !enable));
+      });
+
+      line.append(name, id, toggle);
+      liveCard.append(line);
+    }
+    main.append(liveCard);
+  }
+
   const grid = document.createElement("div");
   grid.className = "grid";
   main.append(grid);

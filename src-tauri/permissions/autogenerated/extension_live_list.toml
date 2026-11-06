@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-extension-live-list"
+description = "Enables the extension_live_list command without any pre-configured scope."
+commands.allow = ["extension_live_list"]
+
+[[permission]]
+identifier = "deny-extension-live-list"
+description = "Denies the extension_live_list command without any pre-configured scope."
+commands.deny = ["extension_live_list"]

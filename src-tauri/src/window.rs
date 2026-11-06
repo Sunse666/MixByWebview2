@@ -84,6 +84,7 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
 
     crate::downloads::start_progress_watch(app.handle().clone());
     crate::snap::install_hotkeys(app.handle());
+    debug_ext_toggle(app.handle());
     crate::tray::install(&app.handle().clone())?;
     // Debug helper: MIX_OPEN_ON_START=settings opens that overlay shortly after
     // startup. Opening it inside setup deadlocks the page: the main thread is
@@ -631,4 +632,33 @@ pub fn relayout(app: &AppHandle, label: &str) -> Result<(), tauri::Error> {
 
     let _ = app.emit_to(label, "layout:changed", (width, height));
     Ok(())
+}
+
+/// Debug hook: toggles one extension and logs the outcome, so the COM path can
+/// be checked without clicking. Inert unless MIX_DEBUG is set.
+fn debug_ext_toggle(app: &tauri::AppHandle) {
+    if !debug_hooks() {
+        return;
+    }
+    let Ok(wanted) = std::env::var("MIX_EXT_TOGGLE") else {
+        return;
+    };
+    let handle = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_secs(3));
+        let Some(webview) = handle.get_webview("w1-tab-1") else {
+            return;
+        };
+        let before = crate::ext_live::list(&webview);
+        let Some(target) = before.iter().find(|item| item.name.contains(&wanted)) else {
+            crate::logging::info(&format!("ext toggle: no match for {wanted}"));
+            return;
+        };
+        let ok = crate::ext_live::set_enabled(&webview, &target.id, !target.enabled);
+        crate::logging::info(&format!("ext toggle {} -> {}: {ok}", target.name, !target.enabled));
+        let after = crate::ext_live::list(&webview);
+        if let Some(seen) = after.iter().find(|item| item.id == target.id) {
+            crate::logging::info(&format!("ext toggle after: enabled={}", seen.enabled));
+        }
+    });
 }

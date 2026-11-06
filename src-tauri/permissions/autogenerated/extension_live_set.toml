@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-extension-live-set"
+description = "Enables the extension_live_set command without any pre-configured scope."
+commands.allow = ["extension_live_set"]
+
+[[permission]]
+identifier = "deny-extension-live-set"
+description = "Denies the extension_live_set command without any pre-configured scope."
+commands.deny = ["extension_live_set"]

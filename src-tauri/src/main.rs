@@ -6,6 +6,7 @@ mod browser_reg;
 mod diag;
 mod zoom;
 mod downloads;
+mod ext_live;
 mod extensions;
 mod favicons;
 mod ipc;
@@ -28,7 +29,7 @@ mod window;
 
 use tauri::Manager;
 
-// embed bump 51
+// embed bump 52
 fn main() {
     let dirs = paths::AppDirs::resolve().ensure();
     logging::init(&dirs.logs);
@@ -82,6 +83,8 @@ fn main() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            ipc::extension_live_list,
+            ipc::extension_live_set,
             ipc::window_control,
             ipc::window_drag,
             ipc::window_resize,

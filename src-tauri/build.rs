@@ -12,6 +12,8 @@ fn main() {
     // Declaring the commands here turns them into ACL permissions, which lets
     // remote pages be granted a single command (see capabilities/remote.json).
     let commands: &'static [&'static str] = &[
+        "extension_live_list",
+        "extension_live_set",
         "window_control",
         "window_drag",
         "window_resize",

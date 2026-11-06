@@ -1428,6 +1428,39 @@ pub async fn snap(app: AppHandle, direction: String) -> Result<(), AppError> {
     crate::snap::cycle(&app, dir).map_err(|err| AppError::new("snap", err))
 }
 
+/// The extensions WebView2 actually loaded, with the ids it assigned.
+#[tauri::command]
+pub async fn extension_live_list(
+    app: AppHandle,
+    window: tauri::Window,
+    state: State<'_, AppState>,
+) -> Result<Vec<crate::ext_live::LiveExtension>, AppError> {
+    let label = selected_label(&state, &window);
+    let Some(webview) = app.get_webview(&label) else {
+        return Ok(Vec::new());
+    };
+    let listed = crate::ext_live::list(&webview);
+    crate::logging::info(&format!("live extensions: {}", listed.len()));
+    Ok(listed)
+}
+
+/// Enables or disables a loaded extension without restarting the app.
+#[tauri::command]
+pub async fn extension_live_set(
+    app: AppHandle,
+    window: tauri::Window,
+    state: State<'_, AppState>,
+    id: String,
+    enabled: bool,
+) -> Result<bool, AppError> {
+    let label = selected_label(&state, &window);
+    let Some(webview) = app.get_webview(&label) else {
+        return Ok(false);
+    };
+    let ok = crate::ext_live::set_enabled(&webview, &id, enabled);
+    crate::logging::info(&format!("extension {id} enabled={enabled}: {ok}"));
+    Ok(ok)
+}
 #[tauri::command]
 pub async fn ext_list(_window: tauri::Window, state: State<'_, AppState>) -> Result<Vec<ExtInfo>, AppError> {
     Ok(state.extensions.clone())
