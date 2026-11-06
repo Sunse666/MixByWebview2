@@ -6,6 +6,9 @@
   "webviews": [
     "*"
   ],
+  "remote": {
+    "urls": ["http://*", "https://*"]
+  },
   "permissions": [
     "core:default",
     "allow-extension-live-list",
