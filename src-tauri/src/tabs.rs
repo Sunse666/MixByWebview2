@@ -60,10 +60,11 @@ fn shortcut_prefix() -> String {
     let map = SHORTCUTS.get().unwrap_or(&empty);
     let json = serde_json::to_string(map).unwrap_or_else(|_| "{}".to_string());
     let gestures = GESTURES.get().cloned().unwrap_or_default();
-    format!(
+    let out = format!(
         "window.__mixShortcuts = {json};\nwindow.__mixGestures = {};\nwindow.__mixGestureConfig = {};\nwindow.__mixSuperDrag = {};\nwindow.__mixDragConfig = {};\n",
         gestures.enabled, gestures.js, gestures.super_drag, gestures.drag_js
-    )
+    );
+    out
 }
 /// The mapping used until the user edits it.
 pub fn default_gestures() -> std::collections::BTreeMap<String, String> {
@@ -631,6 +632,7 @@ const SHORTCUT_FORWARDER: &str = r#"
   var pending = null;
   var badge = null;
 
+
   function invoke(command, args) {
     if (!window.__TAURI_INTERNALS__ || !window.__TAURI_INTERNALS__.invoke) return;
     window.__TAURI_INTERNALS__.invoke(command, args).catch(function () {});
@@ -643,6 +645,12 @@ const SHORTCUT_FORWARDER: &str = r#"
     var image = node.closest('img');
     if (image && image.src) return image.src;
     return null;
+  }
+
+  function linkTextOf(node) {
+    if (!node || !node.closest) return '';
+    var link = node.closest('a[href]');
+    return link ? String(link.textContent || '').trim() : '';
   }
 
   function showBadge(mark) {
@@ -670,11 +678,14 @@ const SHORTCUT_FORWARDER: &str = r#"
     if (!url && !selection) return;
     pending = {
       url: url,
+      linkText: linkTextOf(target),
       text: selection ? text : '',
       x: event.clientX,
       y: event.clientY,
       moved: false,
     };
+    // Native drag and selection steal the pointer once they start.
+    event.preventDefault();
   }, true);
 
   window.addEventListener('dragstart', function (event) {
@@ -714,20 +725,34 @@ const SHORTCUT_FORWARDER: &str = r#"
 
     var text = item.text;
     var url = item.url;
+    var linkText = item.linkText || '';
     if (action === 'search') {
-      invoke('search_new_tab', { text: text || url || '' });
+      invoke('search_new_tab', { text: text || linkText || url || '' });
       return;
     }
     if (action === 'copy') {
-      var value = text || url || '';
+      var value = text || linkText || url || '';
       if (value) invoke('clipboard_write', { text: value });
+      return;
+    }
+    if (action === 'copy_link_text') {
+      if (linkText) invoke('clipboard_write', { text: linkText });
+      return;
+    }
+    if (action === 'copy_link_both') {
+      if (linkText && url) invoke('clipboard_write', { text: linkText + '\n' + url });
       return;
     }
     if (action === 'save') {
       if (url) invoke('download_url', { url: url, fileName: null });
       return;
     }
-    // "open": links and images open, text searches.
+    if (action === 'open_background') {
+      if (url) invoke('tab_new', { url: url, background: true });
+      else if (text) invoke('search_new_tab', { text: text });
+      return;
+    }
+    // "open": links and images open in front, text searches.
     if (url) invoke('tab_new', { url: url });
     else if (text) invoke('search_new_tab', { text: text });
   }, true);

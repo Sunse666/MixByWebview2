@@ -588,7 +588,6 @@ pub async fn tab_select(app: AppHandle, window: tauri::Window, state: State<'_, 
     if !exists {
         return Err(AppError::new("no_tab", id));
     }
-
     {
         let mut core = state.write_core(window.label());
         core.selected = Some(id.clone());
@@ -616,6 +615,8 @@ pub async fn tab_new(
     window: tauri::Window, state: State<'_, AppState>,
     url: Option<String>,
     incognito: Option<bool>,
+    // When true the new tab is created behind the current one.
+    background: Option<bool>,
 ) -> Result<String, AppError> {
     let (id, target) = {
         let mut core = state.write_core(window.label());
@@ -665,6 +666,16 @@ pub async fn tab_new(
     };
 
     let created = spawn_tab(&app, window.label(), &id, &target, incognito.unwrap_or(false))?;
+
+    if background.unwrap_or(false) {
+        // Created behind the current tab; the strip still has to know about it.
+        sync_visibility(&app, window.label());
+        emit_tabs(&app, window.label());
+        save_sessions(&app);
+        crate::logging::info(&format!("tab {id} opened in the background"));
+        return Ok(id);
+    }
+
     let _ = created.set_focus();
     crate::logging::info(&format!("tab created {id} -> {target}"));
     sync_visibility(&app, window.label());
@@ -673,7 +684,6 @@ pub async fn tab_new(
     save_sessions(&app);
     Ok(id)
 }
-
 /// Pins a tab to the left strip, or releases it.
 #[tauri::command]
 pub async fn tab_pin(
@@ -730,7 +740,7 @@ pub async fn tab_close(app: AppHandle, window: tauri::Window, state: State<'_, A
 
     // Closing the last tab shows a fresh one instead of quitting.
     if remaining == 0 {
-        let _ = tab_new(app, window.clone(), state, Some(next_url), None).await;
+        let _ = tab_new(app, window.clone(), state, Some(next_url), None, None).await;
         return Ok(());
     }
 
@@ -1089,7 +1099,7 @@ pub async fn search_new_tab(
         }
     };
     crate::logging::info(&format!("search: {query}"));
-    tab_new(app, window, state, Some(url), None).await?;
+    tab_new(app, window, state, Some(url), None, None).await?;
     Ok(())
 }
 #[tauri::command]
@@ -1099,10 +1109,10 @@ pub async fn shortcut(app: AppHandle, window: tauri::Window, state: State<'_, Ap
     }
     match action.as_str() {
         "new_tab" => {
-            tab_new(app, window.clone(), state, None, None).await?;
+            tab_new(app, window.clone(), state, None, None, None).await?;
         }
         "new_incognito" => {
-            tab_new(app, window.clone(), state, None, Some(true)).await?;
+            tab_new(app, window.clone(), state, None, Some(true), None).await?;
         }
         "dismiss" => {
             crate::overlay::close(&app, window.label());
@@ -1192,7 +1202,7 @@ pub async fn shortcut(app: AppHandle, window: tauri::Window, state: State<'_, Ap
                     .map(|tab| tab.url.clone())
                     .unwrap_or_default()
             };
-            tab_new(app, window.clone(), state, Some(url), None).await?;
+            tab_new(app, window.clone(), state, Some(url), None, None).await?;
         }
         "close_other_tabs" => {
             let keep = selected_label(&state, &window);
@@ -1243,7 +1253,7 @@ pub async fn shortcut(app: AppHandle, window: tauri::Window, state: State<'_, Ap
                 "open_extensions" => "http://tauri.localhost/pages/extensions.html".to_string(),
                 _ => "http://tauri.localhost/pages/downloads.html".to_string(),
             };
-            tab_new(app, window.clone(), state, Some(page), None).await?;
+            tab_new(app, window.clone(), state, Some(page), None, None).await?;
         }
         "translate" => {
             let target = selected_label(&state, &window);
@@ -2876,7 +2886,7 @@ pub async fn translate_page(
         format!("https://fanyi.baidu.com/mtpe-individual/multimodal?query={encoded}&lang=auto2zh")
     };
 
-    let page = tab_new(app, window, state, Some(proxy.clone()), None).await?;
+    let page = tab_new(app, window, state, Some(proxy.clone()), None, None).await?;
     crate::logging::info(&format!("translate {text} as {page}"));
     Ok(proxy)
 }
@@ -3066,7 +3076,7 @@ pub async fn tab_reopen(
     else {
         return Ok(false);
     };
-    tab_new(app, window, state, Some(url), None).await?;
+    tab_new(app, window, state, Some(url), None, None).await?;
     Ok(true)
 }
 

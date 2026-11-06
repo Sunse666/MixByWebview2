@@ -648,8 +648,11 @@ async function boot() {
   const DRAG_ACTIONS = {
     none: "Nothing",
     open: "Open in a new tab",
-    search: "Search the text",
+    open_background: "Open in a background tab",
     copy: "Copy to the clipboard",
+    copy_link_text: "Copy the link text",
+    copy_link_both: "Copy the link text and url",
+    search: "Search the text",
     save: "Save the target",
   };
   const DRAG_DEFAULTS = { L: "open", R: "search", U: "copy", D: "save" };

@@ -29,7 +29,7 @@ mod window;
 
 use tauri::Manager;
 
-// embed bump 83
+// embed bump 85
 fn main() {
     let dirs = paths::AppDirs::resolve().ensure();
     logging::init(&dirs.logs);
@@ -56,7 +56,7 @@ fn main() {
                     let Some(window) = handle.get_window(crate::window::PRIMARY) else {
                         return;
                     };
-                    let _ = ipc::tab_new(handle.clone(), window, state, Some(url), None).await;
+                    let _ = ipc::tab_new(handle.clone(), window, state, Some(url), None, None).await;
                 });
             }
         }))
