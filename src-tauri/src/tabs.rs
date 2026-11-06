@@ -923,6 +923,30 @@ const SHORTCUT_FORWARDER: &str = r#"
       if (url) invoke('clipboard_write', { text: (linkText ? linkText + '\n' : '') + url });
       return;
     }
+    if (action === 'copy_sel_and_url') {
+      var picked = text || linkText;
+      if (picked) {
+        invoke('clipboard_write', { text: picked + '\n' + location.href });
+      } else {
+        invoke('clipboard_write', { text: location.href });
+      }
+      return;
+    }
+    if (action === 'find_next' || action === 'find_prev') {
+      var needle = text || linkText;
+      if (!needle) return;
+      try {
+        window.find(needle, false, action === 'find_prev', true, false, false, false);
+      } catch (error) {}
+      return;
+    }
+    if (action === 'search_in_site') {
+      var query = text || linkText;
+      if (!query) return;
+      var host = location.hostname.replace(/^www\./, '');
+      invoke('search_new_tab', { text: query + ' site:' + host });
+      return;
+    }
     if (action === 'save') {
       if (url) invoke('download_url', { url: url, fileName: null });
       return;

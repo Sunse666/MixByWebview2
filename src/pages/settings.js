@@ -653,6 +653,10 @@ async function boot() {
     copy_link_text: "Copy the link text",
     copy_link_both: "Copy the link text and url",
     search: "Search the text",
+    search_in_site: "Search this site for the text",
+    copy_sel_and_url: "Copy the text and the page url",
+    find_next: "Find the text (next)",
+    find_prev: "Find the text (previous)",
     save: "Save the target",
   };
   const DRAG_DEFAULTS = { L: "open", R: "search", U: "copy", D: "save" };
