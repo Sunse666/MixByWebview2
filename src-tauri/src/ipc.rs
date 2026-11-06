@@ -1109,6 +1109,98 @@ pub async fn shortcut(app: AppHandle, window: tauri::Window, state: State<'_, Ap
             }
         }
         // Not gated on debug: F12 must work in the packaged build too.
+        // Gesture and palette actions that reuse existing commands.
+        "stop" => {
+            let target = selected_label(&state, &window);
+            if let Some(webview) = app.get_webview(&target) {
+                let _ = webview.eval("window.stop()");
+            }
+        }
+        "copy_url" => {
+            let url = {
+                let core = state.read_core(window.label());
+                core.tabs
+                    .iter()
+                    .find(|tab| Some(&tab.id) == core.selected.as_ref())
+                    .map(|tab| tab.url.clone())
+                    .unwrap_or_default()
+            };
+            if !url.is_empty() {
+                let mut board =
+                    arboard::Clipboard::new().map_err(|err| AppError::new("clipboard", err.to_string()))?;
+                board
+                    .set_text(url)
+                    .map_err(|err| AppError::new("clipboard", err.to_string()))?;
+            }
+        }
+        "duplicate_tab" => {
+            let url = {
+                let core = state.read_core(window.label());
+                core.tabs
+                    .iter()
+                    .find(|tab| Some(&tab.id) == core.selected.as_ref())
+                    .map(|tab| tab.url.clone())
+                    .unwrap_or_default()
+            };
+            tab_new(app, window.clone(), state, Some(url), None).await?;
+        }
+        "close_other_tabs" => {
+            let keep = selected_label(&state, &window);
+            let others: Vec<String> = {
+                let core = state.read_core(window.label());
+                core.tabs
+                    .iter()
+                    .filter(|tab| tab.id != keep)
+                    .map(|tab| tab.id.clone())
+                    .collect()
+            };
+            for id in others {
+                let state = app.state::<AppState>();
+                tab_close(app.clone(), window.clone(), state, id).await?;
+            }
+        }
+        "toggle_pin" => {
+            let (id, pinned) = {
+                let core = state.read_core(window.label());
+                match core.tabs.iter().find(|tab| Some(&tab.id) == core.selected.as_ref()) {
+                    Some(tab) => (tab.id.clone(), tab.pinned),
+                    None => (String::new(), false),
+                }
+            };
+            if !id.is_empty() {
+                let mut core = state.write_core(window.label());
+                if let Some(tab) = core.tabs.iter_mut().find(|tab| tab.id == id) {
+                    tab.pinned = !pinned;
+                }
+            }
+        }
+        "minimize" => window_of(&window).minimize()?,
+        "maximize" => {
+            let win = window_of(&window);
+            if win.is_maximized()? {
+                win.unmaximize()?;
+            } else {
+                win.maximize()?;
+            }
+        }
+        "close_window" => window_of(&window).close()?,
+        "open_home" | "open_history" | "open_bookmarks" | "open_settings" | "open_extensions" | "open_downloads" => {
+            let page = match action.as_str() {
+                "open_home" => state.settings.read().start_url.clone(),
+                "open_history" => "http://tauri.localhost/pages/history.html".to_string(),
+                "open_bookmarks" => "http://tauri.localhost/pages/bookmarks.html".to_string(),
+                "open_settings" => "http://tauri.localhost/pages/settings.html".to_string(),
+                "open_extensions" => "http://tauri.localhost/pages/extensions.html".to_string(),
+                _ => "http://tauri.localhost/pages/downloads.html".to_string(),
+            };
+            tab_new(app, window.clone(), state, Some(page), None).await?;
+        }
+        "translate" => {
+            let target = selected_label(&state, &window);
+            if let Some(webview) = app.get_webview(&target) {
+                let _ = webview.eval("window.__mixStartTranslate && window.__mixStartTranslate()");
+            }
+        }
         "devtools" => {
             let target = selected_label(&state, &window);
             match app.get_webview(&target) {
