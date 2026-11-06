@@ -23,6 +23,8 @@ pub struct Settings {
     pub baidu_appid: String,
     pub baidu_secret: String,
     pub translate_to: String,
+    /// Engine used when the address bar input is not a url: baidu | bing | google | ddg.
+    pub search_engine: String,
     /// New tabs open the built-in page instead of the start url.
     pub new_tab_page: bool,
     /// Shows the menu bar row above the address field.
@@ -53,6 +55,7 @@ impl Default for Settings {
             baidu_appid: String::new(),
             baidu_secret: String::new(),
             translate_to: "zh".into(),
+            search_engine: "baidu".into(),
             new_tab_page: true,
             menu_bar: true,
             language: "en".into(),

@@ -168,7 +168,7 @@ async function bootAppMenu() {
         await invoke("tab_reopen");
         await close();
       });
-      row("\u2193", "Downloads", "Ctrl+J", act(() => invoke("open_dir", { which: "downloads" })));
+      row("\u2193", "Downloads", "Ctrl+J", act(() => invoke("tab_new", { url: "http://tauri.localhost/pages/downloads.html" })));
       divider();
 
       // Zoom strip: - 100% +

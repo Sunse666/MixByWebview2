@@ -75,6 +75,8 @@ fn main() {
         "app_restart",
         "app_quit",
         "download_list",
+        "download_open",
+        "download_clear",
         "download_open_dir",
         "shortcut",
         "overlay_open_at",

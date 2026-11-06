@@ -53,6 +53,11 @@ pub fn handle(webview: Webview, event: DownloadEvent<'_>) -> bool {
 
 /// Records a file that we wrote ourselves (image save), so it shows up in the
 /// same list as the webview downloads.
+/// Fills in the byte count for a finished task from the file on disk.
+fn finish_size(path: &str) -> u64 {
+    std::fs::metadata(path).map(|meta| meta.len()).unwrap_or(0)
+}
+
 pub fn record_done(app: &tauri::AppHandle, url: &str, path: &Path) {
     record(app, Some(url), Some(path), "started");
     record(app, Some(url), Some(path), "finished");
@@ -91,6 +96,7 @@ fn record(app: &tauri::AppHandle, url: Option<&str>, path: Option<&Path>, state:
                     if let Some(path) = path {
                         tasks[index].path = path.display().to_string();
                         tasks[index].file_name = file_name(path);
+                        tasks[index].bytes = finish_size(&path.display().to_string());
                     }
                 }
             }

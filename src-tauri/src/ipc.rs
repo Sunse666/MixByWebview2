@@ -161,6 +161,7 @@ pub struct SettingsPatch {
     pub baidu_secret: Option<String>,
     pub translate_to: Option<String>,
     pub new_tab_page: Option<bool>,
+    pub search_engine: Option<String>,
     pub menu_bar: Option<bool>,
     pub language: Option<String>,
     pub hidden_extensions: Option<Vec<String>>,
@@ -780,6 +781,57 @@ pub async fn download_list(_window: tauri::Window, state: State<'_, AppState>) -
     Ok(state.downloads.read().unwrap_or_else(|e| e.into_inner()).clone())
 }
 
+/// Reveals a file in Explorer, or opens its folder when it is missing.
+pub(crate) fn reveal_path(path: &std::path::Path) -> Result<(), AppError> {
+    #[cfg(windows)]
+    {
+        let target = if path.is_dir() {
+            path.to_path_buf()
+        } else {
+            path.parent()
+                .map(|parent| parent.to_path_buf())
+                .unwrap_or_else(|| path.to_path_buf())
+        };
+        std::process::Command::new("explorer")
+            .arg(target)
+            .spawn()
+            .map(|_| ())
+            .map_err(|err| AppError::new("open", err.to_string()))
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = path;
+        Err(AppError::new("open", "not supported on this platform"))
+    }
+}
+
+/// Opens the file a download produced.
+/// Drops finished entries from the list; files on disk stay.
+#[tauri::command]
+pub async fn download_clear(_window: tauri::Window, state: State<'_, AppState>) -> Result<(), AppError> {
+    let mut tasks = state.downloads.write().unwrap_or_else(|e| e.into_inner());
+    tasks.retain(|task| task.state == "started");
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn download_open(
+    _window: tauri::Window,
+    state: State<'_, AppState>,
+    id: u64,
+) -> Result<(), AppError> {
+    let path = {
+        let tasks = state.downloads.read().unwrap_or_else(|e| e.into_inner());
+        tasks
+            .iter()
+            .find(|task| task.id == id)
+            .map(|task| task.path.clone())
+    };
+    let Some(path) = path else {
+        return Err(AppError::new("bad_download", "unknown download"));
+    };
+    reveal_path(std::path::Path::new(&path))
+}
 #[tauri::command]
 pub async fn download_open_dir(_window: tauri::Window, state: State<'_, AppState>, id: u64) -> Result<(), AppError> {
     let path = {
@@ -1167,6 +1219,12 @@ pub async fn settings_set(
         }
         if let Some(value) = patch.baidu_secret {
             guard.baidu_secret = value.trim().to_string();
+        }
+        if let Some(value) = patch.search_engine {
+            guard.search_engine = match value.as_str() {
+                "bing" | "google" | "ddg" => value,
+                _ => "baidu".to_string(),
+            };
         }
         if let Some(value) = patch.new_tab_page {
             guard.new_tab_page = value;

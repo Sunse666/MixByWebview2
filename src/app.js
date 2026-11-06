@@ -172,6 +172,33 @@ async function toggleTranslate() {
 
 // Top level menus; each opens its own dropdown in an overlay window because the
 // strip is too short to hold a popup.
+// When the input is not an address, the address bar searches the web.
+const SEARCH_ENGINES = {
+  baidu: "https://www.baidu.com/s?wd=",
+  bing: "https://www.bing.com/search?q=",
+  google: "https://www.google.com/search?q=",
+  ddg: "https://duckduckgo.com/?q=",
+};
+
+function looksLikeAddress(text) {
+  const value = (text || "").trim();
+  if (!value) return null;
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(value)) return value;
+  if (value.startsWith("mix://")) {
+    const page = value.slice(6).split("/")[0];
+    return "http://tauri.localhost/pages/" + page + ".html";
+  }
+  if (value.includes(" ") || !value.includes(".")) return null;
+  return "https://" + value;
+}
+
+function addressFor(text) {
+  const direct = looksLikeAddress(text);
+  if (direct) return direct;
+  const base = SEARCH_ENGINES[settings.search_engine] || SEARCH_ENGINES.baidu;
+  return base + encodeURIComponent((text || "").trim());
+}
+
 const MENU_BAR = [
   { id: "file", label: "File" },
   { id: "edit", label: "Edit" },
@@ -367,6 +394,8 @@ function setTabs(payload) {
   renderTabs();
   const active = tabs.find((tab) => tab.id === selected);
   if (active) document.title = active.title || "Mix";
+  // Keep the incognito state visible in the chrome itself.
+  document.body.classList.toggle("incognito", Boolean(active && active.incognito));
   syncAddressIcon(active);
   syncUrl();
 }
@@ -593,7 +622,7 @@ async function boot() {
     urlInput.setSelectionRange(urlInput.value.length, urlInput.value.length);
   });
   await listen("url:commit", () => {
-    invoke("tab_navigate", { url: urlInput.value }).catch(flagBadUrl);
+    invoke("tab_navigate", { url: addressFor(urlInput.value) }).catch(flagBadUrl);
     urlInput.blur();
   });
   await listen("url:cancel", () => {
@@ -734,7 +763,7 @@ async function boot() {
 
   urlInput.addEventListener("keydown", (event) => {
     if (event.key === "Enter") {
-      invoke("tab_navigate", { url: urlInput.value }).catch(flagBadUrl);
+      invoke("tab_navigate", { url: addressFor(urlInput.value) }).catch(flagBadUrl);
       closeSuggest();
       urlInput.blur();
     }

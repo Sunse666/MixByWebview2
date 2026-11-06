@@ -211,6 +211,25 @@ async function boot() {
 
   card.append(row("Appearance & theme", "", themePreview()));
 
+  const engine = document.createElement("select");
+  engine.className = "button";
+  for (const [value, label] of [
+    ["baidu", "Baidu"],
+    ["bing", "Bing"],
+    ["google", "Google"],
+    ["ddg", "DuckDuckGo"],
+  ]) {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = label;
+    if ((settings.search_engine || "baidu") === value) option.selected = true;
+    engine.append(option);
+  }
+  engine.addEventListener("change", async () => {
+    await invoke("settings_set", { patch: { search_engine: engine.value } }).catch(() => {});
+  });
+  card.append(row("Search engine", "Used when the address bar is not a url", engine));
+
   card.append(row("Language", "Choose the language of the interface", language));
 
   const toolbarHead = document.createElement("h2");

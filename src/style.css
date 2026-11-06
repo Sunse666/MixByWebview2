@@ -455,3 +455,16 @@ button {
   background: var(--hover);
   opacity: 1;
 }
+
+/* Incognito must be obvious, not a class nobody can see. */
+body.incognito #addressbar { background: #2a2233; }
+body.incognito #url-wrap { border-color: #6b4b8a; }
+body.incognito #tab-strip::after {
+  content: "\25CF  \4E16";
+  position: absolute;
+  right: 120px;
+  top: 4px;
+  color: #b48ee0;
+  font-size: 11px;
+  letter-spacing: 1px;
+}
