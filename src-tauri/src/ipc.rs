@@ -618,7 +618,7 @@ pub async fn tab_new(
     // When true the new tab is created behind the current one.
     background: Option<bool>,
 ) -> Result<String, AppError> {
-    let (id, target) = {
+    let (id, target, selection_before) = {
         let mut core = state.write_core(window.label());
         core.next_tab_id += 1;
         // Labels carry the window so per-window lookups keep working.
@@ -643,6 +643,7 @@ pub async fn tab_new(
     };
         core.tick += 1;
         let tick = core.tick;
+        let previous = core.selected.clone();
         core.tabs.push(Tab {
             id: id.clone(),
             url: target.clone(),
@@ -662,13 +663,17 @@ pub async fn tab_new(
         });
         core.selected = Some(id.clone());
         touch_mru(&mut core.mru, &id);
-        (id, target)
+        (id, target, previous)
     };
 
     let created = spawn_tab(&app, window.label(), &id, &target, incognito.unwrap_or(false))?;
 
     if background.unwrap_or(false) {
-        // Created behind the current tab; the strip still has to know about it.
+        // Created behind the current tab: put the selection back where it was.
+        {
+            let mut core = state.write_core(window.label());
+            core.selected = selection_before;
+        }
         sync_visibility(&app, window.label());
         emit_tabs(&app, window.label());
         save_sessions(&app);
