@@ -598,7 +598,10 @@ async function boot() {
       "tab_close_goes_left",
     ),
   );
-  main.append(tabsCard, gestureCard);
+  const gesturesHead = document.createElement("h2");
+  gesturesHead.textContent = t("Mouse gestures");
+  gesturesHead.style.margin = "18px 0 10px";
+  main.append(tabsCard, gesturesHead, gestureCard);
 
   const newtabHead = document.createElement("h2");
   newtabHead.textContent = t("New tab page");
@@ -897,6 +900,7 @@ function groupSections() {
   const preferred = [
     "Startup",
     "Tab settings",
+    "Mouse gestures",
     "New tab page",
     "Theme file",
     "Toolbar buttons",
