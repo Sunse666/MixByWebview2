@@ -84,6 +84,7 @@
     "allow-app-quit",
     "allow-download-list",
     "allow-download-open-dir",
+    "allow-drag-probe",
     "allow-search-new-tab",
     "allow-shortcut",
     "allow-overlay-open-at",

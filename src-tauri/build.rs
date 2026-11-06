@@ -87,6 +87,7 @@ fn main() {
         "download_open",
         "download_clear",
         "download_open_dir",
+        "drag_probe",
         "search_new_tab",
         "shortcut",
         "overlay_open_at",

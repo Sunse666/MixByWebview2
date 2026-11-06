@@ -223,6 +223,7 @@ async function bootAppMenu() {
       row("\u21ba", "History", "", act(() => invoke("tab_new", { url: "http://tauri.localhost/pages/history.html" })));
       divider();
       row("\u25a4", "Extensions", "", act(() => invoke("tab_new", { url: "http://tauri.localhost/pages/extensions.html" })));
+      row("\u2699", "Diagnose super drag", "", act(() => invoke("drag_probe")));
       row("\u2699", "Userscripts", "", act(() => invoke("tab_new", { url: "http://tauri.localhost/pages/scripts.html" })));
       row("\u2261", "More tools", "", () => render("tools"), { page: true });
       divider();

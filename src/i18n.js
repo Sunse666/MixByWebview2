@@ -220,6 +220,7 @@ const DICT = {
     "Open in a background tab": "在新的后台标签中打开",
     "Copy the link text": "复制链接文本",
     "Copy the link text and url": "复制链接文本和地址",
+    "Diagnose super drag": "超级拖拽诊断",
     "New tab": "新标签页",
     "New incognito tab": "新建无痕标签页",
     "Reopen closed tab": "重新打开关闭的标签页",

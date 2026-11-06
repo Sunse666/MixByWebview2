@@ -29,7 +29,7 @@ mod window;
 
 use tauri::Manager;
 
-// embed bump 89
+// embed bump 92
 fn main() {
     let dirs = paths::AppDirs::resolve().ensure();
     logging::init(&dirs.logs);
@@ -196,6 +196,7 @@ fn main() {
             ipc::app_info,
             ipc::app_restart,
             ipc::app_quit,
+            ipc::drag_probe,
             ipc::search_new_tab,
             ipc::shortcut,
             ipc::overlay_open_at,

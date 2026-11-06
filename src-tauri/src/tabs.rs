@@ -66,6 +66,41 @@ fn shortcut_prefix() -> String {
     );
     out
 }
+/// Overlay used by the diagnose command: reports what a press lands on.
+pub const DRAG_PROBE: &str = r#"
+(function () {
+  var old = document.getElementById('__mix_drag_probe');
+  if (old) old.remove();
+  var box = document.createElement('div');
+  box.id = '__mix_drag_probe';
+  box.style.cssText =
+    'position:fixed;left:12px;top:12px;z-index:2147483647;max-width:70%;padding:10px 12px;' +
+    'background:#202124ee;color:#e8eaed;font:12px monospace;border:1px solid #4c8dff;border-radius:8px;white-space:pre-wrap;';
+  box.textContent = 'drag probe: press anywhere';
+  document.documentElement.appendChild(box);
+
+  function describe(node) {
+    if (!node || node.nodeType !== 1) return 'no element';
+    var cursor = '';
+    try { cursor = getComputedStyle(node).cursor; } catch (error) {}
+    var anchor = node.closest ? node.closest('a') : null;
+    return [
+      'tag=' + node.tagName,
+      'class=' + String(node.className || '').slice(0, 40),
+      'cursor=' + cursor,
+      'anchor=' + (anchor ? (anchor.href ? 'href:' + anchor.href.slice(0, 40) : 'no-href') : 'none'),
+      'flag=' + String(window.__mixSuperDrag),
+      'engine=' + String(window.__mixSuperDragEngine),
+    ].join('\n');
+  }
+
+  document.addEventListener('pointerdown', function (event) {
+    box.textContent = 'drag probe\n' + describe(event.target);
+  }, true);
+
+  setTimeout(function () { if (box.parentNode) box.parentNode.removeChild(box); }, 30000);
+})();
+"#;
 /// The mapping used until the user edits it.
 pub fn default_gestures() -> std::collections::BTreeMap<String, String> {
     [

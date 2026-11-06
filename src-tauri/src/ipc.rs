@@ -1102,6 +1102,21 @@ pub async fn search_new_tab(
     tab_new(app, window, state, Some(url), None, None).await?;
     Ok(())
 }
+/// Shows what the drag engine sees under the pointer for a few seconds.
+#[tauri::command]
+pub async fn drag_probe(
+    app: AppHandle,
+    window: tauri::Window,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    let label = selected_label(&state, &window);
+    let Some(webview) = app.get_webview(&label) else {
+        return Ok(());
+    };
+    let _ = webview.eval(crate::tabs::DRAG_PROBE);
+    crate::logging::info("drag probe injected");
+    Ok(())
+}
 #[tauri::command]
 pub async fn shortcut(app: AppHandle, window: tauri::Window, state: State<'_, AppState>, action: String) -> Result<(), AppError> {
     if action != "dismiss" {
