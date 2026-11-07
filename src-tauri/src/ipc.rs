@@ -881,6 +881,41 @@ pub async fn tab_close(app: AppHandle, window: tauri::Window, state: State<'_, A
     Ok(())
 }
 
+/// Mutes or unmutes the selected tab; with no argument it flips. The mute
+/// button in the toolbar drives this.
+#[tauri::command]
+pub async fn tab_mute(
+    app: AppHandle,
+    window: tauri::Window,
+    state: State<'_, AppState>,
+    muted: Option<bool>,
+) -> Result<bool, AppError> {
+    let id = selected_label(&state, &window);
+    if id.is_empty() {
+        return Ok(false);
+    }
+    let Some(webview) = app.get_webview(&id) else {
+        return Ok(false);
+    };
+    let current = crate::audio::state(&webview).unwrap_or(crate::audio::Audio {
+        playing: false,
+        muted: false,
+    });
+    let target = muted.unwrap_or(!current.muted);
+    let ok = crate::audio::set_muted(&webview, target);
+    let now = crate::audio::state(&webview).unwrap_or(crate::audio::Audio {
+        playing: current.playing,
+        muted: target,
+    });
+    crate::logging::info(&format!("tab {id} muted={} ({ok})", now.muted));
+    let _ = app.emit_to(
+        window.label(),
+        "tab:audio",
+        serde_json::json!({ "id": id, "playing": now.playing, "muted": now.muted }),
+    );
+    Ok(now.muted)
+}
+
 #[tauri::command]
 pub async fn tab_navigate(app: AppHandle, window: tauri::Window, state: State<'_, AppState>, url: String) -> Result<(), AppError> {
     // A dead host would land on WebView2's own error page, which we cannot
@@ -1915,6 +1950,7 @@ pub(crate) fn apply_settings_patch(
                 "extensions",
                 "home",
                 "reopen",
+                "mute",
             ];
             guard.toolbar = value
                 .into_iter()

@@ -2,6 +2,7 @@
 
 // assets: frontend files are embedded at compile time, so editing src/*.js
 // only takes effect after the crate is rebuilt.
+mod audio;
 mod browser_reg;
 mod diag;
 mod zoom;
@@ -96,6 +97,7 @@ fn main() {
             ipc::tab_new,
             ipc::tab_pin,
             ipc::tab_close,
+            ipc::tab_mute,
             ipc::tab_navigate,
             ipc::tab_nav,
             ipc::theme_get,

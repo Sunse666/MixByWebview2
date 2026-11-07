@@ -313,6 +313,8 @@ const DICT = {
     "Left": "左侧",
     "Right": "右侧",
     "Reset to defaults": "重置为默认设置",
+    "Mute tab": "静音标签页",
+    "Unmute tab": "取消静音",
     "Standard font": "标准字体",
     "Monospace font": "等宽字体",
     "Font size": "字号",

@@ -52,6 +52,7 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
         open_window(app.handle(), PRIMARY, tabs, 0, None)?;
         crate::downloads::start_progress_watch(app.handle().clone());
         crate::persist::spawn_history_flusher(app.handle().clone());
+        crate::audio::watch(app.handle().clone());
         crate::snap::install_hotkeys(app.handle());
         crate::tray::install(&app.handle().clone())?;
         return Ok(());
@@ -98,6 +99,7 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
 
     crate::downloads::start_progress_watch(app.handle().clone());
     crate::persist::spawn_history_flusher(app.handle().clone());
+    crate::audio::watch(app.handle().clone());
     crate::snap::install_hotkeys(app.handle());
     #[cfg(debug_assertions)]
     {

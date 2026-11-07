@@ -1112,6 +1112,7 @@ async function boot() {
   const TOOLBAR_CHOICES = [
     ["home", "Home"],
     ["reopen", "Reopen closed tab"],
+    ["mute", "Mute tab"],
     ["translate", "Translate this page"],
     ["zoom", "Zoom"],
     ["bookmark", "Bookmark this page"],
