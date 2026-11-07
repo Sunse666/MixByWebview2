@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-thumb-card"
+description = "Enables the thumb_card command without any pre-configured scope."
+commands.allow = ["thumb_card"]
+
+[[permission]]
+identifier = "deny-thumb-card"
+description = "Denies the thumb_card command without any pre-configured scope."
+commands.deny = ["thumb_card"]

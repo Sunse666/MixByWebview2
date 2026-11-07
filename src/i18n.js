@@ -244,6 +244,7 @@ const DICT = {
     "Mode": "模式",
     "Dark or light palette for the interface": "界面配色：深色或浅色",
     "New tab": "新标签页",
+    "Incognito": "无痕",
     "New incognito tab": "新建无痕标签页",
     "Reopen closed tab": "重新打开关闭的标签页",
     "Full screen": "全屏",
@@ -322,8 +323,8 @@ const DICT = {
     "Search open tabs": "搜索标签页",
     "Type a command or a site": "输入命令或网址",
     "Nothing matches": "没有匹配项",
-    "Shows a picture of the tab when the pointer rests on it; takes a screenshot on every tab switch":
-      "鼠标停在标签上时显示该页面的截图；每次切换标签会截一次图",
+    "Shows the title and the address of a tab when the pointer rests on it":
+      "鼠标停在标签上时显示该标签的标题和地址",
     "Language": "语言",
     "Standard font": "标准字体",
     "Monospace font": "等宽字体",

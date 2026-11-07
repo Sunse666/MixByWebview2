@@ -104,7 +104,7 @@
     "allow-snap",
     "allow-drag-action",
     "allow-thumb-show",
-    "allow-thumb-image",
+    "allow-thumb-card",
     "allow-settings-get",
     "allow-settings-set",
     "allow-autostart-get",

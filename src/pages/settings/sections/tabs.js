@@ -44,7 +44,7 @@ export function buildTabs({ settings, invoke }) {
     ),
     row(
       t("Preview on hover"),
-      t("Shows a picture of the tab when the pointer rests on it; takes a screenshot on every tab switch"),
+      t("Shows the title and the address of a tab when the pointer rests on it"),
       preview,
     ),
   );

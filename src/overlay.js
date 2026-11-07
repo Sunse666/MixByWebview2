@@ -676,37 +676,42 @@ async function bootTabSearch() {
   await bootSearch("tabs");
 }
 
-/** The tab hover card: a preview image and the page it belongs to. */
+/** The tab hover card: what the page is, without trying to photograph it. */
 async function bootThumb() {
   const id = params.get("id") || "";
+  const data = await invoke("thumb_card", { id }).catch(() => null);
+  if (!data) {
+    invoke("overlay_close").catch(() => {});
+    return;
+  }
+
   const card = document.createElement("div");
   card.className = "thumb-card";
 
-  const frame = document.createElement("div");
-  frame.className = "thumb-frame";
-  const image = document.createElement("img");
-  image.className = "thumb-image";
-  frame.append(image);
+  const icon = document.createElement("img");
+  icon.className = "thumb-icon";
+  icon.alt = "";
+  if (data.icon) icon.src = data.icon;
+  else icon.style.visibility = "hidden";
 
-  const caption = document.createElement("div");
-  caption.className = "thumb-caption";
+  const text = document.createElement("div");
+  text.className = "thumb-text";
   const title = document.createElement("div");
   title.className = "thumb-title";
+  title.textContent = (data.pinned ? "\ud83d\udccc " : "") + (data.title || t("New tab"));
   const url = document.createElement("div");
   url.className = "thumb-url";
-  caption.append(title, url);
-
-  card.append(frame, caption);
-  document.body.append(card);
-
-  const data = await invoke("thumb_image", { id }).catch(() => null);
-  if (!data) {
-    card.remove();
-    return;
-  }
-  image.src = data.image;
-  title.textContent = data.title || t("New tab");
   url.textContent = data.url || "";
+  text.append(title, url);
+
+  card.append(icon, text);
+  if (data.incognito) {
+    const mark = document.createElement("span");
+    mark.className = "thumb-mark";
+    mark.textContent = t("Incognito");
+    card.append(mark);
+  }
+  document.body.append(card);
 }
 
 async function bootZoom() {

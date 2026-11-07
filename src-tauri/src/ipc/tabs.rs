@@ -46,21 +46,6 @@ pub async fn tab_select(app: AppHandle, window: tauri::Window, state: State<'_, 
     if !exists {
         return Err(AppError::new("no_tab", id));
     }
-    // Take the outgoing tab's picture while it is still on screen: once it is
-    // hidden there is nothing left to capture. Only when it has none, so at most
-    // one grab happens per switch and only for a tab that was never seen.
-    if state.settings.read().tab_hover_preview {
-        let previous = state.read_core(window.label()).selected.clone();
-        if let Some(previous) = previous.filter(|label| label != &id) {
-            if crate::thumbs::needs(&previous, 60) {
-                if let Some(webview) = app.get_webview(&previous) {
-                    if let Some(png) = crate::thumbs::capture(&webview) {
-                        crate::thumbs::remember(&previous, png);
-                    }
-                }
-            }
-        }
-    }
     {
         let mut core = state.write_core(window.label());
         core.selected = Some(id.clone());
@@ -201,7 +186,6 @@ pub async fn tab_close(app: AppHandle, window: tauri::Window, state: State<'_, A
     if let Some(webview) = app.get_webview(&id) {
         let _ = webview.close();
     }
-    crate::thumbs::forget(&id);
 
     let (remaining, next_url) = {
         let mut core = state.write_core(window.label());
@@ -269,48 +253,35 @@ pub async fn tab_screenshot(
     Ok(target.display().to_string())
 }
 
-/// The hover card: where the pointer is over a tab, show that tab's preview.
+/// The tab hover card. It carries the page's title, address and icon, all of
+/// which the tab already knows: a screenshot of a background tab cannot be taken
+/// on WebView2 - a hidden webview is not composited, and the protocol answers with
+/// whatever surface sits in that place.
 #[derive(Serialize)]
 pub struct ThumbCard {
-    image: String,
     title: String,
     url: String,
+    icon: Option<String>,
+    pinned: bool,
+    incognito: bool,
 }
 
 #[tauri::command]
 pub async fn thumb_show(
     app: AppHandle,
     window: tauri::Window,
-    state: State<'_, AppState>,
+    _state: State<'_, AppState>,
     id: String,
     x: f64,
 ) -> Result<bool, AppError> {
-    if !state.settings.read().tab_hover_preview {
-        return Ok(false);
-    }
-    // The visible tab can be captured right now, which is what the card wants.
-    // Any other tab has to be answered from a picture taken while it was visible;
-    // capturing a hidden webview returns whatever surface sits in that place.
-    let visible = state.read_core(window.label()).selected.as_deref() == Some(id.as_str());
-    if visible && crate::thumbs::needs(&id, 2) {
-        if let Some(webview) = app.get_webview(&id) {
-            if let Some(png) = crate::thumbs::capture(&webview) {
-                crate::thumbs::remember(&id, png);
-            }
-        }
-    }
-    if crate::thumbs::get(&id).is_none() {
-        return Ok(false);
-    }
-
     let (win_w, _) = crate::window::logical_size(&window)?;
-    let (width, height) = (372.0, 232.0);
+    let (width, height) = (372.0, 128.0);
     let left = (x - width / 2.0).clamp(6.0, (win_w - width - 6.0).max(6.0));
     let top = chrome_height(&app) + 6.0;
     let kind = format!("thumb&id={}", crate::permissions::encode(&id));
     crate::overlay::open_at(&app, &window, &kind, left, top, width, height)
         .map_err(|err| AppError::new("overlay", err))?;
-    state
+    app.state::<AppState>()
         .overlay_thumb
         .write()
         .unwrap_or_else(|e| e.into_inner())
@@ -318,26 +289,25 @@ pub async fn thumb_show(
     Ok(true)
 }
 
-/// What the hover card draws: the png as a data url plus the caption.
+/// What the hover card draws.
 #[tauri::command]
-pub async fn thumb_image(
+pub async fn thumb_card(
     _app: AppHandle,
     state: State<'_, AppState>,
     id: String,
 ) -> Result<ThumbCard, AppError> {
-    let png = crate::thumbs::get(&id)
-        .ok_or_else(|| AppError::new("no_thumb", "no preview for this tab"))?;
-    let (title, url) = {
-        let core = state.read_core(window_of_tab(&id));
-        match core.tabs.iter().find(|tab| tab.id == id) {
-            Some(tab) => (tab.title.clone(), tab.url.clone()),
-            None => (String::new(), String::new()),
-        }
-    };
+    let core = state.read_core(window_of_tab(&id));
+    let tab = core
+        .tabs
+        .iter()
+        .find(|tab| tab.id == id)
+        .ok_or_else(|| AppError::new("no_tab", id.clone()))?;
     Ok(ThumbCard {
-        image: format!("data:image/png;base64,{}", crate::extensions::base64(&png)),
-        title,
-        url,
+        title: tab.title.clone(),
+        url: tab.url.clone(),
+        icon: tab.icon.clone(),
+        pinned: tab.pinned,
+        incognito: tab.incognito,
     })
 }
 
