@@ -175,6 +175,9 @@ async function boot() {
   head.textContent = t("Settings");
   main.append(head);
 
+  // Appended right here, not at the end of boot: the page is folded into
+  // sections by the h2 that precedes each card, so leaving it to the end put
+  // session, bookmarks bar and search engine under "Default browser".
   const card = document.createElement("div");
   card.className = "card";
   card.style.maxWidth = "720px";
@@ -358,6 +361,7 @@ async function boot() {
   );
 
   card.append(row("Language", "Choose the language of the interface", language));
+  main.append(card);
 
   const dataHead = document.createElement("h2");
   dataHead.textContent = t("Clear browsing data");
@@ -1172,7 +1176,6 @@ async function boot() {
   toolbarCard.append(resetRow);
 
 
-  main.append(card);
   themeCard.append(toolbarHead, ...toolbarCard.childNodes);
 }
 
