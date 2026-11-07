@@ -6,19 +6,28 @@ use tauri::{
 
 use crate::paths::AppDirs;
 
-/// Runs in every page. Frames cannot see chrome keydown, so shortcuts are
-/// forwarded from the page to Rust and dispatched there.
-/// Action -> combo overrides, filled once at startup from settings.
-static SHORTCUTS: std::sync::OnceLock<std::collections::BTreeMap<String, String>> =
-    std::sync::OnceLock::new();
+/// Action -> combo overrides for the forwarder that runs in every page (frames
+/// cannot see chrome keydown, so shortcuts are forwarded to Rust instead).
+/// A lock rather than a OnceLock: a setting changed in the ui has to win over
+/// the one read at startup.
+static SHORTCUTS: std::sync::RwLock<Option<std::collections::BTreeMap<String, String>>> =
+    std::sync::RwLock::new(None);
 
-/// Called at startup; later changes apply to pages opened afterwards.
+/// Replaces the override map; pages opened later take a copy of it.
 pub fn set_shortcuts(map: std::collections::BTreeMap<String, String>) {
-    let _ = SHORTCUTS.set(map);
+    *SHORTCUTS.write().unwrap_or_else(|e| e.into_inner()) = Some(map);
+}
+
+fn shortcut_map() -> std::collections::BTreeMap<String, String> {
+    SHORTCUTS
+        .read()
+        .unwrap_or_else(|e| e.into_inner())
+        .clone()
+        .unwrap_or_default()
 }
 
 /// Right button gestures, on by default like every gesture browser.
-static GESTURES: std::sync::OnceLock<GestureSetup> = std::sync::OnceLock::new();
+static GESTURES: std::sync::RwLock<Option<GestureSetup>> = std::sync::RwLock::new(None);
 
 /// Everything the injected engine needs, pre-serialised for the page.
 #[derive(Default, Clone)]
@@ -31,19 +40,35 @@ pub struct GestureSetup {
 }
 
 pub fn set_gestures(setup: GestureSetup) {
-    let _ = GESTURES.set(setup);
+    *GESTURES.write().unwrap_or_else(|e| e.into_inner()) = Some(setup);
+}
+
+fn gesture_setup() -> GestureSetup {
+    GESTURES
+        .read()
+        .unwrap_or_else(|e| e.into_inner())
+        .clone()
+        .unwrap_or_default()
 }
 
 /// Contents of UserData/custom.css, applied to every page.
-static CUSTOM_CSS: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+static CUSTOM_CSS: std::sync::RwLock<Option<String>> = std::sync::RwLock::new(None);
 
 pub fn set_custom_css(css: String) {
-    let _ = CUSTOM_CSS.set(css);
+    *CUSTOM_CSS.write().unwrap_or_else(|e| e.into_inner()) = Some(css);
+}
+
+fn custom_css() -> String {
+    CUSTOM_CSS
+        .read()
+        .unwrap_or_else(|e| e.into_inner())
+        .clone()
+        .unwrap_or_default()
 }
 
 /// Wraps the user stylesheet so pages pick it up without a round trip.
 fn custom_css_script() -> String {
-    let css = CUSTOM_CSS.get().cloned().unwrap_or_default();
+    let css = custom_css();
     crate::logging::info(&format!("custom css bytes: {}", css.len()));
     if css.trim().is_empty() {
         return String::new();
@@ -56,10 +81,8 @@ fn custom_css_script() -> String {
 
 /// Small script that hands the overrides to the forwarder below.
 fn shortcut_prefix() -> String {
-    let empty = std::collections::BTreeMap::new();
-    let map = SHORTCUTS.get().unwrap_or(&empty);
-    let json = serde_json::to_string(map).unwrap_or_else(|_| "{}".to_string());
-    let gestures = GESTURES.get().cloned().unwrap_or_default();
+    let json = serde_json::to_string(&shortcut_map()).unwrap_or_else(|_| "{}".to_string());
+    let gestures = gesture_setup();
     let out = format!(
         "window.__mixShortcuts = {json};\nwindow.__mixGestures = {};\nwindow.__mixGestureConfig = {};\nwindow.__mixSuperDrag = {};\nwindow.__mixDragConfig = {};\n",
         gestures.enabled, gestures.js, gestures.super_drag, gestures.drag_js
@@ -106,6 +129,83 @@ pub const DRAG_PROBE: &str = r#"
   setTimeout(function () { if (box.parentNode) box.parentNode.removeChild(box); }, 40000);
 })();
 "#;
+/// Pushes everything the page init scripts copy at creation time. Runs at
+/// startup and again whenever a setting changes, so a tab opened after a change
+/// is never configured with the previous values.
+pub fn apply_settings(dirs: &AppDirs, settings: &crate::state::Settings) {
+    let config = serde_json::json!({
+        "trail": settings.gesture_trail,
+        "color": settings.gesture_color,
+        "width": settings.gesture_width,
+        "threshold": settings.gesture_threshold,
+        "map": if settings.gesture_map.is_empty() {
+            default_gestures()
+        } else {
+            settings.gesture_map.clone()
+        },
+        "blocked": settings.gesture_blocked,
+    });
+    let drag = serde_json::json!({
+        "hint": settings.drag_hint,
+        "threshold": settings.drag_threshold,
+        "map": if settings.drag_map.is_empty() {
+            default_drag()
+        } else {
+            settings.drag_map.clone()
+        },
+    });
+    set_gestures(GestureSetup {
+        enabled: settings.gestures,
+        super_drag: settings.super_drag,
+        drag_js: serde_json::to_string(&drag).unwrap_or_else(|_| "{}".to_string()),
+        js: serde_json::to_string(&config).unwrap_or_else(|_| "{}".to_string()),
+    });
+    set_shortcuts(settings.shortcuts.clone());
+    set_custom_css(build_custom_css(dirs, settings));
+}
+
+/// UserData/custom.css plus the font overrides the settings add on top.
+fn build_custom_css(dirs: &AppDirs, settings: &crate::state::Settings) -> String {
+    let mut css = std::fs::read_to_string(dirs.user_data.join("custom.css"))
+        .unwrap_or_default()
+        .trim_start_matches('\u{feff}')
+        .to_string();
+    if !settings.font_family.trim().is_empty() {
+        // Body only: overriding every element breaks icon fonts.
+        css.push_str(&format!(
+            "\nbody, p, li, td, dd, blockquote {{ font-family: \"{}\" !important; }}\n",
+            settings.font_family.replace('"', "")
+        ));
+    }
+    if settings.font_size > 0 {
+        css.push_str(&format!(
+            "\nbody {{ font-size: {}px !important; }}\n",
+            settings.font_size
+        ));
+    }
+    css
+}
+
+/// Shortcut overrides are read on every keypress, so pages that are already
+/// open can take a new map without a reload. Gestures and the stylesheet are
+/// installed once per page and only reach pages opened afterwards.
+pub fn broadcast_shortcuts(app: &tauri::AppHandle) {
+    let json = serde_json::to_string(&shortcut_map()).unwrap_or_else(|_| "{}".to_string());
+    let script = format!("window.__mixShortcuts = {json};");
+    let state = app.state::<crate::ipc::AppState>();
+    let ids: Vec<String> = state
+        .cores
+        .read()
+        .iter()
+        .flat_map(|(_, core)| core.tabs.iter().map(|tab| tab.id.clone()))
+        .collect();
+    for id in ids {
+        if let Some(webview) = app.get_webview(&id) {
+            let _ = webview.eval(&script);
+        }
+    }
+}
+
 /// The mapping used until the user edits it.
 pub fn default_gestures() -> std::collections::BTreeMap<String, String> {
     [

@@ -69,68 +69,11 @@ fn main() {
         .setup(move |app| {
             let settings = state::Settings::load(&dirs.settings_file);
             let theme = theme::Theme::load(&dirs.theme_file);
-            let disabled_extensions = crate::state::Settings::load(&dirs.settings_file).disabled_extensions;
-    let ext_infos = extensions::scan(&dirs, &disabled_extensions);
+            let ext_infos = extensions::scan(&dirs, &settings.disabled_extensions);
             let scripts = userscripts::scan(&dirs.scripts);
-            {
-                let settings = crate::state::Settings::load(&dirs.settings_file);
-                let map: std::collections::BTreeMap<String, String> = if settings.gesture_map.is_empty() {
-                    crate::tabs::default_gestures()
-                } else {
-                    settings.gesture_map.clone()
-                };
-                let config = serde_json::json!({
-                    "trail": settings.gesture_trail,
-                    "color": settings.gesture_color,
-                    "width": settings.gesture_width,
-                    "threshold": settings.gesture_threshold,
-                    "map": map,
-                    "blocked": settings.gesture_blocked,
-                });
-                crate::tabs::set_gestures(crate::tabs::GestureSetup {
-                    enabled: settings.gestures,
-                    super_drag: settings.super_drag,
-                    drag_js: {
-                        let map: std::collections::BTreeMap<String, String> =
-                            if settings.drag_map.is_empty() {
-                                crate::tabs::default_drag()
-                            } else {
-                                settings.drag_map.clone()
-                            };
-                        let drag = serde_json::json!({
-                            "hint": settings.drag_hint,
-                            "threshold": settings.drag_threshold,
-                            "map": map,
-                        });
-                        serde_json::to_string(&drag).unwrap_or_else(|_| "{}".to_string())
-                    },
-                    js: serde_json::to_string(&config).unwrap_or_else(|_| "{}".to_string()),
-                });
-            }
-            {
-                let settings = crate::state::Settings::load(&dirs.settings_file);
-                let mut css = std::fs::read_to_string(dirs.user_data.join("custom.css"))
-                    .unwrap_or_default()
-                    .trim_start_matches('\u{feff}')
-                    .to_string();
-                if !settings.font_family.trim().is_empty() {
-                    // Body only: overriding every element breaks icon fonts.
-                    css.push_str(&format!(
-                        "\nbody, p, li, td, dd, blockquote {{ font-family: \"{}\" !important; }}\n",
-                        settings.font_family.replace('"', "")
-                    ));
-                }
-                if settings.font_size > 0 {
-                    css.push_str(&format!(
-                        "\nbody {{ font-size: {}px !important; }}\n",
-                        settings.font_size
-                    ));
-                }
-                crate::tabs::set_custom_css(css);
-            }
-            crate::tabs::set_shortcuts(
-                crate::state::Settings::load(&dirs.settings_file).shortcuts,
-            );
+            // One call fills every init script and the stylesheet; settings_set
+            // calls the same function again when something changes.
+            crate::tabs::apply_settings(&dirs, &settings);
             app.manage(ipc::AppState::new(
                 dirs.clone(),
                 settings,

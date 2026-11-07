@@ -812,21 +812,20 @@ async function boot() {
   // Report the real strip height: DPI rounding otherwise leaves an empty band.
   applyThemeMode(settings.theme_mode || "dark");
 
+  // The bookmarks bar is accounted for separately, so report the strip without it.
   const fitStrip = () => {
-    const rect = document.body.getBoundingClientRect();
-    const height = Math.round(rect.height);
+    const bar = document.getElementById("bookmarks");
+    const barHeight = bar && !bar.hidden ? bar.getBoundingClientRect().height : 0;
+    const height = Math.round(document.body.getBoundingClientRect().height - barHeight);
     if (height > 0) invoke("chrome_fit", { height }).catch(() => {});
   };
   fitStrip();
   window.addEventListener("resize", fitStrip);
   report(`boot tabs=${tabs.length} selected=${selected}`);
 
+  await listen("ui:palette", () => openPalette());
   await listen("ui:new-tab", () => invoke("tab_new", {}));
   await listen("ui:open-url", (event) => invoke("tab_new", { url: event.payload }));
-  await listen("url:text", (event) => {
-    urlInput.value = event.payload || "";
-    urlInput.setSelectionRange(urlInput.value.length, urlInput.value.length);
-  });
   await listen("url:commit", () => {
     invoke("tab_navigate", { url: addressFor(urlInput.value) }).catch(flagBadUrl);
     urlInput.blur();

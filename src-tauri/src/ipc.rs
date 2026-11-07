@@ -355,8 +355,15 @@ pub fn focused_window(app: &AppHandle) -> Option<tauri::Window> {
 pub fn chrome_height(app: &AppHandle) -> f64 {
     match app.try_state::<AppState>() {
         Some(state) => {
-            let show_bookmarks = state.settings.read().show_bookmarks;
-            crate::window::CHROME_H + if show_bookmarks { 30.0 } else { 0.0 }
+            let settings = state.settings.read();
+            // The chrome page reports its own measured height through chrome_fit,
+            // so DPI rounding or a css change cannot leave a band behind.
+            let base = if settings.chrome_height > 0.0 {
+                settings.chrome_height
+            } else {
+                crate::window::CHROME_H
+            };
+            base + if settings.show_bookmarks { 30.0 } else { 0.0 }
         }
         None => crate::window::CHROME_H,
     }
@@ -1688,13 +1695,29 @@ pub async fn permission_reply(
 }
 
 #[tauri::command]
-pub async fn settings_get(_window: tauri::Window, state: State<'_, AppState>) -> Result<Settings, AppError> {
+pub async fn settings_get(webview: tauri::Webview, state: State<'_, AppState>) -> Result<Settings, AppError> {
+    require_trusted(&webview)?;
     Ok(state.settings.read().clone())
 }
 
 #[tauri::command]
 pub async fn settings_set(
-    _window: tauri::Window, state: State<'_, AppState>,
+    webview: tauri::Webview, state: State<'_, AppState>,
+    patch: SettingsPatch,
+) -> Result<Settings, AppError> {
+    require_trusted(&webview)?;
+    let settings = apply_settings_patch(&state, patch)?;
+    // The init scripts are baked per webview, so refresh what can be refreshed:
+    // shortcut overrides apply to open pages, the rest to pages opened later.
+    crate::tabs::apply_settings(&state.dirs, &settings);
+    crate::tabs::broadcast_shortcuts(webview.app_handle());
+    Ok(settings)
+}
+
+/// Mutates and writes settings; shared with the support hooks, which have no
+/// caller webview to check.
+pub(crate) fn apply_settings_patch(
+    state: &AppState,
     patch: SettingsPatch,
 ) -> Result<Settings, AppError> {
     let settings = {

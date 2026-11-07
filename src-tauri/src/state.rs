@@ -100,7 +100,7 @@ impl Default for Settings {
             schema_version: SCHEMA,
             start_url: "https://example.com".into(),
             restore_session: true,
-            chrome_height: 68.0,
+            chrome_height: 86.0,
         show_bookmarks: false,
         toolbar: vec![
             "translate".into(),

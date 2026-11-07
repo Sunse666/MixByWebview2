@@ -232,16 +232,18 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
                     return;
                 };
                 crate::logging::info(&format!("debug: hiding {name}"));
-                let Some(win) = target.get_window(PRIMARY) else {
+                if target.get_window(PRIMARY).is_none() {
                     return;
-                };
+                }
                 let state = target.state::<AppState>();
                 let patch = crate::ipc::SettingsPatch {
                     hidden_extensions: Some(vec![name]),
                     ..Default::default()
                 };
-                let call = crate::ipc::settings_set(win, state, patch);
-                let _ = tauri::async_runtime::block_on(call);
+                match crate::ipc::apply_settings_patch(&state, patch) {
+                    Ok(_) => crate::logging::info("debug: settings patched"),
+                    Err(err) => crate::logging::warn(&format!("debug patch failed: {}", err.message)),
+                }
             });
         });
     }
