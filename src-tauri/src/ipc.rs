@@ -3231,11 +3231,17 @@ pub async fn tab_icon(
         return Ok(());
     }
 
-    let page_url = state
+    let (page_url, incognito) = state
         .try_read_core(&window_of_tab(&id))
-        .and_then(|core| core.tabs.iter().find(|tab| tab.id == id).map(|tab| tab.url.clone()))
+        .and_then(|core| {
+            core.tabs
+                .iter()
+                .find(|tab| tab.id == id)
+                .map(|tab| (tab.url.clone(), tab.incognito))
+        })
         .unwrap_or_default();
-    if !page_url.is_empty() {
+    // A private tab leaves no trace in history or in the shared icon cache.
+    if !page_url.is_empty() && !incognito {
         attach_icon(&app, &page_url, &icon);
         let host = crate::favicons::host_of(&page_url);
         let changed = {

@@ -569,11 +569,13 @@ pub fn start_url_watch(app: AppHandle, label: String) {
 }
 
 fn publish_url(app: &AppHandle, id: &str, url: &str) {
+    let mut incognito = false;
     if let Some(state) = app.try_state::<AppState>() {
         let window = crate::ipc::window_of_tab(id);
         if let Some(mut core) = state.try_write_core(window) {
             if let Some(tab) = core.tabs.iter_mut().find(|tab| tab.id == id) {
                 tab.url = url.to_string();
+                incognito = tab.incognito;
             }
         }
     }
@@ -586,7 +588,10 @@ fn publish_url(app: &AppHandle, id: &str, url: &str) {
             .map(|tab| tab.title.clone())
             .unwrap_or_default()
     };
-    crate::ipc::record_visit(app, url, &title);
+    // A private tab keeps its pages out of history; the strip still shows the url.
+    if !incognito {
+        crate::ipc::record_visit(app, url, &title);
+    }
 
     let _ = app.emit(
         "tab:url",
