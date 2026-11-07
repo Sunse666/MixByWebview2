@@ -169,6 +169,13 @@ pub async fn shortcut(app: AppHandle, window: tauri::Window, state: State<'_, Ap
                 let _ = webview.eval("window.__mixStartTranslate && window.__mixStartTranslate()");
             }
         }
+        "tab_search" => {
+            // The list lives in the chrome page, so it needs the keyboard.
+            if let Some(chrome) = app.get_webview(&format!("{}-chrome", window.label())) {
+                let _ = chrome.set_focus();
+                let _ = app.emit_to(window.label(), "ui:tab-search", ());
+            }
+        }
         "palette" => {
             // The palette lives in the chrome page, so it needs the keyboard.
             if let Some(chrome) = app.get_webview(&format!("{}-chrome", window.label())) {

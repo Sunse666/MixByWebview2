@@ -342,6 +342,128 @@ function paletteActions() {
   }));
 }
 
+/** Ctrl+Shift+A: the open tabs of this window, filtered as you type. */
+function openTabSearch() {
+  if (document.querySelector(".palette-backdrop")) return;
+
+  const back = document.createElement("div");
+  back.className = "palette-backdrop";
+
+  const box = document.createElement("div");
+  box.className = "palette";
+
+  const input = document.createElement("input");
+  input.className = "palette-input";
+  input.placeholder = t("Search open tabs");
+
+  const list = document.createElement("div");
+  list.className = "palette-list";
+
+  box.append(input, list);
+  back.append(box);
+  document.body.append(back);
+  input.focus();
+
+  const close = () => back.remove();
+  let matches = [];
+
+  // Subsequence match, rewarded when the characters sit together or at the start
+  // of a word, so "ghub" reaches github and "git" prefers the site over a page
+  // that merely mentions it.
+  const score = (text, query) => {
+    if (!query) return 1;
+    const hay = text.toLowerCase();
+    if (hay.startsWith(query)) return 100;
+    const direct = hay.indexOf(query);
+    if (direct >= 0) return 60 - Math.min(direct, 40) * 0.5;
+    let at = 0;
+    let points = 0;
+    let previous = -2;
+    for (const char of query) {
+      const found = hay.indexOf(char, at);
+      if (found < 0) return 0;
+      points += found === previous + 1 ? 3 : 1;
+      if (found === 0 || /[\s\/._-]/.test(hay[found - 1] || "")) points += 2;
+      previous = found;
+      at = found + 1;
+    }
+    return points;
+  };
+
+  const paint = (query) => {
+    const text = (query || "").trim().toLowerCase();
+    list.replaceChildren();
+
+    matches = tabs
+      .map((tab) => ({
+        tab,
+        // The url is searched too: a page's title is often just the site name.
+        points: Math.max(score(tab.title || "", text), score(tab.url || "", text) * 0.9),
+      }))
+      .filter((entry) => entry.points > 0)
+      .sort((a, b) => b.points - a.points)
+      .slice(0, 40)
+      .map((entry) => entry.tab);
+
+    for (const tab of matches) {
+      const row = document.createElement("div");
+      row.className = "palette-row" + (tab.id === selected ? " active" : "");
+      const label = document.createElement("span");
+      label.textContent = (tab.pinned ? "📌 " : "") + (tab.title || t("New tab"));
+      const where = document.createElement("span");
+      where.className = "palette-hint";
+      where.textContent = tab.url;
+      row.append(label, where);
+      row.addEventListener("click", () => {
+        close();
+        invoke("tab_select", { id: tab.id }).catch(() => {});
+      });
+      list.append(row);
+    }
+
+    const first = list.firstElementChild;
+    if (first) first.classList.add("active");
+  };
+
+  const choose = () => {
+    const row = list.querySelector(".palette-row.active");
+    const index = row ? [...list.children].indexOf(row) : 0;
+    const tab = matches[index];
+    if (!tab) return;
+    close();
+    invoke("tab_select", { id: tab.id }).catch(() => {});
+  };
+
+  input.addEventListener("input", () => paint(input.value));
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      close();
+      return;
+    }
+    if (event.key === "Enter") {
+      event.preventDefault();
+      choose();
+      return;
+    }
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      const rows = [...list.children];
+      if (!rows.length) return;
+      const current = rows.findIndex((row) => row.classList.contains("active"));
+      const step = event.key === "ArrowDown" ? 1 : -1;
+      const next = (current + step + rows.length) % rows.length;
+      rows.forEach((row, index) => row.classList.toggle("active", index === next));
+      rows[next].scrollIntoView({ block: "nearest" });
+    }
+  });
+  back.addEventListener("mousedown", (event) => {
+    if (event.target === back) close();
+  });
+
+  paint("");
+}
+
 function openPalette() {
   if (document.querySelector(".palette-backdrop")) return;
   const back = document.createElement("div");
@@ -927,6 +1049,7 @@ async function boot() {
   report(`boot tabs=${tabs.length} selected=${selected}`);
 
   await listen("ui:palette", () => openPalette());
+  await listen("ui:tab-search", () => openTabSearch());
   await listen("ui:new-tab", () => invoke("tab_new", {}));
   await listen("ui:open-url", (event) => invoke("tab_new", { url: event.payload }));
   await listen("url:commit", () => {

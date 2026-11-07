@@ -131,6 +131,7 @@ export const SHORTCUT_ACTIONS = {
   downloads: "Downloads",
   bookmark: "Bookmark this page",
   devtools: "Dev tools",
+  tab_search: "Search open tabs",
 };
 
 export const SHORTCUT_DEFAULTS = {
@@ -148,6 +149,7 @@ export const SHORTCUT_DEFAULTS = {
   downloads: "ctrl+j",
   bookmark: "ctrl+d",
   devtools: "f12",
+  tab_search: "ctrl+shift+a",
 };
 
 // The strip draws these from settings.toolbar, and the order in that array is

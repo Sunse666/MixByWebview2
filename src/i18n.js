@@ -319,6 +319,7 @@ const DICT = {
     "Unmute tab": "取消静音",
     "Toolbar": "工具栏",
     "Preview on hover": "悬停预览",
+    "Search open tabs": "搜索标签页",
     "Shows a picture of the tab when the pointer rests on it; takes a screenshot on every tab switch":
       "鼠标停在标签上时显示该页面的截图；每次切换标签会截一次图",
     "Language": "语言",

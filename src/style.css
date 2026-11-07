@@ -558,3 +558,19 @@ body.incognito #tab-strip::after {
   background: #2d2f31;
   color: #e8eaed;
 }
+.palette-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+/* The url sits after the title, quiet and clipped first. */
+.palette-hint {
+  flex: 1;
+  min-width: 0;
+  font-size: 11px;
+  color: #8b9096;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: right;
+}
