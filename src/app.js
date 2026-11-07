@@ -978,6 +978,60 @@ async function boot() {
     }
   });
   urlInput.addEventListener("input", () => feedSuggest(urlInput.value));
+
+  // While the address bar owns the keyboard the page has the real focus, so
+  // typing arrives as events and is applied here, where the caret and the
+  // selection live.
+  const urlInsert = (text) => {
+    const start = urlInput.selectionStart ?? urlInput.value.length;
+    const end = urlInput.selectionEnd ?? start;
+    if (text === "\b") {
+      if (start !== end) urlInput.setRangeText("", start, end, "end");
+      else if (start > 0) urlInput.setRangeText("", start - 1, start, "end");
+    } else {
+      urlInput.setRangeText(text, start, end, "end");
+    }
+    urlInput.dispatchEvent(new Event("input"));
+  };
+
+  const urlKey = (key) => {
+    urlInput.focus();
+    const start = urlInput.selectionStart ?? 0;
+    const end = urlInput.selectionEnd ?? start;
+    const move = (at) => urlInput.setSelectionRange(at, at);
+    if (key === "left") move(end > start ? start : Math.max(0, start - 1));
+    else if (key === "right") move(end > start ? end : Math.min(urlInput.value.length, end + 1));
+    else if (key === "home") move(0);
+    else if (key === "end") move(urlInput.value.length);
+    else if (key === "delete") {
+      if (start !== end) urlInput.setRangeText("", start, end, "end");
+      else if (end < urlInput.value.length) urlInput.setRangeText("", end, end + 1, "end");
+      urlInput.dispatchEvent(new Event("input"));
+    } else if (key === "select-all") {
+      urlInput.select();
+    } else if (key === "copy" || key === "cut") {
+      const selected = urlInput.value.slice(start, end);
+      if (selected) {
+        invoke("clipboard_write", { text: selected }).catch(() => {});
+        if (key === "cut") {
+          urlInput.setRangeText("", start, end, "end");
+          urlInput.dispatchEvent(new Event("input"));
+        }
+      }
+    } else if (key === "paste") {
+      invoke("clipboard_read")
+        .then((text) => {
+          if (text) urlInsert(String(text).replace(/[\r\n]+/g, " "));
+        })
+        .catch(() => {});
+    }
+  };
+
+  window.__mixUrlInsert = urlInsert;
+  window.__mixUrlKey = urlKey;
+  // Registered here so the handlers exist before the first keystroke can land.
+  await listen("ui:url-insert", (event) => urlInsert(event.payload || ""));
+  await listen("ui:url-key", (event) => urlKey(event.payload || ""));
   urlInput.addEventListener("blur", () => closeSuggest());
 
   let badUrlTimer = null;

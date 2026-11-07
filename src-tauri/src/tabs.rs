@@ -476,27 +476,63 @@ const SHORTCUT_FORWARDER: &str = r#"
     window.__TAURI_INTERNALS__.invoke(command, payload).catch(function () {});
   };
 
+  // Editing keys the address bar has to act on itself: the browser default that
+  // would have done it belongs to the page, which currently has the keyboard.
+  var EDIT_KEYS = {
+    ArrowLeft: "left",
+    ArrowRight: "right",
+    Home: "home",
+    End: "end",
+    Delete: "delete"
+  };
+
   window.addEventListener("keydown", function (event) {
     if (!window.__mixUrlMode) return;
-    if (event.ctrlKey || event.altKey || event.metaKey) return;
+    // preventDefault stops the character, stopPropagation stops the page's own
+    // single-key shortcuts (GitHub's t, YouTube's k) from firing while the
+    // address bar is being typed into.
+    var stop = function () {
+      event.preventDefault();
+      event.stopPropagation();
+    };
+    if ((event.ctrlKey || event.metaKey) && !event.altKey) {
+      var combo = event.key.toLowerCase();
+      if (combo === "a") {
+        forward("key", "select-all");
+        stop();
+        return;
+      }
+      if (combo === "v" || combo === "c" || combo === "x") {
+        forward("key", combo === "v" ? "paste" : combo);
+        stop();
+      }
+      return;
+    }
+    if (event.altKey) return;
     if (event.key.length === 1) {
       forward("type", event.key);
-      event.preventDefault();
+      stop();
+      return;
+    }
+    var edit = EDIT_KEYS[event.key];
+    if (edit) {
+      forward("key", edit);
+      stop();
       return;
     }
     if (event.key === "Backspace") {
       forward("type", "\u0008");
-      event.preventDefault();
+      stop();
       return;
     }
     if (event.key === "Enter") {
       forward("key", "enter");
-      event.preventDefault();
+      stop();
       return;
     }
     if (event.key === "Escape") {
       forward("key", "escape");
-      event.preventDefault();
+      stop();
     }
   }, true);
 })();

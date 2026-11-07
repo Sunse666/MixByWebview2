@@ -2807,20 +2807,20 @@ pub async fn url_type(
     state: State<'_, AppState>,
     text: String,
 ) -> Result<(), AppError> {
-    let next = {
-        let mut edit = state.url_edit.write().unwrap_or_else(|e| e.into_inner());
-        let Some(buffer) = edit.get_mut(window.label()) else {
-            return Ok(());
-        };
-        if text == "\u{8}" {
-            buffer.pop();
-        } else {
-            buffer.push_str(&text);
-        }
-        buffer.clone()
-    };
-    crate::logging::info(&format!("url_type -> {next:?}"));
-    let _ = app.emit_to(window.label(), "url:text", next);
+    // Url mode only; otherwise the page is typing into itself and the keystroke
+    // has already been handled there.
+    if !state
+        .url_edit
+        .read()
+        .unwrap_or_else(|e| e.into_inner())
+        .contains_key(window.label())
+    {
+        return Ok(());
+    }
+    // The chrome page owns the text and the caret: forwarding the raw keystroke
+    // keeps selection, arrows and delete working, which a buffer in here could
+    // not do.
+    let _ = app.emit_to(window.label(), "ui:url-insert", text);
     Ok(())
 }
 
@@ -2840,7 +2840,10 @@ pub async fn url_key(
             exit_url_edit(&app, window.label());
             let _ = app.emit_to(window.label(), "url:cancel", ());
         }
-        _ => {}
+        // Editing keys are applied by the chrome page, which owns the caret.
+        other => {
+            let _ = app.emit_to(window.label(), "ui:url-key", other.to_string());
+        }
     }
     Ok(())
 }
