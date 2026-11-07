@@ -46,6 +46,8 @@ pub async fn tab_select(app: AppHandle, window: tauri::Window, state: State<'_, 
     if !exists {
         return Err(AppError::new("no_tab", id));
     }
+    // A menu belongs to the tab it was opened on; switching closes it.
+    crate::overlay::close(&app, window.label());
     {
         let mut core = state.write_core(window.label());
         core.selected = Some(id.clone());

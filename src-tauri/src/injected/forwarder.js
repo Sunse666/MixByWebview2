@@ -376,6 +376,8 @@
       var hit = overrides[comboOf(event)];
       if (hit) return hit;
     }
+    // Escape closes whatever the shell put on top of the page.
+    if (event.key === "Escape") return "close_overlay";
     if (event.key === "F5") return "reload";
     if (event.key === "F11") return "fullscreen";
     if (event.key === "F12") return "devtools";
@@ -525,8 +527,12 @@
     }
     var action = actionFor(event);
     if (!action) return;
-    event.preventDefault();
-    event.stopPropagation();
+    // Escape is passed through on purpose: it is reported so an open panel can
+    // close, but the page still gets it for its own dialogs and players.
+    if (action !== 'close_overlay') {
+      event.preventDefault();
+      event.stopPropagation();
+    }
     send(action);
   }, true);
 })();

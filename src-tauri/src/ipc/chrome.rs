@@ -317,6 +317,9 @@ pub async fn focus_page(
     window: tauri::Window,
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
+    // The keyboard is going back to the page, so whatever floated above it is
+    // finished: a menu that stayed open here used to sit over the page forever.
+    crate::overlay::close(&app, window.label());
     let id = selected_label(&state, &window);
     if let Some(webview) = app.get_webview(&id) {
         let _ = webview.set_focus();

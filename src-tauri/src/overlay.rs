@@ -234,6 +234,13 @@ pub fn close(app: &AppHandle, window_label: &str) {
     if let Some(label) = label {
         if let Some(webview) = app.get_webview(&label) {
             let _ = webview.close();
+            // A child webview close can be refused while it is navigating or
+            // busy; hiding it is the fallback that keeps it off the screen
+            // instead of leaving a panel frozen over the page.
+            if let Some(leftover) = app.get_webview(&label) {
+                let _ = leftover.hide();
+                crate::logging::info(&format!("overlay hid ({label}) after close was refused"));
+            }
             crate::logging::info(&format!("overlay closed ({label})"));
         }
         // Put the keyboard back where it was before the overlay opened. A page
