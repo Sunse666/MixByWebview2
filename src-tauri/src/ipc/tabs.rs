@@ -54,7 +54,7 @@ pub async fn tab_select(app: AppHandle, window: tauri::Window, state: State<'_, 
     if state.settings.read().tab_hover_preview {
         let previous = state.read_core(window.label()).selected.clone();
         if let Some(previous) = previous.filter(|label| label != &id) {
-            if crate::thumbs::needs(&previous, 60) {
+            if crate::thumbs::needs(&previous, 5) {
                 if let Some(webview) = app.get_webview(&previous) {
                     if let Some(png) = crate::thumbs::capture(&webview) {
                         crate::thumbs::remember(&previous, png);
@@ -297,7 +297,9 @@ pub async fn thumb_show(
     // The visible tab can be photographed right now, which is what the card is
     // for. Every other tab answers from a picture taken while it was visible.
     let visible = _state.read_core(window.label()).selected.as_deref() == Some(id.as_str());
-    if visible && crate::thumbs::needs(&id, 2) {
+    // Every hover refreshes the picture; a second of slack stops a jittery
+    // pointer from capturing the same frame twice.
+    if visible && crate::thumbs::needs(&id, 1) {
         if let Some(webview) = app.get_webview(&id) {
             if let Some(png) = crate::thumbs::capture(&webview) {
                 crate::thumbs::remember(&id, png);

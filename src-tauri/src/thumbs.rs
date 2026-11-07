@@ -30,6 +30,20 @@ fn store() -> std::sync::MutexGuard<'static, Option<HashMap<String, Thumb>>> {
 /// Grabs what the webview is showing right now.
 #[cfg(windows)]
 pub fn capture(webview: &tauri::Webview) -> Option<Vec<u8>> {
+  let png = capture_once(webview);
+  match &png {
+    Some(bytes) => crate::logging::info(&format!(
+      "thumbs: captured {} ({} bytes)",
+      webview.label(),
+      bytes.len()
+    )),
+    None => crate::logging::warn(&format!("thumbs: capture failed for {}", webview.label())),
+  }
+  png
+}
+
+#[cfg(windows)]
+fn capture_once(webview: &tauri::Webview) -> Option<Vec<u8>> {
   let json = crate::screenshot::call(
     webview,
     "Page.captureScreenshot",
@@ -43,6 +57,11 @@ pub fn capture(webview: &tauri::Webview) -> Option<Vec<u8>> {
   } else {
     Some(png)
   }
+}
+
+#[cfg(not(windows))]
+fn capture_once(_webview: &tauri::Webview) -> Option<Vec<u8>> {
+  None
 }
 
 #[cfg(not(windows))]
