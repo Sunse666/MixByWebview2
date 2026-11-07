@@ -12,6 +12,7 @@
 
 use std::collections::HashMap;
 use std::sync::Mutex;
+use tauri::Manager;
 
 /// A picture older than this is not worth showing any more.
 const MAX_AGE_SECS: u64 = 900;
@@ -80,9 +81,15 @@ fn png_size(png: &[u8]) -> Option<(u32, u32)> {
 }
 
 /// One screenshot attempt, with or without the compositor surface.
+/// One screenshot attempt, with or without the compositor surface.
 #[cfg(windows)]
 fn capture_try(webview: &tauri::Webview, params: &str) -> Option<Vec<u8>> {
-  let json = crate::screenshot::call(webview, "Page.captureScreenshot", params)?;
+  let json = crate::screenshot::call_timeout(
+    webview,
+    "Page.captureScreenshot",
+    params,
+    std::time::Duration::from_millis(700),
+  )?;
   let value: serde_json::Value = serde_json::from_str(&json).ok()?;
   let data = value.get("data")?.as_str()?;
   let png = crate::screenshot::decode_base64(data)?;
@@ -93,14 +100,31 @@ fn capture_try(webview: &tauri::Webview, params: &str) -> Option<Vec<u8>> {
   }
 }
 
+/// When a tab's hidden capture was last probed, successful or not. Without this a
+/// failure repeats on every mouse move and the card ends up waiting on it.
+static PROBED: Mutex<Option<HashMap<String, u64>>> = Mutex::new(None);
+
+fn probe_due(id: &str, seconds: u64) -> bool {
+  let mut guard = PROBED.lock().unwrap_or_else(|e| e.into_inner());
+  let map = guard.get_or_insert_with(HashMap::new);
+  let now = crate::library::now();
+  match map.get(id) {
+    Some(at) if now.saturating_sub(*at) < seconds => false,
+    _ => {
+      map.insert(id.to_string(), now);
+      true
+    }
+  }
+}
+
 /// Experiment: can a webview that is hidden still be photographed?
 ///
 /// Two attempts, because they answer different questions. "fromSurface": false
 /// asks the renderer for a frame it may still be holding; the plain call is the
 /// control, and if that one answers with a real picture then the surface is still
 /// there as well. A blank page compresses to a few kilobytes, so anything above
-/// MIN_PNG is treated as a real frame. Both outcomes are logged: the sizes and the
-/// png dimensions say which one worked.
+/// MIN_PNG is treated as a real frame. Both outcomes are logged with the size and
+/// the png dimensions, which is what says which one worked.
 #[cfg(windows)]
 pub fn probe_hidden(webview: &tauri::Webview) -> Option<Vec<u8>> {
   const MIN_PNG: usize = 12 * 1024;
@@ -129,6 +153,23 @@ pub fn probe_hidden(webview: &tauri::Webview) -> Option<Vec<u8>> {
     }
   }
   best
+}
+
+/// Runs the probe off the command thread and stores whatever it gets, so the card
+/// never waits for a webview that may not answer at all.
+pub fn probe_later(app: tauri::AppHandle, id: String) {
+  if !probe_due(&id, 30) {
+    return;
+  }
+  let Some(webview) = app.get_webview(&id) else {
+    return;
+  };
+  tauri::async_runtime::spawn_blocking(move || {
+    if let Some(png) = probe_hidden(&webview) {
+      remember(&id, png);
+      crate::logging::info(&format!("thumbs: hidden {id} used as the preview"));
+    }
+  });
 }
 
 #[cfg(not(windows))]

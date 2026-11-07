@@ -312,15 +312,11 @@ pub async fn thumb_show(
             }
         }
     }
-    // A hidden tab has no surface to photograph. This probe is the experiment
-    // that decides whether it can still be done; five second cooldown, because
-    // hovering is no reason to run two protocol calls per mouse move.
-    if !visible && crate::thumbs::needs(&id, 5) {
-        if let Some(webview) = app.get_webview(&id) {
-            if let Some(png) = crate::thumbs::probe_hidden(&webview) {
-                crate::thumbs::remember(&id, png);
-            }
-        }
+    // A hidden tab has no surface to photograph, so the probe runs in the
+    // background: waiting on a webview that may never answer is what made the
+    // card appear seconds late, or not at all.
+    if !visible {
+        crate::thumbs::probe_later(app.clone(), id.clone());
     }
     let (win_w, _) = crate::window::logical_size(&window)?;
     let (width, height) = (372.0, 236.0);

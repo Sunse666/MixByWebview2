@@ -8,6 +8,18 @@
 /// Runs one DevTools protocol method and returns its raw JSON answer.
 #[cfg(windows)]
 pub fn call(webview: &tauri::Webview, method: &str, params: &str) -> Option<String> {
+  call_timeout(webview, method, params, std::time::Duration::from_secs(8))
+}
+
+/// Same, with an explicit deadline: a probe that must not hold up its caller
+/// cannot afford to wait eight seconds for an answer that may never come.
+#[cfg(windows)]
+pub fn call_timeout(
+  webview: &tauri::Webview,
+  method: &str,
+  params: &str,
+  wait: std::time::Duration,
+) -> Option<String> {
   use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2;
 
   let method = windows_core::HSTRING::from(method);
@@ -41,13 +53,23 @@ pub fn call(webview: &tauri::Webview, method: &str, params: &str) -> Option<Stri
     return None;
   }
   receiver
-    .recv_timeout(std::time::Duration::from_secs(8))
+    .recv_timeout(wait)
     .ok()
     .flatten()
 }
 
 #[cfg(not(windows))]
 pub fn call(_webview: &tauri::Webview, _method: &str, _params: &str) -> Option<String> {
+  None
+}
+
+#[cfg(not(windows))]
+pub fn call_timeout(
+  _webview: &tauri::Webview,
+  _method: &str,
+  _params: &str,
+  _wait: std::time::Duration,
+) -> Option<String> {
   None
 }
 
