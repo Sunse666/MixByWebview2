@@ -307,6 +307,12 @@ const DICT = {
     "Interface language": "界面语言",
     "Clear the selected data? This cannot be undone.": "清除选中的数据？此操作无法撤销。",
     "Type a command or a site": "输入命令或网址",
+    "Home": "主页",
+    "Reopen closed tab": "恢复关闭的标签页",
+    "Bookmark button position": "书签按钮位置",
+    "Left": "左侧",
+    "Right": "右侧",
+    "Reset to defaults": "重置为默认设置",
     "Choose the language of the interface": "选择界面语言",
   },
 };

@@ -53,10 +53,21 @@ const LIGHT_THEME = {
   url: "#eef1f5",
 };
 
+// The last theme file applied, so switching back from the light palette can
+// restore it instead of leaving the light overrides behind.
+let activeTheme = null;
+
+function prefersLight() {
+  return window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches;
+}
+
 function applyThemeMode(mode) {
   const root = document.documentElement;
-  if (mode !== "light") {
+  const light = mode === "light" || (mode === "system" && prefersLight());
+  if (!light) {
     root.style.colorScheme = "dark";
+    // Put the theme's own colours back; the light palette set them inline.
+    if (activeTheme) applyTheme(activeTheme);
     return;
   }
   root.style.colorScheme = "light";
@@ -76,6 +87,7 @@ function applyThemeMode(mode) {
 }
 
 function applyTheme(theme) {
+  activeTheme = theme;
   const s = root.style;
   s.setProperty("--bg", theme.colors.bg);
   s.setProperty("--panel", theme.colors.chrome);
@@ -446,6 +458,8 @@ function renderMenuBar() {
 }
 
 const TOOLBAR_ITEMS = {
+  home: { glyph: "\u2302", label: "Home", where: "outside", run: () => invoke("shortcut", { action: "open_home" }) },
+  reopen: { glyph: "\u21ba", label: "Reopen closed tab", where: "outside", run: () => invoke("shortcut", { action: "reopen_tab" }) },
   translate: { glyph: "\u6587", label: "Translate this page", where: "inside", run: () => toggleTranslate() },
   zoom: { glyph: "\u2315", label: "Zoom", where: "inside", run: () => invoke("overlay_toggle", { kind: "zoom" }) },
   find: { glyph: "\u2315", label: "Find in page", where: "outside", run: () => invoke("overlay_toggle", { kind: "find" }) },
@@ -467,8 +481,11 @@ async function renderToolbar(extensions) {
   const inner = [];
   const outer = [];
 
-  // Order follows Chrome: extensions puzzle first, downloads last.
-  const order = ["translate", "zoom", "find", "bookmark", "extensions", "downloads"];
+  // The saved order wins, so a button can be moved to either end; unknown ids
+  // from an older profile are simply skipped.
+  const order = (settings.toolbar && settings.toolbar.length
+    ? settings.toolbar
+    : ["translate", "zoom", "bookmark", "extensions", "downloads"]);
   for (const id of order) {
     if (!(settings.toolbar || []).includes(id)) continue;
     const spec = TOOLBAR_ITEMS[id];
@@ -835,6 +852,13 @@ async function boot() {
 
   // Report the real strip height: DPI rounding otherwise leaves an empty band.
   applyThemeMode(settings.theme_mode || "dark");
+  // Only the "system" mode follows the os while the app is running.
+  const scheme = window.matchMedia && window.matchMedia("(prefers-color-scheme: light)");
+  if (scheme && scheme.addEventListener) {
+    scheme.addEventListener("change", () => {
+      if ((settings.theme_mode || "dark") === "system") applyThemeMode("system");
+    });
+  }
 
   // The bookmarks bar is accounted for separately, so report the strip without it.
   const fitStrip = () => {

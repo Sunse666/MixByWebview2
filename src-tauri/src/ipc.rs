@@ -1746,6 +1746,10 @@ pub async fn settings_set(
     // shortcut overrides apply to open pages, the rest to pages opened later.
     crate::tabs::apply_settings(&state.dirs, &settings);
     crate::tabs::broadcast_shortcuts(webview.app_handle());
+    // The chrome strip draws the toolbar and the menu bar from these settings,
+    // and it is a different webview: it has to be told to redraw.
+    let label = webview.window().label().to_string();
+    let _ = webview.app_handle().emit_to(label, "settings:changed", ());
     Ok(settings)
 }
 
@@ -1806,7 +1810,11 @@ pub(crate) fn apply_settings_patch(
             guard.gestures = value;
         }
         if let Some(value) = patch.theme_mode {
-            guard.theme_mode = if value == "light" { "light".into() } else { "dark".into() };
+            guard.theme_mode = match value.as_str() {
+                "light" => "light".into(),
+                "system" => "system".into(),
+                _ => "dark".into(),
+            };
         }
         if let Some(value) = patch.font_family {
             guard.font_family = value.trim().to_string();
@@ -1879,7 +1887,16 @@ pub(crate) fn apply_settings_patch(
         }
         if let Some(value) = patch.toolbar {
             // Only ids we know how to draw survive a hand edited settings file.
-            let known = ["downloads", "translate", "find", "zoom", "bookmark", "extensions"];
+            let known = [
+                "downloads",
+                "translate",
+                "find",
+                "zoom",
+                "bookmark",
+                "extensions",
+                "home",
+                "reopen",
+            ];
             guard.toolbar = value
                 .into_iter()
                 .filter(|id| known.contains(&id.as_str()))

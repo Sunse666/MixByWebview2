@@ -414,7 +414,7 @@ async function boot() {
   themeText.textContent = t("theme.json can be shared with the same folder layout");
   const modeSelect = document.createElement("select");
   modeSelect.className = "button";
-  for (const [value, label] of [["dark", "Dark"], ["light", "Light"]]) {
+  for (const [value, label] of [["dark", "Dark"], ["light", "Light"], ["system", "Follow system"]]) {
     const option = document.createElement("option");
     option.value = value;
     option.textContent = t(label);
@@ -1040,30 +1040,67 @@ async function boot() {
   toolbarCard.className = "card";
   toolbarCard.style.maxWidth = "720px";
 
-  const NAMES = {
-    downloads: "Downloads",
-    translate: "Translate",
-    zoom: "Zoom",
-    find: "Find in page",
-    bookmark: "Bookmark",
-    extensions: "Extensions",
+  // The strip draws these from settings.toolbar, and the order in that array is
+  // the order they appear in, so a position is just an index.
+  const TOOLBAR_CHOICES = [
+    ["home", "Home"],
+    ["reopen", "Reopen closed tab"],
+    ["translate", "Translate this page"],
+    ["zoom", "Zoom"],
+    ["bookmark", "Bookmark this page"],
+    ["find", "Find in page"],
+    ["extensions", "Extensions"],
+    ["downloads", "Downloads"],
+  ];
+  const DEFAULT_TOOLBAR = ["translate", "zoom", "bookmark", "extensions", "downloads"];
+  const toolbarIds = () =>
+    Array.isArray(settings.toolbar) && settings.toolbar.length
+      ? [...settings.toolbar]
+      : [...DEFAULT_TOOLBAR];
+  const saveToolbar = async (next) => {
+    settings.toolbar = next;
+    await invoke("settings_set", { patch: { toolbar: next } }).catch(() => {});
   };
-  const enabled = new Set(settings.toolbar || []);
-  for (const [id, label] of Object.entries(NAMES)) {
+
+  for (const [id, label] of TOOLBAR_CHOICES) {
     toolbarCard.append(
       row(
-        label,
+        t(label),
         "",
-        toggle(enabled.has(id), async (value) => {
-          const next = new Set(settings.toolbar || []);
-          if (value) next.add(id);
-          else next.delete(id);
-          settings.toolbar = [...next];
-          await invoke("settings_set", { patch: { toolbar: [...next] } }).catch(() => {});
+        toggle(toolbarIds().includes(id), async (on) => {
+          const list = toolbarIds().filter((item) => item !== id);
+          if (on) list.push(id);
+          await saveToolbar(list);
         }),
       ),
     );
   }
+
+  const bookmarkPlace = document.createElement("select");
+  bookmarkPlace.className = "button";
+  for (const [value, label] of [["left", "Left"], ["right", "Right"]]) {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = t(label);
+    if ((value === "left") === (toolbarIds()[0] === "bookmark")) option.selected = true;
+    bookmarkPlace.append(option);
+  }
+  bookmarkPlace.addEventListener("change", async () => {
+    const list = toolbarIds().filter((item) => item !== "bookmark");
+    if (bookmarkPlace.value === "left") list.unshift("bookmark");
+    else list.push("bookmark");
+    await saveToolbar(list);
+  });
+  toolbarCard.append(row(t("Bookmark button position"), "", bookmarkPlace));
+
+  const toolbarReset = document.createElement("button");
+  toolbarReset.className = "button";
+  toolbarReset.textContent = t("Reset to defaults");
+  toolbarReset.addEventListener("click", () => saveToolbar([...DEFAULT_TOOLBAR]));
+  const resetRow = document.createElement("div");
+  resetRow.className = "card-actions";
+  resetRow.append(toolbarReset);
+  toolbarCard.append(resetRow);
 
 
   main.append(card);
