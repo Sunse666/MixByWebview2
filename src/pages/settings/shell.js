@@ -4,17 +4,23 @@ import { t } from "../../i18n.js";
 
 const { invoke } = window.__TAURI__.core;
 
+// The order the sections appear in the sidebar, mirroring the appearance page of
+// the browsers this imitates: one entry per concern, not per card.
 const PREFERRED = [
-  "Startup",
   "Performance",
   "Appearance",
+  "Toolbar",
   "New tab page",
+  "Bookmarks",
   "Tab settings",
   "Super drag",
   "Mouse gestures",
-  "Shortcuts",
-  "Backup",
+  "Search engine",
   "Default browser",
+  "Startup",
+  "Shortcuts",
+  "Language",
+  "Backup",
   "Clear browsing data",
 ];
 

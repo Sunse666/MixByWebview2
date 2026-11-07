@@ -29,31 +29,23 @@ async function boot() {
   head.textContent = t("Settings");
   main.append(head);
 
-  // Appended right here, not at the end of boot: the page is folded into
-  // sections by the h2 that precedes each card, so leaving it to the end put
-  // session, bookmarks bar and search engine under "Default browser".
-  const card = document.createElement("div");
-  card.className = "card";
-  card.style.maxWidth = "720px";
-
-  card.append(
-    row(
-      "Restore session",
-      "Restore the last session on start",
-      toggle(settings.restore_session, async (value) => {
-        await invoke("settings_set", { patch: { restore_session: value } }).catch(() => {});
-      }),
-    ),
+  // Each concern gets its own section below: one card holding the session
+  // switch, the bookmarks bar, the language and the search engine together made
+  // the sidebar useless for finding anything.
+  const restoreRow = row(
+    "Restore session",
+    "Restore the last session on start",
+    toggle(settings.restore_session, async (value) => {
+      await invoke("settings_set", { patch: { restore_session: value } }).catch(() => {});
+    }),
   );
 
-  card.append(
-    row(
-      "Bookmarks bar",
-      "Show the bookmarks bar",
-      toggle(settings.show_bookmarks, async (value) => {
-        await invoke("settings_set", { patch: { show_bookmarks: value } }).catch(() => {});
-      }),
-    ),
+  const bookmarksRow = row(
+    "Bookmarks bar",
+    "Show the bookmarks bar",
+    toggle(settings.show_bookmarks, async (value) => {
+      await invoke("settings_set", { patch: { show_bookmarks: value } }).catch(() => {});
+    }),
   );
 
   const language = document.createElement("select");
@@ -179,7 +171,7 @@ async function boot() {
   engine.addEventListener("change", async () => {
     await invoke("settings_set", { patch: { search_engine: engine.value } }).catch(() => {});
   });
-  card.append(row("Search engine", "Used when the address bar is not a url", engine));
+  const engineRow = row("Search engine", "Used when the address bar is not a url", engine);
 
   const customSearch = document.createElement("input");
   customSearch.className = "hex";
@@ -189,12 +181,10 @@ async function boot() {
   customSearch.addEventListener("change", async () => {
     await invoke("settings_set", { patch: { custom_search: customSearch.value } }).catch(() => {});
   });
-  card.append(
-    row(
-      "Custom search url",
-      "Overrides the engine above; %s is the query",
-      customSearch,
-    ),
+  const customSearchRow = row(
+    "Custom search url",
+    "Overrides the engine above; %s is the query",
+    customSearch,
   );
 
   const cssButton = document.createElement("button");
@@ -209,13 +199,10 @@ async function boot() {
   const cssRow = document.createElement("div");
   cssRow.className = "card-actions";
   cssRow.append(cssButton, cssNote);
-  card.append(
-    row("Custom CSS", "UserData/custom.css is applied to every page; restart to reload"),
-    cssRow,
+  const cssRowTitle = row(
+    "Custom CSS",
+    "UserData/custom.css is applied to every page; restart to reload",
   );
-
-  card.append(row("Language", "Choose the language of the interface", language));
-  main.append(card);
 
   const dataHead = document.createElement("h2");
   dataHead.textContent = t("Clear browsing data");
@@ -296,10 +283,43 @@ async function boot() {
     await invoke("settings_set", { patch: { home_url: homeUrl.value } }).catch(() => {});
   });
   startCard.append(
+    restoreRow,
     row("Start page", "Opened at launch", startUrl),
     row(t("Home address"), t("Opened by the home button; empty uses the start page"), homeUrl),
   );
   main.append(startCard);
+
+  // Bookmarks, search and language are sections of their own, not rows in a
+  // catch-all card: the sidebar is how these pages are navigated.
+  const bookmarksHead = document.createElement("h2");
+  bookmarksHead.textContent = t("Bookmarks");
+  bookmarksHead.style.margin = "18px 0 10px";
+  main.append(bookmarksHead);
+  const bookmarksCard = document.createElement("div");
+  bookmarksCard.className = "card";
+  bookmarksCard.style.maxWidth = "720px";
+  bookmarksCard.append(bookmarksRow);
+  main.append(bookmarksCard);
+
+  const searchHead = document.createElement("h2");
+  searchHead.textContent = t("Search engine");
+  searchHead.style.margin = "18px 0 10px";
+  main.append(searchHead);
+  const searchCard = document.createElement("div");
+  searchCard.className = "card";
+  searchCard.style.maxWidth = "720px";
+  searchCard.append(engineRow, customSearchRow);
+  main.append(searchCard);
+
+  const langHead = document.createElement("h2");
+  langHead.textContent = t("Language");
+  langHead.style.margin = "18px 0 10px";
+  main.append(langHead);
+  const langCard = document.createElement("div");
+  langCard.className = "card";
+  langCard.style.maxWidth = "720px";
+  langCard.append(row("Interface language", "Choose the language of the interface", language));
+  main.append(langCard);
 
   const themeHead = document.createElement("h2");
   themeHead.textContent = t("Appearance");
@@ -358,6 +378,8 @@ async function boot() {
     row(t("Font size"), t("Text size for pages that do not set one"), sizeSelect),
     row(t("Minimum font size"), t("Stops pages from rendering text smaller than this"), minSelect),
     preview,
+    cssRowTitle,
+    cssRow,
   );
   main.append(themeCard);
 
@@ -599,8 +621,9 @@ async function boot() {
   );
   main.append(browserCard);
 
-  const toolbarHead = document.createElement("div");
-  toolbarHead.style.marginTop = "14px";
+  const toolbarHead = document.createElement("h2");
+  toolbarHead.textContent = t("Toolbar");
+  toolbarHead.style.margin = "18px 0 10px";
   main.append(toolbarHead);
 
   const toolbarCard = document.createElement("div");
@@ -657,8 +680,7 @@ async function boot() {
   resetRow.className = "card-actions";
   resetRow.append(toolbarReset);
   toolbarCard.append(resetRow);
-
-  themeCard.append(toolbarHead, ...toolbarCard.childNodes);
+  main.append(toolbarCard);
 }
 
 boot().then(() => {
