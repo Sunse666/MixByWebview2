@@ -312,12 +312,10 @@ pub async fn thumb_show(
             }
         }
     }
-    // A hidden tab has no surface to photograph, so the probe runs in the
-    // background: waiting on a webview that may never answer is what made the
-    // card appear seconds late, or not at all.
-    if !visible {
-        crate::thumbs::probe_later(app.clone(), id.clone());
-    }
+    // A hidden tab cannot be photographed: its page does not paint at all, and the
+    // protocol answers with the frame from when it was last visible - measured, see
+    // the fingerprints in the log. So the card shows that frame and says what the
+    // tab is doing now through the live fields.
     let (win_w, _) = crate::window::logical_size(&window)?;
     let (width, height) = (372.0, 236.0);
     let left = (x - width / 2.0).clamp(6.0, (win_w - width - 6.0).max(6.0));
