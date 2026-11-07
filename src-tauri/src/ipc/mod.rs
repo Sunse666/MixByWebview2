@@ -55,6 +55,9 @@ pub struct AppState {
     /// Window label -> whether its overlay belongs to the page rather than the
     /// chrome strip, so closing it can hand the keyboard back to the right one.
     pub overlay_from_page: RwLock<std::collections::HashMap<String, bool>>,
+    /// Windows whose overlay is the tab hover card: closing that one must not
+    /// push a settings refresh at the chrome strip.
+    pub overlay_thumb: RwLock<std::collections::HashSet<String>>,
     pub permissions: crate::permissions::PermissionStore,
     pub snap: std::sync::Mutex<crate::snap::SnapState>,
     pub opts: crate::tabs::WebviewOpts,
@@ -142,6 +145,7 @@ impl AppState {
             menu_context: RwLock::new(MenuContext::default()),
             overlay: RwLock::new(std::collections::HashMap::new()),
             overlay_from_page: RwLock::new(std::collections::HashMap::new()),
+            overlay_thumb: RwLock::new(std::collections::HashSet::new()),
             permissions: crate::permissions::PermissionStore::default(),
             snap: std::sync::Mutex::new(crate::snap::SnapState::default()),
         }
@@ -198,6 +202,7 @@ pub struct SettingsPatch {
     pub memory_saver: Option<bool>,
     pub keep_alive_hosts: Option<String>,
     pub mark_suspended: Option<bool>,
+    pub tab_hover_preview: Option<bool>,
     pub drag_hint: Option<bool>,
     pub drag_threshold: Option<u32>,
     pub drag_map: Option<std::collections::BTreeMap<String, String>>,

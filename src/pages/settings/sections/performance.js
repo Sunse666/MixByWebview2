@@ -2,7 +2,8 @@
 import { t } from "../../../i18n.js";
 import { row, toggle, switchEl } from "../ui.js";
 
-export function buildPerformance({ settings, invoke }) {  const perfHead = document.createElement("h2");
+export function buildPerformance({ settings, invoke }) {
+  const perfHead = document.createElement("h2");
   perfHead.textContent = t("Performance");
   perfHead.style.margin = "18px 0 10px";
 

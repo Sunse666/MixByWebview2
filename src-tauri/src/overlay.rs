@@ -21,8 +21,9 @@ fn overlay_builder(app: &AppHandle, label: &str, page: &str) -> WebviewBuilder<t
         parse_color(&theme.colors.chrome)
     };
 
-    // The dropdown must never take focus away from the address bar.
-    let focused = !page.starts_with("overlay.html#suggest");
+    // The dropdown must never take focus away from the address bar, and the tab
+    // hover card is opened by a mouse move, not by a click.
+    let focused = !page.starts_with("overlay.html#suggest") && !page.starts_with("overlay.html#thumb");
     let builder = WebviewBuilder::new(label, WebviewUrl::App(page.into()))
         .background_color(color)
         .devtools(true)
@@ -87,6 +88,8 @@ pub fn open(app: &AppHandle, win: &tauri::Window, kind: &str) -> Result<(), Stri
         "chrome_menu" => (190.0, 110.0),
         // The find bar rides under the address row, right aligned.
         "find" => (380.0, 44.0),
+        // Tab hover card: the preview plus a caption line.
+        "thumb" => (372.0, 232.0),
         _ => DEFAULT,
     };
     // Never taller than the space under the chrome strip, but a small panel
@@ -191,7 +194,7 @@ pub fn open_at(
 
     let webview = place(win, builder, x, y, width, height)?;
 
-    if !kind.starts_with("suggest") {
+    if !kind.starts_with("suggest") && !kind.starts_with("thumb") {
         let _ = webview.set_focus();
     }
     {
@@ -263,11 +266,23 @@ pub fn close(app: &AppHandle, window_label: &str) {
         let cancelled = crate::permissions::cancel_window(app, window_label);
         if cancelled > 0 {
             crate::logging::info(&format!("{cancelled} permission prompt(s) dismissed"));
-        }        // Whatever was changed behind the panel shows up now.
-        let _ = app.emit_to(
-            format!("{window_label}-chrome"),
-            "settings:changed",
-            (),
-        );
+        }        // Whatever was changed behind the panel shows up now - unless the panel
+        // was the tab hover card, which is opened and closed on every mouse move
+        // across the strip and has nothing to do with settings.
+        let was_thumb = {
+            let state = app.state::<crate::ipc::AppState>();
+            let mut thumbs = state
+                .overlay_thumb
+                .write()
+                .unwrap_or_else(|e| e.into_inner());
+            thumbs.remove(window_label)
+        };
+        if !was_thumb {
+            let _ = app.emit_to(
+                format!("{window_label}-chrome"),
+                "settings:changed",
+                (),
+            );
+        }
     }
 }

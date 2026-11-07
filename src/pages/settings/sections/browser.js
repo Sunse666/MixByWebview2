@@ -2,7 +2,8 @@
 import { t } from "../../../i18n.js";
 import { row, toggle, switchEl } from "../ui.js";
 
-export function buildBrowser({ settings, invoke }) {  const browserHead = document.createElement("h2");
+export function buildBrowser({ settings, invoke }) {
+  const browserHead = document.createElement("h2");
   browserHead.textContent = t("Default browser");
   browserHead.style.margin = "18px 0 10px";
 

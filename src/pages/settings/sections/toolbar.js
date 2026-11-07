@@ -3,7 +3,8 @@ import { t } from "../../../i18n.js";
 import { row, toggle, switchEl } from "../ui.js";
 import { TOOLBAR_CHOICES, DEFAULT_TOOLBAR } from "../tables.js";
 
-export function buildToolbar({ settings, invoke }) {  const toolbarHead = document.createElement("h2");
+export function buildToolbar({ settings, invoke }) {
+  const toolbarHead = document.createElement("h2");
   toolbarHead.textContent = t("Toolbar");
   toolbarHead.style.margin = "18px 0 10px";
 

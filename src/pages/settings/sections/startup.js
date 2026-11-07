@@ -2,7 +2,8 @@
 import { t } from "../../../i18n.js";
 import { row, toggle, switchEl } from "../ui.js";
 
-export function buildStartup({ settings, invoke }) {  const restoreRow = row(
+export function buildStartup({ settings, invoke }) {
+  const restoreRow = row(
     "Restore session",
     "Restore the last session on start",
     toggle(settings.restore_session, async (value) => {

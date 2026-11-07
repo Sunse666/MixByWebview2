@@ -97,6 +97,8 @@ pub struct Settings {
     pub keep_alive_hosts: String,
     /// Draw the suspended marker on idle tabs.
     pub mark_suspended: bool,
+    /// Show a preview card when the pointer rests on a tab.
+    pub tab_hover_preview: bool,
     pub max_live_tabs: usize,
     pub download_dir: Option<String>,
 }
@@ -155,6 +157,7 @@ impl Default for Settings {
             memory_saver: true,
             keep_alive_hosts: String::new(),
             mark_suspended: true,
+            tab_hover_preview: false,
             max_live_tabs: 12,
             download_dir: None,
         }

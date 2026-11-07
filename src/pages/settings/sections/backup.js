@@ -2,7 +2,8 @@
 import { t } from "../../../i18n.js";
 import { row, toggle, switchEl } from "../ui.js";
 
-export function buildBackup({ settings, invoke }) {  const backupHead = document.createElement("h2");
+export function buildBackup({ settings, invoke }) {
+  const backupHead = document.createElement("h2");
   backupHead.textContent = t("Backup");
   backupHead.style.margin = "18px 0 10px";
 

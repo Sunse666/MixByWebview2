@@ -2,7 +2,8 @@
 import { t } from "../../../i18n.js";
 import { row, toggle, switchEl } from "../ui.js";
 
-export function buildNewtab({ settings, invoke }) {  const newtabHead = document.createElement("h2");
+export function buildNewtab({ settings, invoke }) {
+  const newtabHead = document.createElement("h2");
   newtabHead.textContent = t("New tab page");
   newtabHead.style.margin = "18px 0 10px";
 

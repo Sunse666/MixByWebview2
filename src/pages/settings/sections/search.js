@@ -2,7 +2,8 @@
 import { t } from "../../../i18n.js";
 import { row, toggle, switchEl } from "../ui.js";
 
-export function buildSearch({ settings, invoke }) {  const engine = document.createElement("select");
+export function buildSearch({ settings, invoke }) {
+  const engine = document.createElement("select");
   engine.className = "button";
   for (const [value, label] of [
     ["baidu", "Baidu"],

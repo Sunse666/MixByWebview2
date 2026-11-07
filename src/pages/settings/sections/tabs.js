@@ -1,8 +1,9 @@
-// Generated from the old inline section; behaviour unchanged.
+// Tab settings: what a click on a tab does.
 import { t } from "../../../i18n.js";
-import { row, toggle, switchEl } from "../ui.js";
+import { row, switchEl } from "../ui.js";
 
-export function buildTabs({ settings, invoke }) {  const tabsHead = document.createElement("h2");
+export function buildTabs({ settings, invoke }) {
+  const tabsHead = document.createElement("h2");
   tabsHead.textContent = t("Tab settings");
   tabsHead.style.margin = "18px 0 10px";
 
@@ -16,6 +17,11 @@ export function buildTabs({ settings, invoke }) {  const tabsHead = document.cre
     });
     return row(t(label), t(note), control);
   };
+
+  // Off by default: the card costs a screenshot per tab switch.
+  const preview = switchEl(settings.tab_hover_preview === true, async (next) => {
+    await invoke("settings_set", { patch: { tab_hover_preview: next } }).catch(() => {});
+  });
 
   tabsCard.append(
     tabToggle(
@@ -36,10 +42,12 @@ export function buildTabs({ settings, invoke }) {  const tabsHead = document.cre
       settings.tab_close_goes_left,
       "tab_close_goes_left",
     ),
+    row(
+      t("Preview on hover"),
+      t("Shows a picture of the tab when the pointer rests on it; takes a screenshot on every tab switch"),
+      preview,
+    ),
   );
-
-  // The gesture and drag sections live in their own modules: they are mostly
-  // tables, and this file only has to place them.
 
   return [tabsHead, tabsCard];
 }

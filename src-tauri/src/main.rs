@@ -28,6 +28,7 @@ mod userscripts;
 mod state;
 mod tabs;
 mod theme;
+mod thumbs;
 mod window;
 
 use tauri::Manager;
@@ -99,6 +100,8 @@ fn main() {
             ipc::tab_pin,
             ipc::tab_close,
             ipc::tab_mute,
+            ipc::thumb_show,
+            ipc::thumb_image,
             ipc::tab_screenshot,
             ipc::tab_navigate,
             ipc::tab_nav,

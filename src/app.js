@@ -12,6 +12,9 @@ let settings = { show_bookmarks: false };
 let draggingBookmark = null;
 let selected = null;
 let hidePill = null;
+// Hover preview: the timer that delays the card and whether one is showing.
+let hoverThumb = null;
+let thumbOpen = false;
 const downloadPill = document.getElementById("download");
 
 function renderDownloads(tasks) {
@@ -158,6 +161,30 @@ function renderTabs() {
     } else {
       el.append(icon, label, close);
     }
+    // Resting the pointer on a tab shows a preview of what that tab looked
+    // like; the delay keeps it out of the way while moving across the strip.
+    if (settings.tab_hover_preview) {
+      el.addEventListener("mouseenter", () => {
+        clearTimeout(hoverThumb);
+        hoverThumb = setTimeout(async () => {
+          const box = el.getBoundingClientRect();
+          const shown = await invoke("thumb_show", {
+            id: tab.id,
+            x: box.left + box.width / 2,
+          }).catch(() => false);
+          if (shown) thumbOpen = true;
+        }, 400);
+      });
+      el.addEventListener("mouseleave", () => {
+        clearTimeout(hoverThumb);
+        hoverThumb = null;
+        if (thumbOpen) {
+          thumbOpen = false;
+          invoke("overlay_close").catch(() => {});
+        }
+      });
+    }
+
     el.addEventListener("mousedown", (event) => {
       if (event.target.closest("button")) return;
       invoke("tab_select", { id: tab.id });

@@ -64,6 +64,9 @@ pub async fn tab_select(app: AppHandle, window: tauri::Window, state: State<'_, 
         }
     }
     emit_tabs(&app, window.label());
+    // Take the preview once the tab is on screen: a hidden webview does not
+    // render, so a thumbnail has to come from a moment the tab was visible.
+    crate::thumbs::remember_later(app.clone(), id);
     Ok(())
 }
 
@@ -186,6 +189,7 @@ pub async fn tab_close(app: AppHandle, window: tauri::Window, state: State<'_, A
     if let Some(webview) = app.get_webview(&id) {
         let _ = webview.close();
     }
+    crate::thumbs::forget(&id);
 
     let (remaining, next_url) = {
         let mut core = state.write_core(window.label());
@@ -251,6 +255,76 @@ pub async fn tab_screenshot(
     crate::downloads::record_done(&app, "mix://screenshot", &target);
     crate::logging::info(&format!("screenshot {}", target.display()));
     Ok(target.display().to_string())
+}
+
+/// The hover card: where the pointer is over a tab, show that tab's preview.
+#[derive(Serialize)]
+pub struct ThumbCard {
+    image: String,
+    title: String,
+    url: String,
+}
+
+#[tauri::command]
+pub async fn thumb_show(
+    app: AppHandle,
+    window: tauri::Window,
+    state: State<'_, AppState>,
+    id: String,
+    x: f64,
+) -> Result<bool, AppError> {
+    if !state.settings.read().tab_hover_preview {
+        return Ok(false);
+    }
+    // Use the stored preview when there is one: a hidden webview does not render,
+    // so asking it now would come back black. Capturing on demand is the fallback
+    // for a tab that has never been selected.
+    if crate::thumbs::get(&id).is_none() {
+        let Some(webview) = app.get_webview(&id) else {
+            return Ok(false);
+        };
+        let Some(png) = crate::thumbs::capture(&webview) else {
+            return Ok(false);
+        };
+        crate::thumbs::remember(&id, png);
+    }
+
+    let (win_w, _) = crate::window::logical_size(&window)?;
+    let (width, height) = (372.0, 232.0);
+    let left = (x - width / 2.0).clamp(6.0, (win_w - width - 6.0).max(6.0));
+    let top = chrome_height(&app) + 6.0;
+    let kind = format!("thumb&id={}", crate::permissions::encode(&id));
+    crate::overlay::open_at(&app, &window, &kind, left, top, width, height)
+        .map_err(|err| AppError::new("overlay", err))?;
+    state
+        .overlay_thumb
+        .write()
+        .unwrap_or_else(|e| e.into_inner())
+        .insert(window.label().to_string());
+    Ok(true)
+}
+
+/// What the hover card draws: the png as a data url plus the caption.
+#[tauri::command]
+pub async fn thumb_image(
+    _app: AppHandle,
+    state: State<'_, AppState>,
+    id: String,
+) -> Result<ThumbCard, AppError> {
+    let png = crate::thumbs::get(&id)
+        .ok_or_else(|| AppError::new("no_thumb", "no preview for this tab"))?;
+    let (title, url) = {
+        let core = state.read_core(window_of_tab(&id));
+        match core.tabs.iter().find(|tab| tab.id == id) {
+            Some(tab) => (tab.title.clone(), tab.url.clone()),
+            None => (String::new(), String::new()),
+        }
+    };
+    Ok(ThumbCard {
+        image: format!("data:image/png;base64,{}", crate::extensions::base64(&png)),
+        title,
+        url,
+    })
 }
 
 /// Mutes or unmutes the selected tab; with no argument it flips. The mute

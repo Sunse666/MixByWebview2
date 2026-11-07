@@ -2,7 +2,8 @@
 import { t } from "../../../i18n.js";
 import { row, toggle, switchEl } from "../ui.js";
 
-export function buildClearData({ settings, invoke }) {  const dataHead = document.createElement("h2");
+export function buildClearData({ settings, invoke }) {
+  const dataHead = document.createElement("h2");
   dataHead.textContent = t("Clear browsing data");
   dataHead.style.margin = "18px 0 10px";
 

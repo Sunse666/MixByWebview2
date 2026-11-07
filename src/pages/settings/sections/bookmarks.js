@@ -2,7 +2,8 @@
 import { t } from "../../../i18n.js";
 import { row, toggle, switchEl } from "../ui.js";
 
-export function buildBookmarks({ settings, invoke }) {  const row0 = row(
+export function buildBookmarks({ settings, invoke }) {
+  const row0 = row(
     "Bookmarks bar",
     "Show the bookmarks bar",
     toggle(settings.show_bookmarks, async (value) => {

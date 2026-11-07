@@ -110,6 +110,9 @@ pub(crate) fn apply_settings_patch(
         if let Some(value) = patch.keep_alive_hosts {
             guard.keep_alive_hosts = value.trim().to_string();
         }
+        if let Some(value) = patch.tab_hover_preview {
+            guard.tab_hover_preview = value;
+        }
         if let Some(value) = patch.mark_suspended {
             guard.mark_suspended = value;
         }

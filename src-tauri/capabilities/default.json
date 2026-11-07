@@ -102,6 +102,8 @@
     "allow-permission-reply",
     "allow-permission-poll",
     "allow-snap",
+    "allow-thumb-show",
+    "allow-thumb-image",
     "allow-settings-get",
     "allow-settings-set",
     "allow-autostart-get",

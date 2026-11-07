@@ -1,15 +1,17 @@
-//! Page screenshots.
+//! Page screenshots and the DevTools protocol helper behind them.
 //!
 //! ICoreWebView2::CapturePreview wants an IStream and a completion handler, and
 //! the bytes then have to be read back out of the stream. The DevTools protocol
-//! the webview already exposes does the same job with one callback: Page
-//! .captureScreenshot answers with a base64 png.
+//! the webview already exposes does the same job with one callback, so every
+//! capture in the app goes through here.
 
-/// Grabs the visible page as png bytes.
+/// Runs one DevTools protocol method and returns its raw JSON answer.
 #[cfg(windows)]
-pub fn capture(webview: &tauri::Webview) -> Option<Vec<u8>> {
+pub fn call(webview: &tauri::Webview, method: &str, params: &str) -> Option<String> {
   use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2;
 
+  let method = windows_core::HSTRING::from(method);
+  let params = windows_core::HSTRING::from(params);
   let (sender, receiver) = std::sync::mpsc::channel();
   let done = sender.clone();
   let request = webview.with_webview(move |platform| unsafe {
@@ -29,8 +31,6 @@ pub fn capture(webview: &tauri::Webview) -> Option<Vec<u8>> {
           Ok(())
         },
       ));
-      let method = windows_core::HSTRING::from("Page.captureScreenshot");
-      let params = windows_core::HSTRING::from(r#"{"format":"png"}"#);
       core.CallDevToolsProtocolMethod(&method, &params, &handler)
     })();
     if result.is_err() {
@@ -40,10 +40,21 @@ pub fn capture(webview: &tauri::Webview) -> Option<Vec<u8>> {
   if request.is_err() {
     return None;
   }
-  let json = receiver
+  receiver
     .recv_timeout(std::time::Duration::from_secs(8))
     .ok()
-    .flatten()?;
+    .flatten()
+}
+
+#[cfg(not(windows))]
+pub fn call(_webview: &tauri::Webview, _method: &str, _params: &str) -> Option<String> {
+  None
+}
+
+/// Grabs the visible page as png bytes.
+#[cfg(windows)]
+pub fn capture(webview: &tauri::Webview) -> Option<Vec<u8>> {
+  let json = call(webview, "Page.captureScreenshot", r#"{"format":"png"}"#)?;
   let value: serde_json::Value = serde_json::from_str(&json).ok()?;
   let data = value.get("data")?.as_str()?;
   decode_base64(data)
@@ -54,9 +65,7 @@ pub fn capture(_webview: &tauri::Webview) -> Option<Vec<u8>> {
   None
 }
 
-/// Decodes standard base64, ignoring whitespace. Enough for a data field, so the
-/// project does not need another dependency for twenty lines.
-fn decode_base64(input: &str) -> Option<Vec<u8>> {
+pub fn decode_base64(input: &str) -> Option<Vec<u8>> {
   let mut out = Vec::with_capacity(input.len() * 3 / 4);
   let mut buffer: u32 = 0;
   let mut bits: u32 = 0;

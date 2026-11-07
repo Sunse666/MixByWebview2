@@ -478,6 +478,39 @@ async function bootSuggest() {
   await invoke("suggest_refresh").catch(() => {});
 }
 
+/** The tab hover card: a preview image and the page it belongs to. */
+async function bootThumb() {
+  const id = params.get("id") || "";
+  const card = document.createElement("div");
+  card.className = "thumb-card";
+
+  const frame = document.createElement("div");
+  frame.className = "thumb-frame";
+  const image = document.createElement("img");
+  image.className = "thumb-image";
+  frame.append(image);
+
+  const caption = document.createElement("div");
+  caption.className = "thumb-caption";
+  const title = document.createElement("div");
+  title.className = "thumb-title";
+  const url = document.createElement("div");
+  url.className = "thumb-url";
+  caption.append(title, url);
+
+  card.append(frame, caption);
+  document.body.append(card);
+
+  const data = await invoke("thumb_image", { id }).catch(() => null);
+  if (!data) {
+    card.remove();
+    return;
+  }
+  image.src = data.image;
+  title.textContent = data.title || t("New tab");
+  url.textContent = data.url || "";
+}
+
 async function bootZoom() {
   menu.hidden = false;
   appMenu.hidden = true;
@@ -872,6 +905,10 @@ async function boot() {
   }
   if (kind === "context_menu") {
     await bootMenu();
+    return;
+  }
+  if (kind === "thumb") {
+    await bootThumb();
     return;
   }
   if (kind === "zoom") {
