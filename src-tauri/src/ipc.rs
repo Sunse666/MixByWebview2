@@ -1485,14 +1485,14 @@ fn set_zoom(app: &AppHandle, label: &str, level: f64) -> Result<(), AppError> {
     let level = crate::zoom::normalize(level);
     let state = app.state::<AppState>();
 
-    let (id, url) = {
+    let (id, url, incognito) = {
         let core = state.read_core(label);
         match core
             .selected
             .as_ref()
             .and_then(|id| core.tabs.iter().find(|tab| &tab.id == id))
         {
-            Some(tab) => (tab.id.clone(), tab.url.clone()),
+            Some(tab) => (tab.id.clone(), tab.url.clone(), tab.incognito),
             None => return Ok(()),
         }
     };
@@ -1507,7 +1507,11 @@ fn set_zoom(app: &AppHandle, label: &str, level: f64) -> Result<(), AppError> {
         webview.set_zoom(level)?;
     }
 
-    // The level belongs to the site, not the tab, so it survives both.
+    // The level belongs to the site, not the tab, so it survives both. A private
+    // tab must not leave that record behind, so it only applies the level.
+    if incognito {
+        return Ok(());
+    }
     {
         let mut store = state.zoom.write();
         if store.remember(&url, level) {
