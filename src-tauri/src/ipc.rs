@@ -178,6 +178,8 @@ pub struct SettingsPatch {
     pub gesture_threshold: Option<u32>,
     pub gesture_map: Option<std::collections::BTreeMap<String, String>>,
     pub gesture_blocked: Option<String>,
+    pub font_family: Option<String>,
+    pub font_size: Option<u32>,
     pub default_zoom: Option<f64>,
     pub tab_double_click_close: Option<bool>,
     pub tab_show_close: Option<bool>,
@@ -1667,6 +1669,12 @@ pub async fn settings_set(
         }
         if let Some(value) = patch.gestures {
             guard.gestures = value;
+        }
+        if let Some(value) = patch.font_family {
+            guard.font_family = value.trim().to_string();
+        }
+        if let Some(value) = patch.font_size {
+            guard.font_size = value.min(32);
         }
         if let Some(value) = patch.default_zoom {
             guard.default_zoom = value.clamp(0.5, 2.0);

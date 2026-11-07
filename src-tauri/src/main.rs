@@ -29,7 +29,7 @@ mod window;
 
 use tauri::Manager;
 
-// embed bump 131
+// embed bump 132
 fn main() {
     let dirs = paths::AppDirs::resolve().ensure();
     logging::init(&dirs.logs);
@@ -107,12 +107,27 @@ fn main() {
                     js: serde_json::to_string(&config).unwrap_or_else(|_| "{}".to_string()),
                 });
             }
-            crate::tabs::set_custom_css(
-                std::fs::read_to_string(dirs.user_data.join("custom.css"))
+            {
+                let settings = crate::state::Settings::load(&dirs.settings_file);
+                let mut css = std::fs::read_to_string(dirs.user_data.join("custom.css"))
                     .unwrap_or_default()
                     .trim_start_matches('\u{feff}')
-                    .to_string(),
-            );
+                    .to_string();
+                if !settings.font_family.trim().is_empty() {
+                    // Body only: overriding every element breaks icon fonts.
+                    css.push_str(&format!(
+                        "\nbody, p, li, td, dd, blockquote {{ font-family: \"{}\" !important; }}\n",
+                        settings.font_family.replace('"', "")
+                    ));
+                }
+                if settings.font_size > 0 {
+                    css.push_str(&format!(
+                        "\nbody {{ font-size: {}px !important; }}\n",
+                        settings.font_size
+                    ));
+                }
+                crate::tabs::set_custom_css(css);
+            }
             crate::tabs::set_shortcuts(
                 crate::state::Settings::load(&dirs.settings_file).shortcuts,
             );
