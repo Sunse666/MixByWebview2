@@ -5,6 +5,10 @@ use std::time::{Duration, Instant};
 
 const TIMEOUT: Duration = Duration::from_millis(1500);
 const TTL: Duration = Duration::from_secs(300);
+/// A probe that has not answered within this budget counts as reachable: the
+/// webview then decides for itself, and a hung dns lookup cannot hold a
+/// navigation command hostage.
+const BUDGET: Duration = Duration::from_millis(2000);
 
 /// WebView2 draws its own page when a host cannot be reached, and wry gives no
 /// navigation-failed hook. Probing first means the user sees our page instead.
@@ -30,7 +34,16 @@ impl Reachability {
             }
         }
 
-        let ok = probe(&host, port);
+        // getaddrinfo has no timeout of its own, so the probe gets a thread and
+        // this side waits only as long as the budget allows.
+        let (sender, receiver) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = sender.send(probe(&host, port));
+        });
+        let Ok(ok) = receiver.recv_timeout(BUDGET) else {
+            crate::logging::warn(&format!("reachability probe timed out for {key}"));
+            return true;
+        };
         let mut seen = self.seen.lock().unwrap_or_else(|e| e.into_inner());
         seen.insert(key, (ok, Instant::now()));
         ok

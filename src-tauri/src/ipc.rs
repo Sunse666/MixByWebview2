@@ -42,14 +42,16 @@ pub struct AppState {
     /// Recently closed tabs, newest last, so Ctrl+Shift+T can bring them back.
     pub closed_tabs: RwLock<Vec<(String, String)>>,
     pub zoom: parking_lot::RwLock<crate::zoom::ZoomStore>,
-    /// Window label -> text typed while the address bar owns the keyboard.
+    /// Windows whose address bar currently owns the keyboard; the entry carries
+    /// an empty string and exists only as a flag.
     pub url_edit: RwLock<std::collections::HashMap<String, String>>,
     /// Tab id -> the url it is currently trying to load.
     /// Origin of the bundled pages, e.g. http://tauri.localhost/
     pub app_base: parking_lot::RwLock<String>,
     pub pending: RwLock<std::collections::HashMap<String, String>>,
     /// Cached "can we reach this host" answers, so navigation is not slowed down.
-    pub reachability: crate::net::Reachability,
+    /// Shared through an Arc so the probe can run on a blocking thread.
+    pub reachability: std::sync::Arc<crate::net::Reachability>,
     /// Result of the last in-page translation, polled by the bubble.
     pub translate_result: parking_lot::RwLock<(usize, Option<String>)>,
     /// Tabs whose text is currently replaced by the translator.
@@ -95,7 +97,7 @@ impl AppState {
             url_edit: RwLock::new(std::collections::HashMap::new()),
             app_base: parking_lot::RwLock::new(String::new()),
             pending: RwLock::new(std::collections::HashMap::new()),
-            reachability: crate::net::Reachability::default(),
+            reachability: std::sync::Arc::new(crate::net::Reachability::default()),
             translate_result: parking_lot::RwLock::new((0, None)),
             translated_tabs: parking_lot::RwLock::new(std::collections::HashSet::new()),
             fullscreen: parking_lot::RwLock::new(std::collections::HashSet::new()),
@@ -876,14 +878,22 @@ pub async fn tab_close(app: AppHandle, window: tauri::Window, state: State<'_, A
 #[tauri::command]
 pub async fn tab_navigate(app: AppHandle, window: tauri::Window, state: State<'_, AppState>, url: String) -> Result<(), AppError> {
     // A dead host would land on WebView2's own error page, which we cannot
-    // replace, so answer it ourselves before navigating.
-    if url.starts_with("http") && !is_internal_url(&url) && !state.reachability.check(&url) {
-        let id = selected_label(&state, &window);
-        if !id.is_empty() {
-            crate::logging::info(&format!("unreachable: {url}"));
-            show_error_page(&app, &id, url.trim());
+    // replace, so answer it ourselves before navigating. The probe resolves dns
+    // and therefore runs on a blocking thread, never on this command's future.
+    if url.starts_with("http") && !is_internal_url(&url) {
+        let reach = state.reachability.clone();
+        let probe_url = url.clone();
+        let reachable = tauri::async_runtime::spawn_blocking(move || reach.check(&probe_url))
+            .await
+            .unwrap_or(true);
+        if !reachable {
+            let id = selected_label(&state, &window);
+            if !id.is_empty() {
+                crate::logging::info(&format!("unreachable: {url}"));
+                show_error_page(&app, &id, url.trim());
+            }
+            return Ok(());
         }
-        return Ok(());
     }
 
     let Some(target) = crate::tabs::parse_url(&url) else {
