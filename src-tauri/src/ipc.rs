@@ -296,9 +296,8 @@ pub fn focused_window(app: &AppHandle) -> Option<tauri::Window> {
 pub fn chrome_height(app: &AppHandle) -> f64 {
     match app.try_state::<AppState>() {
         Some(state) => {
-            let settings = state.settings.read();
-            settings.chrome_height
-        + if settings.show_bookmarks { 30.0 } else { 0.0 }
+            let show_bookmarks = state.settings.read().show_bookmarks;
+            crate::window::CHROME_H + if show_bookmarks { 30.0 } else { 0.0 }
         }
         None => crate::window::CHROME_H,
     }
