@@ -10,6 +10,9 @@ pub struct Settings {
     pub schema_version: u32,
     pub start_url: String,
     pub restore_session: bool,
+    /// What the chrome page last reported. Informational: the layout uses a
+    /// constant, because the page measures its own viewport and cannot tell a
+    /// wrong height from a right one.
     pub chrome_height: f64,
     /// Adds a bookmarks row under the address bar, which also grows the chrome.
     pub show_bookmarks: bool,
@@ -169,11 +172,6 @@ impl Settings {
         // profile predates the field, where falling back to the default is right.
         if self.toolbar.is_empty() {
             self.toolbar = Settings::default().toolbar;
-        }
-        // 68 was the default while the strip was still a constant; the chrome page
-        // reports its real height on boot, so only the stale default is moved.
-        if (self.chrome_height - 68.0).abs() < 1.0 {
-            self.chrome_height = Settings::default().chrome_height;
         }
         self
     }

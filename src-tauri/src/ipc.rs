@@ -364,15 +364,12 @@ pub fn focused_window(app: &AppHandle) -> Option<tauri::Window> {
 pub fn chrome_height(app: &AppHandle) -> f64 {
     match app.try_state::<AppState>() {
         Some(state) => {
-            let settings = state.settings.read();
-            // The chrome page reports its own measured height through chrome_fit,
-            // so DPI rounding or a css change cannot leave a band behind.
-            let base = if settings.chrome_height > 0.0 {
-                settings.chrome_height
-            } else {
-                crate::window::CHROME_H
-            };
-            base + if settings.show_bookmarks { 30.0 } else { 0.0 }
+            let show_bookmarks = state.settings.read().show_bookmarks;
+            // The strip is laid out from the constant, not from what the page
+            // measures: the address row flexes to fill, so a measurement can only
+            // echo back whatever height it was given and would lock in any wrong
+            // value instead of correcting it.
+            crate::window::CHROME_H + if show_bookmarks { 30.0 } else { 0.0 }
         }
         None => crate::window::CHROME_H,
     }
@@ -3056,18 +3053,24 @@ pub async fn page_fullscreen(
 /// The chrome strip reports how tall it actually is, so the page never
 /// starts inside an empty band caused by DPI rounding.
 #[tauri::command]
-pub async fn chrome_fit(app: AppHandle, window: tauri::Window, state: State<'_, AppState>, height: f64) -> Result<(), AppError> {
-    let wanted = height.clamp(24.0, 160.0);
-    {
-        let mut settings = state.settings.write();
-        if (settings.chrome_height - wanted).abs() < 1.0 {
-            return Ok(());
-        }
-        settings.chrome_height = wanted;
+pub async fn chrome_fit(
+    app: AppHandle,
+    _window: tauri::Window,
+    state: State<'_, AppState>,
+    height: f64,
+) -> Result<(), AppError> {
+    // Kept as a diagnostic only. The address row has flex: 1, so the page can
+    // never report more than the height it was laid out with: adopting it (and
+    // relaying out, which fires another resize) shrinks the strip a little on
+    // every pass, which is exactly what happens once a stale value gets in.
+    let reported = height.clamp(0.0, 400.0);
+    state.settings.write().chrome_height = reported;
+    let expected = chrome_height(&app);
+    if (reported - expected).abs() > 8.0 {
+        crate::logging::warn(&format!(
+            "chrome strip reported {reported} but is laid out at {expected}; layout kept"
+        ));
     }
-    crate::logging::info(&format!("chrome fit: {wanted}"));
-    let label = window_of(&window).label().to_string();
-    crate::window::relayout(&app, &label)?;
     Ok(())
 }
 #[tauri::command]
