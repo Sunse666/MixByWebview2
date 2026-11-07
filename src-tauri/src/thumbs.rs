@@ -34,9 +34,10 @@ pub fn capture(webview: &tauri::Webview) -> Option<Vec<u8>> {
   let png = capture_once(webview);
   match &png {
     Some(bytes) => crate::logging::info(&format!(
-      "thumbs: captured {} ({} bytes)",
+      "thumbs: captured {} ({} bytes fp={:x})",
       webview.label(),
-      bytes.len()
+      bytes.len(),
+      fingerprint(bytes)
     )),
     None => crate::logging::warn(&format!("thumbs: capture failed for {}", webview.label())),
   }
@@ -70,6 +71,17 @@ pub fn capture(_webview: &tauri::Webview) -> Option<Vec<u8>> {
   None
 }
 
+/// Cheap fingerprint over the first 64 KB: two captures of the same pixels hash
+/// the same, so the log shows whether a forced repaint produced new content.
+fn fingerprint(png: &[u8]) -> u64 {
+  let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+  for byte in &png[..png.len().min(64 * 1024)] {
+    hash ^= *byte as u64;
+    hash = hash.wrapping_mul(0x100_0000_01b3);
+  }
+  hash
+}
+
 /// Reads the width and height out of a png header.
 fn png_size(png: &[u8]) -> Option<(u32, u32)> {
   if png.len() < 24 || &png[1..4] != b"PNG" {
@@ -88,7 +100,7 @@ fn capture_try(webview: &tauri::Webview, params: &str) -> Option<Vec<u8>> {
     webview,
     "Page.captureScreenshot",
     params,
-    std::time::Duration::from_millis(700),
+    std::time::Duration::from_millis(1500),
   )?;
   let value: serde_json::Value = serde_json::from_str(&json).ok()?;
   let data = value.get("data")?.as_str()?;
@@ -134,8 +146,31 @@ pub fn probe_hidden(webview: &tauri::Webview) -> Option<Vec<u8>> {
     r#"{"format":"png","captureBeyondViewport":false,"optimizeForSpeed":true}"#;
 
   let label = webview.label();
-  let mut best: Option<Vec<u8>> = None;
+
+  // A hidden page does not paint, so the plain attempts below can only ever hand
+  // back the frame from when the tab was last on screen. captureBeyondViewport
+  // forces a fresh raster of the document as it is now, which is the only way to
+  // learn whether a hidden tab can be shown live at all.
+  let forced = forced_repaint(webview);
+  match &forced {
+    Some(png) => {
+      let size = png_size(png).unwrap_or((0, 0));
+      crate::logging::info(&format!(
+        "thumbs: hidden {label} repaint -> {} bytes {}x{} fp={:x}",
+        png.len(),
+        size.0,
+        size.1,
+        fingerprint(png)
+      ));
+    }
+    None => crate::logging::warn(&format!("thumbs: hidden {label} repaint -> no answer")),
+  }
+
+  let mut best: Option<Vec<u8>> = forced.filter(|png| png.len() >= MIN_PNG);
   for (name, params) in [("view", VIEW), ("surface", SURFACE)] {
+    if best.is_some() {
+      break;
+    }
     match capture_try(webview, params) {
       Some(png) => {
         let size = png_size(&png).unwrap_or((0, 0));
@@ -145,7 +180,7 @@ pub fn probe_hidden(webview: &tauri::Webview) -> Option<Vec<u8>> {
           size.0,
           size.1
         ));
-        if png.len() >= MIN_PNG && best.is_none() {
+        if png.len() >= MIN_PNG {
           best = Some(png);
         }
       }
@@ -153,6 +188,31 @@ pub fn probe_hidden(webview: &tauri::Webview) -> Option<Vec<u8>> {
     }
   }
   best
+}
+
+/// Asks for the document as it is now, at its own scale, clipped to the viewport.
+/// No scale factor: that is what used to make the page re-raster visibly.
+#[cfg(windows)]
+fn forced_repaint(webview: &tauri::Webview) -> Option<Vec<u8>> {
+  let metrics = crate::screenshot::call_timeout(
+    webview,
+    "Page.getLayoutMetrics",
+    "{}",
+    std::time::Duration::from_millis(1200),
+  )?;
+  let value: serde_json::Value = serde_json::from_str(&metrics).ok()?;
+  let viewport = value
+    .get("cssVisualViewport")
+    .or_else(|| value.get("visualViewport"))?;
+  let width = viewport.get("clientWidth")?.as_f64()?;
+  let height = viewport.get("clientHeight")?.as_f64()?;
+  if width < 8.0 || height < 8.0 {
+    return None;
+  }
+  let params = format!(
+    r#"{{"format":"png","captureBeyondViewport":true,"optimizeForSpeed":true,"clip":{{"x":0,"y":0,"width":{width},"height":{height},"scale":1}}}}"#
+  );
+  capture_try(webview, &params)
 }
 
 /// Runs the probe off the command thread and stores whatever it gets, so the card
@@ -166,8 +226,11 @@ pub fn probe_later(app: tauri::AppHandle, id: String) {
   };
   tauri::async_runtime::spawn_blocking(move || {
     if let Some(png) = probe_hidden(&webview) {
+      let printed = fingerprint(&png);
       remember(&id, png);
-      crate::logging::info(&format!("thumbs: hidden {id} used as the preview"));
+      crate::logging::info(&format!(
+        "thumbs: hidden {id} used as the preview (fp={printed:x})"
+      ));
     }
   });
 }
