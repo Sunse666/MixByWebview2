@@ -4,12 +4,14 @@
 //! png comes back at full size and the card scales it in css: a clip with a scale
 //! factor would make Chromium re-raster the page, which flashes white on WebView2.
 //!
-//! A hidden webview does not render, so a thumbnail is taken while the tab is
-//! still visible - when it becomes the selected tab - rather than on hover.
+//! Only a webview that is actually on screen may be captured. A hidden one is not
+//! composited, and the protocol answers with whatever surface sits in that place,
+//! which is how another tab's page or a panel ended up in the hover card. So the
+//! picture is taken while the tab is visible: on hover when it is the selected
+//! tab, and on the way out - before it is hidden - when it is switched away from.
 
 use std::collections::HashMap;
 use std::sync::Mutex;
-use tauri::Manager;
 
 /// A thumbnail older than this is thrown away rather than shown stale forever.
 const MAX_AGE_SECS: u64 = 600;
@@ -86,49 +88,14 @@ pub fn forget(id: &str) {
   }
 }
 
-/// Captures on a worker thread: the CDP round trip must not run on the thread
-/// that is switching tabs.
-pub fn remember_later(app: tauri::AppHandle, id: String) {
-  let Some(webview) = app.get_webview(&id) else {
-    return;
-  };
-  tauri::async_runtime::spawn_blocking(move || {
-    // The compositor needs a frame or two after the tab is shown, otherwise the
-    // capture catches the page that was there before the switch.
-    std::thread::sleep(std::time::Duration::from_millis(350));
-    // Two things can change while the worker sleeps, and both would leave a
-    // wrong picture in the map: the feature can be switched off, and the tab can
-    // stop being the selected one. A hidden webview is not composited any more,
-    // so capturing it returns whatever surface is in that place - which showed up
-    // as another tab's page, or a panel, appearing in the hover card.
-    {
-      let state = app.state::<crate::ipc::AppState>();
-      if !state.settings.read().tab_hover_preview {
-        return;
-      }
-      let window_label = crate::ipc::window_of_tab(&id);
-      let still_selected = state
-        .try_read_core(window_label)
-        .map(|core| core.selected.as_deref() == Some(id.as_str()))
-        .unwrap_or(false);
-      if !still_selected {
-        return;
-      }
-    }
-    if is_fresh(&id, 5) {
-      return;
-    }
-    if let Some(png) = capture(&webview) {
-      remember(&id, png);
-    }
-  });
-}
-
-fn is_fresh(id: &str, seconds: u64) -> bool {
+/// True when there is no usable picture yet. Only a webview that is on screen can
+/// be captured: a hidden one is not composited, and the frame that comes back is
+/// whatever surface happens to sit in that place - another tab, or a panel.
+pub fn needs(id: &str, seconds: u64) -> bool {
   let guard = store();
-  let Some(map) = guard.as_ref() else { return false };
+  let Some(map) = guard.as_ref() else { return true };
   match map.get(id) {
-    Some(thumb) => crate::library::now().saturating_sub(thumb.at) < seconds,
-    None => false,
+    Some(thumb) => crate::library::now().saturating_sub(thumb.at) >= seconds,
+    None => true,
   }
 }

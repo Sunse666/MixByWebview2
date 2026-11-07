@@ -46,6 +46,21 @@ pub async fn tab_select(app: AppHandle, window: tauri::Window, state: State<'_, 
     if !exists {
         return Err(AppError::new("no_tab", id));
     }
+    // Take the outgoing tab's picture while it is still on screen: once it is
+    // hidden there is nothing left to capture. Only when it has none, so at most
+    // one grab happens per switch and only for a tab that was never seen.
+    if state.settings.read().tab_hover_preview {
+        let previous = state.read_core(window.label()).selected.clone();
+        if let Some(previous) = previous.filter(|label| label != &id) {
+            if crate::thumbs::needs(&previous, 60) {
+                if let Some(webview) = app.get_webview(&previous) {
+                    if let Some(png) = crate::thumbs::capture(&webview) {
+                        crate::thumbs::remember(&previous, png);
+                    }
+                }
+            }
+        }
+    }
     {
         let mut core = state.write_core(window.label());
         core.selected = Some(id.clone());
@@ -64,13 +79,6 @@ pub async fn tab_select(app: AppHandle, window: tauri::Window, state: State<'_, 
         }
     }
     emit_tabs(&app, window.label());
-    // Take the preview once the tab is on screen: a hidden webview does not
-    // render, so a thumbnail has to come from a moment the tab was visible.
-    // Only when the feature is on: a DevTools screenshot makes the page re-raster
-    // and that shows as a white flash, which must not happen on every switch.
-    if state.settings.read().tab_hover_preview {
-        crate::thumbs::remember_later(app.clone(), id);
-    }
     Ok(())
 }
 
@@ -280,17 +288,19 @@ pub async fn thumb_show(
     if !state.settings.read().tab_hover_preview {
         return Ok(false);
     }
-    // Use the stored preview when there is one: a hidden webview does not render,
-    // so asking it now would come back black. Capturing on demand is the fallback
-    // for a tab that has never been selected.
+    // The visible tab can be captured right now, which is what the card wants.
+    // Any other tab has to be answered from a picture taken while it was visible;
+    // capturing a hidden webview returns whatever surface sits in that place.
+    let visible = state.read_core(window.label()).selected.as_deref() == Some(id.as_str());
+    if visible && crate::thumbs::needs(&id, 2) {
+        if let Some(webview) = app.get_webview(&id) {
+            if let Some(png) = crate::thumbs::capture(&webview) {
+                crate::thumbs::remember(&id, png);
+            }
+        }
+    }
     if crate::thumbs::get(&id).is_none() {
-        let Some(webview) = app.get_webview(&id) else {
-            return Ok(false);
-        };
-        let Some(png) = crate::thumbs::capture(&webview) else {
-            return Ok(false);
-        };
-        crate::thumbs::remember(&id, png);
+        return Ok(false);
     }
 
     let (win_w, _) = crate::window::logical_size(&window)?;
