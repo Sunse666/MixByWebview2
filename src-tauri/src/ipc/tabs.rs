@@ -48,6 +48,21 @@ pub async fn tab_select(app: AppHandle, window: tauri::Window, state: State<'_, 
     }
     // A menu belongs to the tab it was opened on; switching closes it.
     crate::overlay::close(&app, window.label());
+    // Take the outgoing tab's picture now, while it is still on screen: once it is
+    // hidden there is nothing left to capture. Only when it has none, so at most
+    // one grab happens per switch and switching stays instant in normal use.
+    if state.settings.read().tab_hover_preview {
+        let previous = state.read_core(window.label()).selected.clone();
+        if let Some(previous) = previous.filter(|label| label != &id) {
+            if crate::thumbs::needs(&previous, 60) {
+                if let Some(webview) = app.get_webview(&previous) {
+                    if let Some(png) = crate::thumbs::capture(&webview) {
+                        crate::thumbs::remember(&previous, png);
+                    }
+                }
+            }
+        }
+    }
     {
         let mut core = state.write_core(window.label());
         core.selected = Some(id.clone());
@@ -188,6 +203,7 @@ pub async fn tab_close(app: AppHandle, window: tauri::Window, state: State<'_, A
     if let Some(webview) = app.get_webview(&id) {
         let _ = webview.close();
     }
+    crate::thumbs::forget(&id);
 
     let (remaining, next_url) = {
         let mut core = state.write_core(window.label());
@@ -264,6 +280,8 @@ pub struct ThumbCard {
     title: String,
     url: String,
     icon: Option<String>,
+    /// Full-size png as a data url; the card scales it down.
+    image: Option<String>,
     pinned: bool,
     incognito: bool,
 }
@@ -276,8 +294,18 @@ pub async fn thumb_show(
     id: String,
     x: f64,
 ) -> Result<bool, AppError> {
+    // The visible tab can be photographed right now, which is what the card is
+    // for. Every other tab answers from a picture taken while it was visible.
+    let visible = _state.read_core(window.label()).selected.as_deref() == Some(id.as_str());
+    if visible && crate::thumbs::needs(&id, 2) {
+        if let Some(webview) = app.get_webview(&id) {
+            if let Some(png) = crate::thumbs::capture(&webview) {
+                crate::thumbs::remember(&id, png);
+            }
+        }
+    }
     let (win_w, _) = crate::window::logical_size(&window)?;
-    let (width, height) = (372.0, 128.0);
+    let (width, height) = (372.0, 236.0);
     let left = (x - width / 2.0).clamp(6.0, (win_w - width - 6.0).max(6.0));
     let top = chrome_height(&app) + 6.0;
     let kind = format!("thumb&id={}", crate::permissions::encode(&id));
@@ -308,6 +336,8 @@ pub async fn thumb_card(
         title: tab.title.clone(),
         url: tab.url.clone(),
         icon: tab.icon.clone(),
+        image: crate::thumbs::get(&id)
+            .map(|png| format!("data:image/png;base64,{}", crate::extensions::base64(&png))),
         pinned: tab.pinned,
         incognito: tab.incognito,
     })

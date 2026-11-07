@@ -28,6 +28,7 @@ mod userscripts;
 mod state;
 mod tabs;
 mod theme;
+mod thumbs;
 mod window;
 
 use tauri::Manager;

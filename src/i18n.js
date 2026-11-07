@@ -323,8 +323,8 @@ const DICT = {
     "Search open tabs": "搜索标签页",
     "Type a command or a site": "输入命令或网址",
     "Nothing matches": "没有匹配项",
-    "Shows the title and the address of a tab when the pointer rests on it":
-      "鼠标停在标签上时显示该标签的标题和地址",
+    "Shows a picture of the tab when the pointer rests on it":
+      "鼠标停在标签上时显示该标签的画面（当前标签实时截图，其它用上次在前台时的画面）",
     "Language": "语言",
     "Standard font": "标准字体",
     "Monospace font": "等宽字体",
