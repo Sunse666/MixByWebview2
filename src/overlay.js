@@ -1100,6 +1100,13 @@ async function applyLanguage() {
 }
 
 async function boot() {
+  // Every panel starts hidden and only the one this kind needs is revealed:
+  // a kind that forgot to hide the others used to paint the theme editor, which
+  // is what the tab hover card showed instead of its own content.
+  menu.hidden = true;
+  appMenu.hidden = true;
+  themePanel.hidden = true;
+  permissionPanel.hidden = true;
   await applyLanguage();
   report(`overlay kind=${kind}`);
   if (kind === "app_menu") {
