@@ -1009,6 +1009,15 @@ async function boot() {
       urlInput.dispatchEvent(new Event("input"));
     } else if (key === "select-all") {
       urlInput.select();
+    } else if (key === "delete-word") {
+      // Ctrl+Backspace: drop the word (or separator run) before the caret.
+      const boundary = /[\s/.:?&=#@_-]/;
+      let at = start;
+      while (at > 0 && !boundary.test(urlInput.value[at - 1])) at -= 1;
+      while (at > 0 && boundary.test(urlInput.value[at - 1])) at -= 1;
+      if (at === start && start > 0) at = start - 1;
+      urlInput.setRangeText("", at, Math.max(end, start), "end");
+      urlInput.dispatchEvent(new Event("input"));
     } else if (key === "copy" || key === "cut") {
       const selected = urlInput.value.slice(start, end);
       if (selected) {

@@ -476,6 +476,43 @@ const SHORTCUT_FORWARDER: &str = r#"
     window.__TAURI_INTERNALS__.invoke(command, payload).catch(function () {});
   };
 
+  // An input method only composes inside an editable element, and in url mode the
+  // page holds the keyboard but has none. A hidden field collects the
+  // composition and its final text is forwarded as one insertion.
+  var sink = null;
+  var ensureSink = function () {
+    if (sink) return sink;
+    sink = document.createElement("textarea");
+    sink.setAttribute("autocomplete", "off");
+    sink.setAttribute("autocorrect", "off");
+    sink.setAttribute("spellcheck", "false");
+    sink.setAttribute("tabindex", "-1");
+    sink.style.cssText =
+      "position:fixed;left:-1000px;top:0;width:1px;height:1px;opacity:0;pointer-events:none;";
+    (document.body || document.documentElement).appendChild(sink);
+    var flush = function () {
+      var text = sink.value;
+      if (!text) return;
+      sink.value = "";
+      if (window.__mixUrlMode) forward("type", text);
+    };
+    sink.addEventListener("compositionend", flush);
+    sink.addEventListener("input", function (event) {
+      if (!event.isComposing) flush();
+    });
+    return sink;
+  };
+
+  window.addEventListener("mix-url-mode", function () {
+    if (window.__mixUrlMode) {
+      try {
+        ensureSink().focus();
+      } catch (error) {}
+    } else if (sink) {
+      sink.blur();
+    }
+  }, true);
+
   // Editing keys the address bar has to act on itself: the browser default that
   // would have done it belongs to the page, which currently has the keyboard.
   var EDIT_KEYS = {
@@ -488,6 +525,9 @@ const SHORTCUT_FORWARDER: &str = r#"
 
   window.addEventListener("keydown", function (event) {
     if (!window.__mixUrlMode) return;
+    // A composition owns its keystrokes: forwarding the space that picks a
+    // candidate, or the backspace that edits one, would break the input method.
+    if (event.isComposing || event.keyCode === 229) return;
     // preventDefault stops the character, stopPropagation stops the page's own
     // single-key shortcuts (GitHub's t, YouTube's k) from firing while the
     // address bar is being typed into.
@@ -504,6 +544,11 @@ const SHORTCUT_FORWARDER: &str = r#"
       }
       if (combo === "v" || combo === "c" || combo === "x") {
         forward("key", combo === "v" ? "paste" : combo);
+        stop();
+        return;
+      }
+      if (combo === "backspace") {
+        forward("key", "delete-word");
         stop();
       }
       return;

@@ -2885,7 +2885,13 @@ pub(crate) fn set_url_edit(app: &AppHandle, window: &tauri::Window, on: bool) {
         Some(core) => core.tabs.iter().map(|tab| tab.id.clone()).collect(),
         None => Vec::new(),
     };
-    let script = if on { "window.__mixUrlMode = true" } else { "window.__mixUrlMode = false" };
+    // The page needs to know when the mode flips: it parks an input method sink
+    // while the address bar owns the keyboard.
+    let script = if on {
+        "window.__mixUrlMode = true; window.dispatchEvent(new Event('mix-url-mode'))"
+    } else {
+        "window.__mixUrlMode = false; window.dispatchEvent(new Event('mix-url-mode'))"
+    };
     let count = tabs.len();
     for id in tabs {
         if let Some(webview) = app.get_webview(&id) {
