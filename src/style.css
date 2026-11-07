@@ -105,7 +105,7 @@ button {
   gap: 6px;
   flex: 0 1 180px;
   min-width: 84px;
-  height: 26px;
+  height: 32px;
   padding: 0 4px 0 10px;
   border-radius: var(--tab-radius);
   border: 1px solid transparent;
