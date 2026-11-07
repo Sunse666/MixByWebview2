@@ -45,7 +45,7 @@ pub fn capture(webview: &tauri::Webview) -> Option<Vec<u8>> {
   // The clip is in css pixels and the scale shrinks the raster, so the result is
   // WIDTH x (height * scale) without any post-processing.
   let params = format!(
-    r#"{{"format":"png","captureBeyondViewport":false,"clip":{{"x":0,"y":0,"width":{width},"height":{height},"scale":{scale}}}}}"#
+    r#"{{"format":"png","captureBeyondViewport":false,"optimizeForSpeed":true,"clip":{{"x":0,"y":0,"width":{width},"height":{height},"scale":{scale}}}}}"#
   );
   let json = crate::screenshot::call(webview, "Page.captureScreenshot", &params)?;
   let value: serde_json::Value = serde_json::from_str(&json).ok()?;
@@ -105,7 +105,14 @@ pub fn remember_later(app: tauri::AppHandle, id: String) {
     // The compositor needs a frame or two after the tab is shown, otherwise the
     // capture catches the page that was there before the switch.
     std::thread::sleep(std::time::Duration::from_millis(350));
-    if is_fresh(&id, 2) {
+    // The setting can be turned off while the worker is asleep.
+    {
+      let state = app.state::<crate::ipc::AppState>();
+      if !state.settings.read().tab_hover_preview {
+        return;
+      }
+    }
+    if is_fresh(&id, 5) {
       return;
     }
     if let Some(png) = capture(&webview) {

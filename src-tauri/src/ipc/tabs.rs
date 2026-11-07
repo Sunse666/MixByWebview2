@@ -66,7 +66,11 @@ pub async fn tab_select(app: AppHandle, window: tauri::Window, state: State<'_, 
     emit_tabs(&app, window.label());
     // Take the preview once the tab is on screen: a hidden webview does not
     // render, so a thumbnail has to come from a moment the tab was visible.
-    crate::thumbs::remember_later(app.clone(), id);
+    // Only when the feature is on: a DevTools screenshot makes the page re-raster
+    // and that shows as a white flash, which must not happen on every switch.
+    if state.settings.read().tab_hover_preview {
+        crate::thumbs::remember_later(app.clone(), id);
+    }
     Ok(())
 }
 
