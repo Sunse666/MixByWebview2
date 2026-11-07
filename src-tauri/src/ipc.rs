@@ -787,6 +787,7 @@ pub async fn tab_new(
 /// Pins a tab to the left strip, or releases it.
 #[tauri::command]
 pub async fn tab_pin(
+    app: AppHandle,
     window: tauri::Window,
     state: State<'_, AppState>,
     id: String,
@@ -797,7 +798,22 @@ pub async fn tab_pin(
         if let Some(tab) = core.tabs.iter_mut().find(|tab| tab.id == id) {
             tab.pinned = pinned;
         }
+        // Pinned tabs sit on the left, like every other browser; the strip is
+        // drawn from this order, so it has to be applied here.
+        let mut pinned_tabs: Vec<Tab> = Vec::new();
+        let mut loose: Vec<Tab> = Vec::new();
+        for tab in core.tabs.drain(..) {
+            if tab.pinned {
+                pinned_tabs.push(tab);
+            } else {
+                loose.push(tab);
+            }
+        }
+        core.tabs.extend(pinned_tabs);
+        core.tabs.extend(loose);
     }
+    emit_tabs(&app, window.label());
+    save_sessions(&app);
     crate::logging::info(&format!("tab {id} pinned={pinned}"));
     Ok(())
 }

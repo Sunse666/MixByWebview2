@@ -163,13 +163,11 @@ function renderTabs() {
       if (event.button !== 1) return;
       event.preventDefault();
       invoke("tab_pin", { id: tab.id, pinned: !tab.pinned }).catch(() => {});
-      setTimeout(() => invoke("tab_list").catch(() => {}), 60);
     });
 
     el.addEventListener("contextmenu", (event) => {
       event.preventDefault();
       invoke("tab_pin", { id: tab.id, pinned: !tab.pinned }).catch(() => {});
-      setTimeout(() => invoke("tab_list").catch(() => {}), 60);
     });
 
     // Drag to reorder. The strip only sends the index, Rust does the move.
