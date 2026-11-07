@@ -2434,7 +2434,8 @@ pub(crate) fn attach_icon(app: &AppHandle, url: &str, icon: &str) {
 }
 
 pub(crate) fn record_visit(app: &AppHandle, url: &str, title: &str) {
-    if !crate::library::worth_recording(url) {
+    // Settings, history and the new tab page are the browser, not browsing.
+    if !crate::library::worth_recording(url) || trusted_url(url) {
         return;
     }
     let Some(state) = app.try_state::<AppState>() else {
@@ -3471,8 +3472,10 @@ pub async fn tab_icon(
                 .map(|tab| (tab.url.clone(), tab.incognito))
         })
         .unwrap_or_default();
-    // A private tab leaves no trace in history or in the shared icon cache.
-    if !page_url.is_empty() && !incognito {
+    // A private tab leaves no trace in history or in the shared icon cache, and
+    // the app's own pages have no site icon to cache: their fallback url is
+    // /favicon.ico on tauri.localhost, which only ever 404s.
+    if !page_url.is_empty() && !incognito && !trusted_url(&page_url) {
         attach_icon(&app, &page_url, &icon);
         let host = crate::favicons::host_of(&page_url);
         let changed = {
