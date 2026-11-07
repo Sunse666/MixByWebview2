@@ -114,7 +114,14 @@ button {
 
 .tab:hover { opacity: 1; background: var(--hover); }
 
+.tab.suspended {
+  /* A dashed outline reads as "asleep" without shouting. */
+  border-color: var(--border);
+  border-style: dashed;
+  opacity: 0.75;
+}
 .tab.suspended .tab-title { opacity: 0.45; font-style: italic; }
+.tab.suspended .tab-icon { filter: grayscale(1); opacity: 0.6; }
 
 .tab.incognito {
   border-color: color-mix(in srgb, var(--accent) 40%, var(--border));

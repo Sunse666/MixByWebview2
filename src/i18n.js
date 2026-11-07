@@ -229,6 +229,7 @@ const DICT = {
     "Memory saver": "省内存模式",
     "Tabs beyond the limit are suspended and reload when selected": "超出数量的标签会被挂起，切回时自动重新加载",
     "Keep this many tabs live": "保持活跃的标签数",
+    "Suspended to save memory": "已挂起以节省内存，点击恢复",
     "New tab": "新标签页",
     "New incognito tab": "新建无痕标签页",
     "Reopen closed tab": "重新打开关闭的标签页",

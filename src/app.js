@@ -70,7 +70,7 @@ function renderTabs() {
     if (tab.incognito) classes.push("incognito");
     if (tab.pinned) classes.push("pinned");
     el.className = classes.join(" ");
-    el.title = tab.url;
+    el.title = tab.alive ? tab.url : tab.url + "\n" + t("Suspended to save memory");
 
     const label = document.createElement("span");
     const icon = document.createElement(tab.loading ? "span" : tab.icon ? "img" : "span");
