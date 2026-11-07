@@ -305,6 +305,7 @@ const DICT = {
     "Show the bookmarks bar": "显示书签栏",
     "Restore the last session on start": "启动时恢复上次会话",
     "Interface language": "界面语言",
+    "Clear the selected data? This cannot be undone.": "清除选中的数据？此操作无法撤销。",
     "Choose the language of the interface": "选择界面语言",
   },
 };

@@ -346,6 +346,8 @@ async function boot() {
   run.className = "button";
   run.textContent = t("Clear selected data");
   run.addEventListener("click", async () => {
+    // Irreversible: history, bookmarks, session and zoom have no undo.
+    if (!window.confirm(t("Clear the selected data? This cannot be undone."))) return;
     const done = await invoke("clear_data", { kinds: [...picked] }).catch(() => []);
     run.textContent = t("Cleared") + ": " + (done || []).join(", ");
     setTimeout(() => {
