@@ -66,7 +66,7 @@ function renderTabs() {
     const el = document.createElement("div");
     const classes = ["tab"];
     if (tab.id === selected) classes.push("active");
-    if (!tab.alive) classes.push("suspended");
+    if (!tab.alive && settings.mark_suspended !== false) classes.push("suspended");
     if (tab.incognito) classes.push("incognito");
     if (tab.pinned) classes.push("pinned");
     el.className = classes.join(" ");

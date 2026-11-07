@@ -78,6 +78,10 @@ pub struct Settings {
     pub language: String,
     /// Suspend tabs beyond the live limit to give memory back.
     pub memory_saver: bool,
+    /// Hosts that are never suspended, comma separated.
+    pub keep_alive_hosts: String,
+    /// Draw the suspended marker on idle tabs.
+    pub mark_suspended: bool,
     pub max_live_tabs: usize,
     pub download_dir: Option<String>,
 }
@@ -129,6 +133,8 @@ impl Default for Settings {
             menu_bar: true,
             language: "en".into(),
             memory_saver: true,
+            keep_alive_hosts: String::new(),
+            mark_suspended: true,
             max_live_tabs: 12,
             download_dir: None,
         }

@@ -415,6 +415,19 @@ async function boot() {
   liveHolder.style.alignItems = "center";
   liveHolder.append(liveInput, liveValue);
 
+  const keepAlive = document.createElement("input");
+  keepAlive.className = "hex";
+  keepAlive.style.width = "320px";
+  keepAlive.placeholder = "bilibili.com, mail.google.com";
+  keepAlive.value = settings.keep_alive_hosts || "";
+  keepAlive.addEventListener("change", async () => {
+    await invoke("settings_set", { patch: { keep_alive_hosts: keepAlive.value } }).catch(() => {});
+  });
+
+  const markSwitch = switchEl(settings.mark_suspended !== false, async (next) => {
+    await invoke("settings_set", { patch: { mark_suspended: next } }).catch(() => {});
+  });
+
   perfCard.append(
     row(
       t("Memory saver"),
@@ -422,6 +435,8 @@ async function boot() {
       perfSwitch,
     ),
     row(t("Keep this many tabs live"), "", liveHolder),
+    row(t("Never suspend these sites"), t("Comma separated hosts"), keepAlive),
+    row(t("Mark suspended tabs"), t("Dashed border and grey icon"), markSwitch),
   );
   main.append(perfCard);
 

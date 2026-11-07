@@ -167,6 +167,8 @@ pub struct SettingsPatch {
     pub gestures: Option<bool>,
     pub super_drag: Option<bool>,
     pub memory_saver: Option<bool>,
+    pub keep_alive_hosts: Option<String>,
+    pub mark_suspended: Option<bool>,
     pub drag_hint: Option<bool>,
     pub drag_threshold: Option<u32>,
     pub drag_map: Option<std::collections::BTreeMap<String, String>>,
@@ -413,6 +415,20 @@ pub(crate) fn enforce_live_limit(app: &AppHandle, label: &str) {
     {
         return;
     }
+    let keep_alive: Vec<String> = app
+        .try_state::<AppState>()
+        .map(|state| {
+            state
+                .settings
+                .read()
+                .keep_alive_hosts
+                .split([' ', ',', ';'])
+                .map(|entry| entry.trim().trim_start_matches("www.").to_ascii_lowercase())
+                .filter(|entry| !entry.is_empty())
+                .collect()
+        })
+        .unwrap_or_default();
+
     loop {
         let victim = {
             let state = app.state::<AppState>();
@@ -427,6 +443,24 @@ pub(crate) fn enforce_live_limit(app: &AppHandle, label: &str) {
                     .tabs
                     .iter()
                     .filter(|tab| tab.alive && Some(&tab.id) != selected.as_ref())
+                    .filter(|tab| {
+                        if keep_alive.is_empty() {
+                            return true;
+                        }
+                        let host = tab
+                            .url
+                            .split("://")
+                            .nth(1)
+                            .unwrap_or("")
+                            .split(['/', '?', '#'])
+                            .next()
+                            .unwrap_or("")
+                            .trim_start_matches("www.")
+                            .to_ascii_lowercase();
+                        !keep_alive
+                            .iter()
+                            .any(|entry| host == *entry || host.ends_with(&format!(".{entry}")))
+                    })
                     .min_by_key(|tab| tab.last_active)
                     .map(|tab| tab.id.clone());
                 if let Some(id) = &candidate {
@@ -1589,6 +1623,12 @@ pub async fn settings_set(
         }
         if let Some(value) = patch.baidu_secret {
             guard.baidu_secret = value.trim().to_string();
+        }
+        if let Some(value) = patch.keep_alive_hosts {
+            guard.keep_alive_hosts = value.trim().to_string();
+        }
+        if let Some(value) = patch.mark_suspended {
+            guard.mark_suspended = value;
         }
         if let Some(value) = patch.memory_saver {
             guard.memory_saver = value;
