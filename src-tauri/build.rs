@@ -97,6 +97,7 @@ fn main() {
         "register_browser",
         "clipboard_read",
         "clipboard_write",
+        "chrome_fit",
         "focus_page",
         "chrome_menu",
         "url_action",

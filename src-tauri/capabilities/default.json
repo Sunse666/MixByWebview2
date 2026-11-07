@@ -94,6 +94,7 @@
     "allow-register-browser",
     "allow-clipboard-read",
     "allow-clipboard-write",
+    "allow-chrome-fit",
     "allow-focus-page",
     "allow-chrome-menu",
     "allow-url-action",

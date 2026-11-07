@@ -301,7 +301,6 @@ pub fn chrome_height(app: &AppHandle) -> f64 {
             let settings = state.settings.read();
             settings.chrome_height
         + if settings.show_bookmarks { 30.0 } else { 0.0 }
-        + if settings.menu_bar { MENU_BAR_HEIGHT } else { 0.0 }
         }
         None => crate::window::CHROME_H,
     }
@@ -2743,6 +2742,23 @@ pub async fn page_fullscreen(
 }
 
 /// Gives the keyboard to the page once the address bar is done.
+/// The chrome strip reports how tall it actually is, so the page never
+/// starts inside an empty band caused by DPI rounding.
+#[tauri::command]
+pub async fn chrome_fit(app: AppHandle, window: tauri::Window, state: State<'_, AppState>, height: f64) -> Result<(), AppError> {
+    let wanted = height.clamp(24.0, 160.0);
+    {
+        let mut settings = state.settings.write();
+        if (settings.chrome_height - wanted).abs() < 1.0 {
+            return Ok(());
+        }
+        settings.chrome_height = wanted;
+    }
+    crate::logging::info(&format!("chrome fit: {wanted}"));
+    let label = window_of(&window).label().to_string();
+    crate::window::relayout(&app, &label)?;
+    Ok(())
+}
 #[tauri::command]
 pub async fn focus_page(
     app: AppHandle,

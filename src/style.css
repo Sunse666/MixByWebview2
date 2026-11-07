@@ -175,8 +175,10 @@ button {
   display: flex;
   align-items: center;
   gap: 6px;
-  height: 36px;
-  padding: 0 8px 8px;
+  /* Fill whatever the strip has left, so rounding cannot leave a gap. */
+  flex: 1;
+  min-height: 36px;
+  padding: 0 8px;
   background: var(--panel);
 }
 

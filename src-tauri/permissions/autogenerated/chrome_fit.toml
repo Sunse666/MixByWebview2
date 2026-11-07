@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-chrome-fit"
+description = "Enables the chrome_fit command without any pre-configured scope."
+commands.allow = ["chrome_fit"]
+
+[[permission]]
+identifier = "deny-chrome-fit"
+description = "Denies the chrome_fit command without any pre-configured scope."
+commands.deny = ["chrome_fit"]

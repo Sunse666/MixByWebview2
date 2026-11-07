@@ -776,6 +776,15 @@ async function boot() {
   await listen("theme:changed", (event) => applyTheme(event.payload));
   await listen("download:changed", (event) => renderDownloads(event.payload));
   setTabs(await invoke("tab_list"));
+
+  // Report the real strip height: DPI rounding otherwise leaves an empty band.
+  const fitStrip = () => {
+    const rect = document.body.getBoundingClientRect();
+    const height = Math.round(rect.height);
+    if (height > 0) invoke("chrome_fit", { height }).catch(() => {});
+  };
+  fitStrip();
+  window.addEventListener("resize", fitStrip);
   report(`boot tabs=${tabs.length} selected=${selected}`);
 
   await listen("ui:new-tab", () => invoke("tab_new", {}));
