@@ -315,7 +315,6 @@ fn push_suggestions(app: &AppHandle, window_label: &str, state: &AppState) -> Ve
     items
 }
 
-/// Moves a tab to a new index; the strip calls this after a drag.
 /// Pages forward typed characters here while the address bar owns the keyboard,
 /// which avoids depending on webview focus.
 #[tauri::command]

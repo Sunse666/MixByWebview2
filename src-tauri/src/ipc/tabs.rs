@@ -1,0 +1,603 @@
+//! Tab lifecycle: creating, closing, selecting, ordering and the per-tab
+//! state the strip reads.
+
+use super::*;
+
+fn spawn_tab(
+    app: &AppHandle,
+    label: &str,
+    id: &str,
+    url: &str,
+    incognito: bool,
+) -> Result<tauri::Webview, AppError> {
+    let win = app
+        .get_window(label)
+        .ok_or_else(|| AppError::new("no_window", "window is missing"))?;
+    let opts = app.state::<AppState>().opts.clone();
+    let (width, height) = crate::window::logical_size(&win)?;
+    crate::tabs::create(
+        &win,
+        id,
+        url,
+        width,
+        (height - chrome_height(app)).max(1.0),
+        &opts,
+        incognito,
+    )
+    .map_err(AppError::from)
+}
+
+
+
+
+
+#[tauri::command]
+pub async fn tab_list(window: tauri::Window, state: State<'_, AppState>) -> Result<TabList, AppError> {
+    let core = state.read_core(window.label());
+    Ok(snapshot(&core))
+}
+
+#[tauri::command]
+pub async fn tab_select(app: AppHandle, window: tauri::Window, state: State<'_, AppState>, id: String) -> Result<(), AppError> {
+    let exists = {
+        let core = state.read_core(window.label());
+        core.tabs.iter().any(|tab| tab.id == id)
+    };
+    if !exists {
+        return Err(AppError::new("no_tab", id));
+    }
+    {
+        let mut core = state.write_core(window.label());
+        core.selected = Some(id.clone());
+        touch_mru(&mut core.mru, &id);
+    }
+
+    sync_visibility(&app, window.label());
+    if let Some(webview) = app.get_webview(&id) {
+        let _ = webview.set_focus();
+        let scroll = state
+            .try_read_core(window.label())
+            .and_then(|core| core.tabs.iter().find(|tab| tab.id == id).map(|tab| tab.scroll))
+            .unwrap_or(0.0);
+        if scroll > 0.0 {
+            let _ = webview.eval(&format!("window.scrollTo(0, {scroll});"));
+        }
+    }
+    emit_tabs(&app, window.label());
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn tab_new(
+    app: AppHandle,
+    window: tauri::Window, state: State<'_, AppState>,
+    url: Option<String>,
+    incognito: Option<bool>,
+    // When true the new tab is created behind the current one.
+    background: Option<bool>,
+) -> Result<String, AppError> {
+    let (id, target, selection_before) = {
+        let mut core = state.write_core(window.label());
+        core.next_tab_id += 1;
+        // Labels carry the window so per-window lookups keep working.
+    let id = tab_label(window.label(), core.next_tab_id);
+        let target = match url {
+        Some(input) => {
+            if crate::tabs::parse_url(&input).is_none() {
+                return Err(AppError::new("bad_url", format!("not a web address: {input}")));
+            }
+            input
+        }
+        None => {
+            let settings = state.settings.read();
+            if !settings.newtab_url.is_empty() {
+                settings.newtab_url.clone()
+            } else if settings.new_tab_page {
+                "http://tauri.localhost/pages/newtab.html".to_string()
+            } else {
+                settings.start_url.clone()
+            }
+        }
+    };
+        core.tick += 1;
+        let tick = core.tick;
+        let previous = core.selected.clone();
+        core.tabs.push(Tab {
+            id: id.clone(),
+            url: target.clone(),
+            title: if incognito.unwrap_or(false) {
+                "Incognito".into()
+            } else {
+                "New tab".into()
+            },
+            zoom: 1.0,
+            pinned: false,
+            incognito: incognito.unwrap_or(false),
+            icon: None,
+            loading: false,
+            scroll: 0.0,
+            alive: true,
+            last_active: tick,
+        });
+        core.selected = Some(id.clone());
+        touch_mru(&mut core.mru, &id);
+        (id, target, previous)
+    };
+
+    let created = spawn_tab(&app, window.label(), &id, &target, incognito.unwrap_or(false))?;
+    crate::tabs::apply_default_zoom(&app, &id);
+
+    if background.unwrap_or(false) {
+        // Created behind the current tab: put the selection back where it was.
+        {
+            let mut core = state.write_core(window.label());
+            core.selected = selection_before;
+        }
+        sync_visibility(&app, window.label());
+        emit_tabs(&app, window.label());
+        save_sessions(&app);
+        crate::logging::info(&format!("tab {id} opened in the background"));
+        return Ok(id);
+    }
+
+    let _ = created.set_focus();
+    crate::logging::info(&format!("tab created {id} -> {target}"));
+    sync_visibility(&app, window.label());
+    enforce_live_limit(&app, window.label());
+    emit_tabs(&app, window.label());
+    save_sessions(&app);
+    Ok(id)
+}
+/// Pins a tab to the left strip, or releases it.
+#[tauri::command]
+pub async fn tab_pin(
+    app: AppHandle,
+    window: tauri::Window,
+    state: State<'_, AppState>,
+    id: String,
+    pinned: bool,
+) -> Result<(), AppError> {
+    {
+        let mut core = state.write_core(window.label());
+        if let Some(tab) = core.tabs.iter_mut().find(|tab| tab.id == id) {
+            tab.pinned = pinned;
+        }
+        // Pinned tabs sit on the left, like every other browser; the strip is
+        // drawn from this order, so it has to be applied here.
+        let mut pinned_tabs: Vec<Tab> = Vec::new();
+        let mut loose: Vec<Tab> = Vec::new();
+        for tab in core.tabs.drain(..) {
+            if tab.pinned {
+                pinned_tabs.push(tab);
+            } else {
+                loose.push(tab);
+            }
+        }
+        core.tabs.extend(pinned_tabs);
+        core.tabs.extend(loose);
+    }
+    emit_tabs(&app, window.label());
+    save_sessions(&app);
+    crate::logging::info(&format!("tab {id} pinned={pinned}"));
+    Ok(())
+}
+#[tauri::command]
+pub async fn tab_close(app: AppHandle, window: tauri::Window, state: State<'_, AppState>, id: String) -> Result<(), AppError> {
+    if let Some(webview) = app.get_webview(&id) {
+        let _ = webview.close();
+    }
+
+    let (remaining, next_url) = {
+        let mut core = state.write_core(window.label());
+        if let Some(index) = core.tabs.iter().position(|tab| tab.id == id) {
+            let closed = core.tabs[index].clone();
+            if !closed.incognito {
+                let mut history = state.closed_tabs.write().unwrap_or_else(|e| e.into_inner());
+                let list = history.entry(window.label().to_string()).or_default();
+                list.push((closed.url, closed.title));
+                if list.len() > 20 {
+                    list.remove(0);
+                }
+            }
+        }
+        let closed_at = core.tabs.iter().position(|tab| tab.id == id);
+        core.tabs.retain(|tab| tab.id != id);
+        core.mru.retain(|entry| entry != &id);
+        if core.selected.as_deref() == Some(id.as_str()) {
+            let go_left = state.settings.read().tab_close_goes_left;
+            core.selected = match closed_at {
+                // Step to the neighbour on the chosen side, staying in range.
+                Some(index) if go_left => core
+                    .tabs
+                    .get(index.saturating_sub(1))
+                    .map(|tab| tab.id.clone()),
+                Some(index) => core.tabs.get(index).map(|tab| tab.id.clone()),
+                None => None,
+            }
+            .or_else(|| core.tabs.last().map(|tab| tab.id.clone()));
+        }
+        (core.tabs.len(), state.settings.read().start_url.clone())
+    };
+
+    // Closing the last tab shows a fresh one instead of quitting.
+    if remaining == 0 {
+        let _ = tab_new(app, window.clone(), state, Some(next_url), None, None).await;
+        return Ok(());
+    }
+
+    sync_visibility(&app, window.label());
+    emit_tabs(&app, window.label());
+    save_sessions(&app);
+    Ok(())
+}
+
+/// Saves a png of the visible page into the downloads folder.
+#[tauri::command]
+pub async fn tab_screenshot(
+    app: AppHandle,
+    window: tauri::Window,
+    state: State<'_, AppState>,
+) -> Result<String, AppError> {
+    let id = selected_label(&state, &window);
+    let Some(webview) = app.get_webview(&id) else {
+        return Err(AppError::new("no_tab", "there is no tab to capture"));
+    };
+    let Some(bytes) = crate::screenshot::capture(&webview) else {
+        return Err(AppError::new("capture", "the page did not answer with an image"));
+    };
+    let name = format!("Mix-shot-{}.png", crate::library::now());
+    let target = crate::downloads::target_for(&state.dirs.downloads, "mix://screenshot", &name);
+    crate::paths::write_atomic(&target, &bytes)?;
+    crate::downloads::record_done(&app, "mix://screenshot", &target);
+    crate::logging::info(&format!("screenshot {}", target.display()));
+    Ok(target.display().to_string())
+}
+
+/// Mutes or unmutes the selected tab; with no argument it flips. The mute
+/// button in the toolbar drives this.
+#[tauri::command]
+pub async fn tab_mute(
+    app: AppHandle,
+    window: tauri::Window,
+    state: State<'_, AppState>,
+    muted: Option<bool>,
+) -> Result<bool, AppError> {
+    let id = selected_label(&state, &window);
+    if id.is_empty() {
+        return Ok(false);
+    }
+    let Some(webview) = app.get_webview(&id) else {
+        return Ok(false);
+    };
+    let current = crate::audio::state(&webview).unwrap_or(crate::audio::Audio {
+        playing: false,
+        muted: false,
+    });
+    let target = muted.unwrap_or(!current.muted);
+    let ok = crate::audio::set_muted(&webview, target);
+    let now = crate::audio::state(&webview).unwrap_or(crate::audio::Audio {
+        playing: current.playing,
+        muted: target,
+    });
+    crate::logging::info(&format!("tab {id} muted={} ({ok})", now.muted));
+    let _ = app.emit_to(
+        window.label(),
+        "tab:audio",
+        serde_json::json!({ "id": id, "playing": now.playing, "muted": now.muted }),
+    );
+    Ok(now.muted)
+}
+
+#[tauri::command]
+pub async fn tab_navigate(app: AppHandle, window: tauri::Window, state: State<'_, AppState>, url: String) -> Result<(), AppError> {
+    // A dead host would land on WebView2's own error page, which we cannot
+    // replace, so answer it ourselves before navigating. The probe resolves dns
+    // and therefore runs on a blocking thread, never on this command's future.
+    if url.starts_with("http") && !trusted_url(&url) {
+        let reach = state.reachability.clone();
+        let probe_url = url.clone();
+        let reachable = tauri::async_runtime::spawn_blocking(move || reach.check(&probe_url))
+            .await
+            .unwrap_or(true);
+        if !reachable {
+            let id = selected_label(&state, &window);
+            if !id.is_empty() {
+                crate::logging::info(&format!("unreachable: {url}"));
+                show_error_page(&app, &id, url.trim());
+            }
+            return Ok(());
+        }
+    }
+
+    let Some(target) = crate::tabs::parse_url(&url) else {
+        crate::logging::warn(&format!("rejected address: {url}"));
+        let id = selected_label(&state, &window);
+        if !id.is_empty() {
+            show_error_page(&app, &id, url.trim());
+        }
+        return Err(AppError::new("bad_url", format!("not a web address: {url}")));
+    };
+    let label = selected_label(&state, &window);
+    if label.is_empty() {
+        return Ok(());
+    }
+    {
+        let mut core = state.write_core(window.label());
+        if let Some(tab) = core.tabs.iter_mut().find(|tab| tab.id == label) {
+            tab.url = target.to_string();
+        }
+    }
+    if let Some(webview) = app.get_webview(&label) {
+        webview.navigate(target)?;
+        // Without this the first click after a menu action only activates the
+        // webview; the click never reaches the page.
+        let _ = webview.set_focus();
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn tab_nav(
+    app: AppHandle,
+    window: tauri::Window,
+    state: State<'_, AppState>,
+    action: String,
+) -> Result<(), AppError> {
+    let Some(webview) = app.get_webview(&selected_label(&state, &window)) else {
+        return Ok(());
+    };
+    match action.as_str() {
+        // Tauri exposes no history API, so drive it from the page.
+        "back" => webview.eval("history.back()")?,
+        "forward" => webview.eval("history.forward()")?,
+        "reload" => webview.reload()?,
+        "stop" => webview.eval("window.stop()")?,
+        other => return Err(AppError::new("bad_nav", other)),
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn tab_print(
+    app: AppHandle,
+    window: tauri::Window,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    if let Some(webview) = app.get_webview(&selected_label(&state, &window)) {
+        webview.print()?;
+    }
+    Ok(())
+}
+
+/// Moves a tab to a new index; the strip calls this after a drag.
+pub(crate) fn move_tab(tabs: &mut Vec<Tab>, id: &str, to: usize) -> bool {
+    let Some(from) = tabs.iter().position(|tab| tab.id == id) else {
+        return false;
+    };
+    let target = to.min(tabs.len().saturating_sub(1));
+    if from == target {
+        return false;
+    }
+    let tab = tabs.remove(from);
+    tabs.insert(target, tab);
+    true
+}
+
+/// Pages report their scroll offset here so it survives a tab switch.
+#[tauri::command]
+pub async fn tab_scroll(
+    _app: AppHandle,
+    webview: tauri::Webview,
+    state: State<'_, AppState>,
+    y: f64,
+) -> Result<(), AppError> {
+    let id = webview.label().to_string();
+
+    let owner = window_of_tab(&id).to_string();
+    if let Some(mut core) = state.try_write_core(&owner) {
+        if let Some(tab) = core.tabs.iter_mut().find(|tab| tab.id == id) {
+            tab.scroll = y.max(0.0);
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn tab_move(
+    app: AppHandle,
+    window: tauri::Window,
+    state: State<'_, AppState>,
+    id: String,
+    to: usize,
+) -> Result<(), AppError> {
+    {
+        let mut core = state.write_core(window.label());
+        move_tab(&mut core.tabs, &id, to);
+    }
+    emit_tabs(&app, window.label());
+    save_sessions(&app);
+    Ok(())
+}
+
+/// Pages report their favicon here so the tab strip can show it.
+#[tauri::command]
+pub async fn tab_icon(
+    app: AppHandle,
+    webview: tauri::Webview,
+    state: State<'_, AppState>,
+    url: String,
+) -> Result<(), AppError> {
+    let id = webview.label().to_string();
+    let icon = url.trim().to_string();
+    if icon.is_empty() || !icon.starts_with("http") {
+        return Ok(());
+    }
+
+    let (page_url, incognito) = state
+        .try_read_core(&window_of_tab(&id))
+        .and_then(|core| {
+            core.tabs
+                .iter()
+                .find(|tab| tab.id == id)
+                .map(|tab| (tab.url.clone(), tab.incognito))
+        })
+        .unwrap_or_default();
+    // A private tab leaves no trace in history or in the shared icon cache, and
+    // the app's own pages have no site icon to cache: their fallback url is
+    // /favicon.ico on tauri.localhost, which only ever 404s.
+    if !page_url.is_empty() && !incognito && !trusted_url(&page_url) {
+        attach_icon(&app, &page_url, &icon);
+        let host = crate::favicons::host_of(&page_url);
+        let changed = {
+            let state = app.try_state::<AppState>();
+            match state {
+                Some(state) => state
+                    .favicons
+                    .write()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .set(&host, &icon),
+                None => false,
+            }
+        };
+        if changed {
+            if let Some(state) = app.try_state::<AppState>() {
+                state
+                    .favicons
+                    .read()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .save(&state.dirs.favicons_file);
+            }
+        }
+        // Outside the branch: the map may already know this host but the file
+        // cache can still be missing (fresh profile, deleted folder).
+        cache_icon(&app, &host, &icon);
+    }
+
+    let owner = window_of_tab(&id).to_string();
+    if let Some(mut core) = state.try_write_core(&owner) {
+        if let Some(tab) = core.tabs.iter_mut().find(|tab| tab.id == id) {
+            tab.icon = Some(icon.clone());
+        }
+    }
+    let _ = app.emit_to(owner, "tab:icon", IconPayload { id, icon: Some(icon) });
+    Ok(())
+}
+/// Reopens the most recently closed tab of this window.
+#[tauri::command]
+pub async fn tab_reopen(
+    app: AppHandle,
+    window: tauri::Window,
+    state: State<'_, AppState>,
+) -> Result<bool, AppError> {
+    let Some((url, _title)) = state
+        .closed_tabs
+        .write()
+        .unwrap_or_else(|e| e.into_inner())
+        .get_mut(window.label())
+        .and_then(|list| list.pop())
+    else {
+        return Ok(false);
+    };
+    tab_new(app, window, state, Some(url), None, None).await?;
+    Ok(true)
+}
+
+/// Only the selected tab is visible; the rest keep running underneath.
+pub(crate) fn sync_visibility(app: &AppHandle, label: &str) {
+    let pairs: Vec<(String, Option<String>)> = {
+        let state = app.state::<AppState>();
+        let core = state.read_core(label);
+        core.tabs
+            .iter()
+            .map(|tab| (tab.id.clone(), core.selected.clone()))
+            .collect()
+    };
+    for (id, selected) in pairs {
+        if let Some(webview) = app.get_webview(&id) {
+            if selected.as_deref() == Some(id.as_str()) {
+                let _ = webview.show();
+            } else {
+                let _ = webview.hide();
+            }
+        }
+    }
+}
+
+/// Drop the least recently used background tab once too many are alive.
+pub(crate) fn enforce_live_limit(app: &AppHandle, label: &str) {
+    if !app
+        .try_state::<AppState>()
+        .map(|state| state.settings.read().memory_saver)
+        .unwrap_or(false)
+    {
+        return;
+    }
+    let keep_alive: Vec<String> = app
+        .try_state::<AppState>()
+        .map(|state| {
+            state
+                .settings
+                .read()
+                .keep_alive_hosts
+                .split([' ', ',', ';'])
+                .map(|entry| entry.trim().trim_start_matches("www.").to_ascii_lowercase())
+                .filter(|entry| !entry.is_empty())
+                .collect()
+        })
+        .unwrap_or_default();
+
+    loop {
+        let victim = {
+            let state = app.state::<AppState>();
+            let mut core = state.write_core(label);
+            let alive = core.tabs.iter().filter(|tab| tab.alive).count();
+            let limit = state.settings.read().max_live_tabs.max(1);
+            if alive <= limit {
+                None
+            } else {
+                let selected = core.selected.clone();
+                let candidate = core
+                    .tabs
+                    .iter()
+                    .filter(|tab| tab.alive && Some(&tab.id) != selected.as_ref())
+                    .filter(|tab| {
+                        if keep_alive.is_empty() {
+                            return true;
+                        }
+                        let host = tab
+                            .url
+                            .split("://")
+                            .nth(1)
+                            .unwrap_or("")
+                            .split(['/', '?', '#'])
+                            .next()
+                            .unwrap_or("")
+                            .trim_start_matches("www.")
+                            .to_ascii_lowercase();
+                        !keep_alive
+                            .iter()
+                            .any(|entry| host == *entry || host.ends_with(&format!(".{entry}")))
+                    })
+                    .min_by_key(|tab| tab.last_active)
+                    .map(|tab| tab.id.clone());
+                if let Some(id) = &candidate {
+                    if let Some(tab) = core.tabs.iter_mut().find(|tab| &tab.id == id) {
+                        tab.alive = false;
+                    }
+                }
+                candidate
+            }
+        };
+
+        match victim {
+            Some(id) => {
+                if let Some(webview) = app.get_webview(&id) {
+                    let _ = webview.close();
+                }
+                crate::logging::info(&format!("suspended {id}"));
+                let _ = app.emit_to(crate::ipc::window_of_tab(&id), "tab:suspended", &id);
+            }
+            None => return,
+        }
+    }
+}
