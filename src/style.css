@@ -105,7 +105,7 @@ button {
   gap: 6px;
   flex: 0 1 180px;
   min-width: 84px;
-  height: 32px;
+  height: 26px;
   padding: 0 4px 0 10px;
   border-radius: var(--tab-radius);
   border: 1px solid transparent;
@@ -177,7 +177,7 @@ button {
   gap: 6px;
   /* Fill whatever the strip has left, so rounding cannot leave a gap. */
   flex: 1;
-  min-height: 60px;
+  min-height: 43px;
   padding: 0 8px;
   background: var(--panel);
 }

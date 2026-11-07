@@ -9,7 +9,7 @@ use tauri::{
 use crate::ipc::AppState;
 use crate::tabs;
 
-pub const CHROME_H: f64 = 87.0;
+pub const CHROME_H: f64 = 78.0;
 
 pub fn logical_size(win: &Window) -> tauri::Result<(f64, f64)> {
     let size = win.inner_size()?;
@@ -443,14 +443,15 @@ pub fn open_window(
         LogicalSize::new(width, chrome_h),
     )?;
 
-    // WebView2 renders the chrome smaller than its box at high DPI; matching
-    // the zoom is what keeps the strip filling the space it was given.
+    // The strip renders at 1:1 inside a DPI scaled box; zoom is what makes the
+    // two agree, otherwise a band of empty panel colour is left at the bottom.
     if let Some(chrome) = app.get_webview(&format!("{label}-chrome")) {
         let scale = win.scale_factor().unwrap_or(1.0);
         if (scale - 1.0).abs() > f64::EPSILON {
             let _ = chrome.set_zoom(scale);
         }
     }
+
 
 
     for (index, (url, _scroll, _pinned)) in urls.iter().enumerate() {
