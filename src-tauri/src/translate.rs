@@ -78,14 +78,13 @@ fn batches(texts: &[String]) -> Vec<Vec<usize>> {
   for (index, text) in texts.iter().enumerate() {
     let len = text.chars().count() + 1;
     if len > CHUNK {
-      // Too big on its own: translate a prefix so something shows up.
-      let clipped: String = text.chars().take(CHUNK).collect();
+      // Too big for any batch, so it goes alone; the caller clips it to CHUNK
+      // before sending rather than dropping the tail silently here.
       if !current.is_empty() {
         out.push(std::mem::take(&mut current));
         size = 0;
       }
       out.push(vec![index]);
-      let _ = clipped;
       continue;
     }
     if size + len > CHUNK && !current.is_empty() {

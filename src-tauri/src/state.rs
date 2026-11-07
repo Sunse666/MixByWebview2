@@ -22,9 +22,7 @@ pub struct Settings {
     pub hidden_extensions: Vec<String>,
     /// Extensions that must not load at all; takes effect on the next start.
     pub disabled_extensions: Vec<String>,
-    /// Baidu translate open platform credentials; empty means the free fallback.
-    pub baidu_appid: String,
-    pub baidu_secret: String,
+
     pub translate_to: String,
     /// A search template with %s; wins over search_engine when set.
     pub custom_search: String,
@@ -114,8 +112,6 @@ impl Default for Settings {
         ],
         hidden_extensions: Vec::new(),
         disabled_extensions: Vec::new(),
-            baidu_appid: String::new(),
-            baidu_secret: String::new(),
             translate_to: "zh".into(),
             gestures: true,
             super_drag: true,

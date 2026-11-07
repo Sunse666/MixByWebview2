@@ -166,8 +166,6 @@ pub struct SettingsPatch {
     pub restore_session: Option<bool>,
     pub show_bookmarks: Option<bool>,
     pub toolbar: Option<Vec<String>>,
-    pub baidu_appid: Option<String>,
-    pub baidu_secret: Option<String>,
     pub translate_to: Option<String>,
     pub new_tab_page: Option<bool>,
     pub search_engine: Option<String>,
@@ -1764,12 +1762,6 @@ pub(crate) fn apply_settings_patch(
         }
         if let Some(value) = patch.show_bookmarks {
             guard.show_bookmarks = value;
-        }
-        if let Some(value) = patch.baidu_appid {
-            guard.baidu_appid = value.trim().to_string();
-        }
-        if let Some(value) = patch.baidu_secret {
-            guard.baidu_secret = value.trim().to_string();
         }
         if let Some(value) = patch.keep_alive_hosts {
             guard.keep_alive_hosts = value.trim().to_string();
