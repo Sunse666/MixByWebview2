@@ -26,8 +26,9 @@ pub fn set_bounds(webview: &Webview, x: f64, y: f64, w: f64, h: f64) -> tauri::R
 
 pub const PRIMARY: &str = "w1";
 
-/// The MIX_* hooks exist for tests and manual probing. They are inert unless
-/// this switch is set, so a release build cannot be driven by a stray variable.
+/// The MIX_* hooks exist for tests and manual probing. They are compiled out of
+/// a release build, so a stray environment variable cannot drive one.
+#[cfg(debug_assertions)]
 fn debug_hooks() -> bool {
     std::env::var("MIX_DEBUG").is_ok_and(|value| value != "0")
 }
@@ -96,8 +97,11 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
 
     crate::downloads::start_progress_watch(app.handle().clone());
     crate::snap::install_hotkeys(app.handle());
-    debug_ext_toggle(app.handle());
-    debug_gesture_test(app.handle());
+    #[cfg(debug_assertions)]
+    {
+        debug_ext_toggle(app.handle());
+        debug_gesture_test(app.handle());
+    }
     crate::tray::install(&app.handle().clone())?;
     // Debug helper: MIX_OPEN_ON_START=settings opens that overlay shortly after
     // startup. Opening it inside setup deadlocks the page: the main thread is
@@ -135,6 +139,7 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
 
     // Debug helper: MIX_FULLSCREEN=1 reports a fullscreen page, so the strip hiding
     // can be checked without a video that asks for it.
+    #[cfg(debug_assertions)]
     if debug_hooks() && std::env::var("MIX_FULLSCREEN").is_ok() {
         let handle = app.handle().clone();
         std::thread::spawn(move || {
@@ -170,6 +175,7 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
     }
 
     // Support hook: MIX_TRANSLATE=1 runs the translator on the current page.
+    #[cfg(debug_assertions)]
     if debug_hooks() && std::env::var("MIX_TRANSLATE").is_ok() {
         let handle = app.handle().clone();
         std::thread::spawn(move || {
@@ -203,6 +209,7 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
 
     // Support hook: MIX_DOM_PUSH=1 appends a paragraph later, so the observer that
     // picks up dynamic content can be exercised without a real feed.
+    #[cfg(debug_assertions)]
     if debug_hooks() && std::env::var("MIX_DOM_PUSH").is_ok() {
         let handle = app.handle().clone();
         std::thread::spawn(move || {
@@ -225,6 +232,7 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
 
     // Support hook: MIX_TOGGLE_EXT=1 hides the first extension after startup, so
     // the live settings path can be checked without a click.
+    #[cfg(debug_assertions)]
     if debug_hooks() && std::env::var("MIX_TOGGLE_EXT").is_ok() {
         let handle = app.handle().clone();
         std::thread::spawn(move || {
@@ -261,6 +269,7 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
 
     // Support hook: MIX_SAVE_URL=<url> saves that file, so the download path
     // can be checked without a right click.
+    #[cfg(debug_assertions)]
     if debug_hooks() {
         if let Ok(url) = std::env::var("MIX_SAVE_URL") {
         let handle = app.handle().clone();
@@ -281,6 +290,7 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
 
     // Support hook: MIX_NAV=1 navigates the first tab to a dead host, so the
     // "unreachable" path can be checked without typing.
+    #[cfg(debug_assertions)]
     if debug_hooks() && std::env::var("MIX_NAV").is_ok() {
         let handle = app.handle().clone();
         std::thread::spawn(move || {
@@ -303,6 +313,7 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
     }
 
     // Support hook: MIX_ERROR_PAGE=1 shows the error page so it can be reviewed.
+    #[cfg(debug_assertions)]
     if debug_hooks() && std::env::var("MIX_ERROR_PAGE").is_ok() {
         let handle = app.handle().clone();
         std::thread::spawn(move || {
@@ -322,6 +333,7 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
 
     // Support hook: MIX_DEVTOOLS=1 runs the devtools shortcut, so a broken F12
     // can be told apart from a broken key path.
+    #[cfg(debug_assertions)]
     if debug_hooks() && std::env::var("MIX_DEVTOOLS").is_ok() {
         let handle = app.handle().clone();
         std::thread::spawn(move || {
@@ -669,6 +681,7 @@ pub fn relayout(app: &AppHandle, label: &str) -> Result<(), tauri::Error> {
 
 /// Debug hook: toggles one extension and logs the outcome, so the COM path can
 /// be checked without clicking. Inert unless MIX_DEBUG is set.
+#[cfg(debug_assertions)]
 fn debug_ext_toggle(app: &tauri::AppHandle) {
     if !debug_hooks() {
         return;
@@ -698,6 +711,7 @@ fn debug_ext_toggle(app: &tauri::AppHandle) {
 
 /// Debug hook: runs a synthetic left gesture in the active tab and logs which
 /// action reached the backend. Inert unless MIX_DEBUG is set.
+#[cfg(debug_assertions)]
 fn debug_gesture_test(app: &tauri::AppHandle) {
     if !debug_hooks() {
         return;
@@ -728,7 +742,6 @@ fn debug_gesture_test(app: &tauri::AppHandle) {
         }
     });
 }
-
 
 
 
