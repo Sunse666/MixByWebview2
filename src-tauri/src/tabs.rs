@@ -342,7 +342,16 @@ pub fn create(
     let nav_app = app.clone();
     let owner = crate::ipc::window_of_tab(id).to_string();
     let target = parse_url(url).unwrap_or_else(|| "about:blank".parse().expect("static url"));
+    // Hiding and showing a webview repaints it, and the paint used to be white:
+    // switching tabs flashed. Giving the webview the theme's own background makes
+    // that repaint invisible instead.
+    let background = win
+        .app_handle()
+        .try_state::<crate::ipc::AppState>()
+        .map(|state| crate::overlay::parse_color(&state.theme.read().colors.bg))
+        .unwrap_or(tauri::window::Color(0x1F, 0x20, 0x20, 0xFF));
     let builder = WebviewBuilder::new(id, WebviewUrl::External(target))
+        .background_color(background)
         // WebView2 keeps ctrl+wheel zoom off unless asked (M0 E2).
         .zoom_hotkeys_enabled(true)
         // Without this wry leaves AreDevToolsEnabled off and open_devtools is a no-op.

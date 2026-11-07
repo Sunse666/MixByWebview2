@@ -1,18 +1,16 @@
 //! Tab preview thumbnails for the hover card.
 //!
-//! Captured through the same DevTools protocol call as the screenshot button, but
-//! with a clip and a scale factor, so the png that comes back is already the size
-//! of the card: no image crate, no resize step, and nothing big enough to matter
-//! in memory. A hidden webview does not render, so the thumbnail is taken when the
-//! tab is still visible - on the way out when it is switched away from, and once
-//! the page finishes loading.
+//! Captured through the same DevTools protocol call as the screenshot button. The
+//! png comes back at full size and the card scales it in css: a clip with a scale
+//! factor would make Chromium re-raster the page, which flashes white on WebView2.
+//!
+//! A hidden webview does not render, so a thumbnail is taken while the tab is
+//! still visible - when it becomes the selected tab - rather than on hover.
 
 use std::collections::HashMap;
 use std::sync::Mutex;
 use tauri::Manager;
 
-/// Preview width in css pixels; the card scales it up to its own size.
-const WIDTH: f64 = 360.0;
 /// A thumbnail older than this is thrown away rather than shown stale forever.
 const MAX_AGE_SECS: u64 = 600;
 
@@ -29,25 +27,18 @@ fn store() -> std::sync::MutexGuard<'static, Option<HashMap<String, Thumb>>> {
 }
 
 /// Takes a preview of whatever the webview is showing right now.
+///
+/// No clip and no scale: asking the protocol to re-raster the page at a smaller
+/// scale makes Chromium rebuild the whole surface, and on WebView2 that shows as
+/// several white frames. The full-size png is scaled down by the card instead,
+/// which costs a little memory and no flicker.
 #[cfg(windows)]
 pub fn capture(webview: &tauri::Webview) -> Option<Vec<u8>> {
-  let metrics = crate::screenshot::call(webview, "Page.getLayoutMetrics", "{}")?;
-  let value: serde_json::Value = serde_json::from_str(&metrics).ok()?;
-  let viewport = value
-    .get("cssVisualViewport")
-    .or_else(|| value.get("visualViewport"))?;
-  let width = viewport.get("clientWidth")?.as_f64()?;
-  let height = viewport.get("clientHeight")?.as_f64()?;
-  if width < 1.0 || height < 1.0 {
-    return None;
-  }
-  let scale = (WIDTH / width).clamp(0.05, 1.0);
-  // The clip is in css pixels and the scale shrinks the raster, so the result is
-  // WIDTH x (height * scale) without any post-processing.
-  let params = format!(
-    r#"{{"format":"png","captureBeyondViewport":false,"optimizeForSpeed":true,"clip":{{"x":0,"y":0,"width":{width},"height":{height},"scale":{scale}}}}}"#
-  );
-  let json = crate::screenshot::call(webview, "Page.captureScreenshot", &params)?;
+  let json = crate::screenshot::call(
+    webview,
+    "Page.captureScreenshot",
+    r#"{"format":"png","captureBeyondViewport":false,"optimizeForSpeed":true}"#,
+  )?;
   let value: serde_json::Value = serde_json::from_str(&json).ok()?;
   let data = value.get("data")?.as_str()?;
   let png = crate::screenshot::decode_base64(data)?;

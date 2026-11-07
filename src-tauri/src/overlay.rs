@@ -36,7 +36,7 @@ fn overlay_builder(app: &AppHandle, label: &str, page: &str) -> WebviewBuilder<t
     builder
 }
 
-fn parse_color(hex: &str) -> tauri::window::Color {
+pub(crate) fn parse_color(hex: &str) -> tauri::window::Color {
     let trimmed = hex.trim_start_matches('#');
     let value = u32::from_str_radix(trimmed, 16).unwrap_or(0x1F2020);
     let (r, g, b) = match trimmed.len() {
