@@ -680,12 +680,42 @@ const SHORTCUT_FORWARDER: &str = r#"
   }, true);
 
   // Sensitive APIs ask the shell first; the prompt is ours, not a browser dialog.
+  // The command answers at once - either with a remembered decision or with a
+  // prompt id - and the answer is collected here so no ipc thread is held while
+  // the user decides.
+  var pollPermission = function (invoke, id) {
+    return new Promise(function (resolve) {
+      var tries = 0;
+      var tick = function () {
+        invoke("permission_poll", { id: id }).then(function (value) {
+          if (typeof value === "boolean") {
+            resolve(value);
+            return;
+          }
+          tries += 1;
+          if (tries > 300) {
+            resolve(false);
+            return;
+          }
+          setTimeout(tick, 200);
+        }).catch(function () { resolve(false); });
+      };
+      tick();
+    });
+  };
+
   var askPermission = function (kind) {
-    if (!window.__TAURI_INTERNALS__ || !window.__TAURI_INTERNALS__.invoke) return Promise.resolve(false);
-    return window.__TAURI_INTERNALS__.invoke("permission_request", {
+    var tauri = window.__TAURI_INTERNALS__;
+    if (!tauri || !tauri.invoke) return Promise.resolve(false);
+    var invoke = function (command, payload) { return tauri.invoke(command, payload); };
+    return invoke("permission_request", {
       origin: location.origin,
       kind: kind
-    }).then(function (allow) { return !!allow; }).catch(function () { return false; });
+    }).then(function (answer) {
+      if (!answer) return false;
+      if (typeof answer.allow === "boolean") return answer.allow;
+      return pollPermission(invoke, answer.id);
+    }).catch(function () { return false; });
   };
 
   if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {

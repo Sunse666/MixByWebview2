@@ -176,6 +176,7 @@ fn main() {
             ipc::autostart_set,
             ipc::permission_request,
             ipc::permission_reply,
+            ipc::permission_poll,
             ipc::menu_context_get,
             ipc::download_list,
             ipc::download_open,

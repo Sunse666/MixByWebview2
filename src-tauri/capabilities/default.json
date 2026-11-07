@@ -99,6 +99,7 @@
     "allow-menu-context-get",
     "allow-permission-request",
     "allow-permission-reply",
+    "allow-permission-poll",
     "allow-snap",
     "allow-settings-get",
     "allow-settings-set",

@@ -1661,20 +1661,32 @@ pub async fn menu_context_get(_window: tauri::Window, state: State<'_, AppState>
     Ok(state.menu_context.read().unwrap_or_else(|e| e.into_inner()).clone())
 }
 
-/// Asked from the page before a sensitive API is used. Waits for the user.
+/// What the page gets back: an answer, or a prompt id to poll.
+#[derive(Serialize)]
+pub struct PermissionAsk {
+    /// Set when this origin and kind were already decided for the session.
+    allow: Option<bool>,
+    /// Set when the user has to be asked; collect it with permission_poll.
+    id: Option<u64>,
+}
+
+/// Asked from the page before a sensitive API is used.
 #[tauri::command]
 pub async fn permission_request(
     app: AppHandle,
     window: tauri::Window,
     origin: String,
     kind: String,
-) -> Result<bool, AppError> {
+) -> Result<PermissionAsk, AppError> {
     let key = crate::permissions::key(&origin, &kind);
     if let Some(known) = crate::permissions::remembered(&app, &key) {
-        return Ok(known);
+        return Ok(PermissionAsk {
+            allow: Some(known),
+            id: None,
+        });
     }
 
-    let (id, receiver) = crate::permissions::open_prompt(&app);
+    let id = crate::permissions::open_prompt(&app, window.label(), &key);
     let win = window_of(&window);
     let (width, _) = crate::window::logical_size(&win)?;
     let prompt_w = 380.0;
@@ -1699,18 +1711,12 @@ pub async fn permission_request(
     .map_err(|err| AppError::new("overlay", err))?;
 
     crate::logging::info(&format!("permission prompt {key}"));
-    let allow = tauri::async_runtime::spawn_blocking(move || {
-        receiver
-            .recv_timeout(std::time::Duration::from_secs(120))
-            .unwrap_or(false)
+    // Nothing waits here: the page polls, so this command returns at once and no
+    // runtime thread is held while the user makes up their mind.
+    Ok(PermissionAsk {
+        allow: None,
+        id: Some(id),
     })
-    .await
-    .unwrap_or(false);
-
-    crate::permissions::remember(&app, &key, allow);
-    crate::overlay::close(&app, window.label());
-    crate::logging::info(&format!("permission {key} -> {allow}"));
-    Ok(allow)
 }
 
 #[tauri::command]
@@ -1725,6 +1731,12 @@ pub async fn permission_reply(
     }
     crate::overlay::close(&app, window.label());
     Ok(())
+}
+
+/// The page asks again until the prompt is answered; null means "not yet".
+#[tauri::command]
+pub async fn permission_poll(app: AppHandle, id: u64) -> Result<Option<bool>, AppError> {
+    Ok(crate::permissions::poll(&app, id))
 }
 
 #[tauri::command]

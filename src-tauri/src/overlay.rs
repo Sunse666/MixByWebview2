@@ -258,7 +258,12 @@ pub fn close(app: &AppHandle, window_label: &str) {
         if let Some(webview) = app.get_webview(&target) {
             let _ = webview.set_focus();
         }
-        // Whatever was changed behind the panel shows up now.
+        // A prompt that is closed without an answer must not leave the page
+        // polling: count it as denied.
+        let cancelled = crate::permissions::cancel_window(app, window_label);
+        if cancelled > 0 {
+            crate::logging::info(&format!("{cancelled} permission prompt(s) dismissed"));
+        }        // Whatever was changed behind the panel shows up now.
         let _ = app.emit_to(
             format!("{window_label}-chrome"),
             "settings:changed",

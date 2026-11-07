@@ -1,16 +1,32 @@
 use crate::ipc::AppState;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::Mutex;
+use std::time::{Duration, Instant};
 use tauri::{AppHandle, Manager};
+
+/// A prompt that was never answered is not worth keeping around.
+const PROMPT_TTL: Duration = Duration::from_secs(300);
+
+/// One outstanding question. The page polls for the answer instead of the
+/// command blocking a thread until the user makes up their mind.
+pub struct Pending {
+    /// Window whose page asked; the answer only belongs to it.
+    pub window: String,
+    /// "origin|kind", remembered once the answer is collected.
+    pub key: String,
+    /// None until the user answers.
+    pub answer: Option<bool>,
+    pub at: Instant,
+}
 
 #[derive(Default)]
 pub struct PermissionStore {
     /// "origin|kind" -> allow
     pub decisions: Mutex<HashMap<String, bool>>,
-    /// Outstanding prompts, answered by permission_reply.
-    pub pending: Mutex<HashMap<u64, Sender<bool>>>,
+    /// Outstanding prompts, answered by permission_reply and collected by
+    /// permission_poll.
+    pub pending: Mutex<HashMap<u64, Pending>>,
 }
 
 static NEXT_ID: AtomicU64 = AtomicU64::new(1);
@@ -39,8 +55,7 @@ pub fn remember(app: &AppHandle, key: &str, allow: bool) {
     decisions.insert(key.to_string(), allow);
 }
 
-pub fn open_prompt(app: &AppHandle) -> (u64, Receiver<bool>) {
-    let (sender, receiver) = channel();
+pub fn open_prompt(app: &AppHandle, window: &str, key: &str) -> u64 {
     let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
     let state = app.state::<AppState>();
     let mut pending = state
@@ -48,22 +63,84 @@ pub fn open_prompt(app: &AppHandle) -> (u64, Receiver<bool>) {
         .pending
         .lock()
         .unwrap_or_else(|e| e.into_inner());
-    pending.insert(id, sender);
-    (id, receiver)
+    pending.retain(|_, prompt| prompt.at.elapsed() < PROMPT_TTL);
+    pending.insert(
+        id,
+        Pending {
+            window: window.to_string(),
+            key: key.to_string(),
+            answer: None,
+            at: Instant::now(),
+        },
+    );
+    id
 }
 
+/// Records the answer; the page collects it on its next poll.
 pub fn answer(app: &AppHandle, id: u64, allow: bool) -> bool {
     let state = app.state::<AppState>();
-    let sender = state
+    let mut pending = state
+        .permissions
+        .pending
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    match pending.get_mut(&id) {
+        Some(prompt) => {
+            prompt.answer = Some(allow);
+            true
+        }
+        None => false,
+    }
+}
+
+/// The answer, once. None means the user has not decided yet; an id nobody
+/// knows about is denied rather than left waiting.
+pub fn poll(app: &AppHandle, id: u64) -> Option<bool> {
+    let (answer, key) = {
+        let state = app.state::<AppState>();
+        let pending = state
+            .permissions
+            .pending
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        match pending.get(&id) {
+            None => return Some(false),
+            Some(prompt) => match prompt.answer {
+                None => return None,
+                Some(answer) => (answer, prompt.key.clone()),
+            },
+        }
+    };
+    // Remembered here so both a user answer and a dismissed prompt are covered,
+    // exactly once per prompt.
+    remember(app, &key, answer);
+    let state = app.state::<AppState>();
+    state
         .permissions
         .pending
         .lock()
         .unwrap_or_else(|e| e.into_inner())
         .remove(&id);
-    match sender {
-        Some(sender) => sender.send(allow).is_ok(),
-        None => false,
+    Some(answer)
+}
+
+/// A prompt whose overlay closed without an answer counts as denied, otherwise
+/// the page would keep polling for something nobody can answer any more.
+pub fn cancel_window(app: &AppHandle, window: &str) -> usize {
+    let state = app.state::<AppState>();
+    let mut pending = state
+        .permissions
+        .pending
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    let mut cancelled = 0;
+    for prompt in pending.values_mut() {
+        if prompt.window == window && prompt.answer.is_none() {
+            prompt.answer = Some(false);
+            cancelled += 1;
+        }
     }
+    cancelled
 }
 
 /// Minimal percent encoding: only alphanumerics and a few safe characters survive.
