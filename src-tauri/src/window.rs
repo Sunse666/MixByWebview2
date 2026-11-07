@@ -9,7 +9,7 @@ use tauri::{
 use crate::ipc::AppState;
 use crate::tabs;
 
-pub const CHROME_H: f64 = 68.0;
+pub const CHROME_H: f64 = 82.0;
 
 pub fn logical_size(win: &Window) -> tauri::Result<(f64, f64)> {
     let size = win.inner_size()?;
