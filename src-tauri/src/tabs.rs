@@ -518,6 +518,8 @@ const SHORTCUT_FORWARDER: &str = r#"
   var EDIT_KEYS = {
     ArrowLeft: "left",
     ArrowRight: "right",
+    ArrowUp: "up",
+    ArrowDown: "down",
     Home: "home",
     End: "end",
     Delete: "delete"

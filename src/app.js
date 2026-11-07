@@ -950,30 +950,72 @@ async function boot() {
   // Address bar autocomplete: the dropdown is a separate overlay webview,
   // because the chrome strip is only 68px tall and would clip it.
   var suggestOpen = false;
+  var suggestItems = [];
+  var suggestIndex = -1;
+  var suggestQuery = "";
+  // The list comes back from the feed, so the arrow keys can walk it here while
+  // the overlay only paints the highlight.
+  var takeSuggestions = (query) => (items) => {
+    suggestItems = Array.isArray(items) ? items : [];
+    suggestIndex = -1;
+    suggestQuery = query;
+  };
+  // An arrow key previews a url in the field; the next keystroke has to start
+  // from what was typed, not from the preview.
+  var restoreQuery = () => {
+    if (suggestIndex < 0) return;
+    suggestIndex = -1;
+    urlInput.value = suggestQuery;
+    urlInput.setSelectionRange(urlInput.value.length, urlInput.value.length);
+  };
+  var moveSuggestion = (step) => {
+    if (!suggestItems.length) return;
+    let next = suggestIndex + step;
+    if (next < 0) next = suggestItems.length - 1;
+    if (next >= suggestItems.length) next = 0;
+    suggestIndex = next;
+    const item = suggestItems[next];
+    urlInput.value = item.url;
+    urlInput.setSelectionRange(item.url.length, item.url.length);
+    invoke("suggest_active", { index: next }).catch(() => {});
+  };
+  var resetSuggestion = () => {
+    suggestIndex = -1;
+    invoke("suggest_active", { index: -1 }).catch(() => {});
+  };
   var feedSuggest = (text) => {
     if (!suggestOpen) {
       suggestOpen = true;
       const box = urlInput.getBoundingClientRect();
       invoke("suggest_open", { x: box.left, width: box.width })
         .then(() => invoke("suggest_feed", { text }))
+        .then(takeSuggestions(text))
         .catch((error) => {
           suggestOpen = false;
           report(`suggest open failed: ${error}`);
         });
       return;
     }
-    invoke("suggest_feed", { text }).catch(() => {});
+    invoke("suggest_feed", { text }).then(takeSuggestions(text)).catch(() => {});
   };
   const closeSuggest = () => {
     if (!suggestOpen) return;
     suggestOpen = false;
+    suggestItems = [];
+    resetSuggestion();
     invoke("overlay_close").catch(() => {});
   };
 
   // The dropdown opens on typing, not on focus: an open dropdown is a separate
   // webview that would swallow the click meant to move focus to the page.
   urlInput.addEventListener("keydown", (event) => {
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      moveSuggestion(event.key === "ArrowDown" ? 1 : -1);
+      return;
+    }
     if (event.key.length === 1 || event.key === "Backspace" || event.key === "Delete") {
+      restoreQuery();
       feedSuggest(urlInput.value);
     }
   });
@@ -983,6 +1025,7 @@ async function boot() {
   // typing arrives as events and is applied here, where the caret and the
   // selection live.
   const urlInsert = (text) => {
+    restoreQuery();
     const start = urlInput.selectionStart ?? urlInput.value.length;
     const end = urlInput.selectionEnd ?? start;
     if (text === "\b") {
@@ -999,6 +1042,10 @@ async function boot() {
     const start = urlInput.selectionStart ?? 0;
     const end = urlInput.selectionEnd ?? start;
     const move = (at) => urlInput.setSelectionRange(at, at);
+    if (key === "down" || key === "up") {
+      moveSuggestion(key === "down" ? 1 : -1);
+      return;
+    }
     if (key === "left") move(end > start ? start : Math.max(0, start - 1));
     else if (key === "right") move(end > start ? end : Math.min(urlInput.value.length, end + 1));
     else if (key === "home") move(0);

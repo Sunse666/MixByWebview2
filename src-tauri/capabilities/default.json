@@ -41,6 +41,7 @@
     "allow-theme-import",
     "allow-suggest-open",
     "allow-suggest-feed",
+    "allow-suggest-active",
     "allow-suggest-refresh",
     "allow-overlay-toggle",
     "allow-download-url",

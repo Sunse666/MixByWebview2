@@ -116,6 +116,7 @@ fn main() {
             ipc::theme_import,
             ipc::suggest_open,
             ipc::suggest_feed,
+            ipc::suggest_active,
             ipc::suggest_refresh,
             ipc::overlay_toggle,
             ipc::download_url,

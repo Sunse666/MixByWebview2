@@ -466,6 +466,15 @@ async function bootSuggest() {
     }
   };
 
+  // The address bar owns the keyboard, so the highlighted row is painted from
+  // there; -1 clears the highlight.
+  window.__mixSuggestActive = (index) => {
+    const rows = [...menu.querySelectorAll(".row")];
+    rows.forEach((row, at) => row.classList.toggle("active", at === index));
+    const active = rows[index];
+    if (active && active.scrollIntoView) active.scrollIntoView({ block: "nearest" });
+  };
+
   await invoke("suggest_refresh").catch(() => {});
 }
 

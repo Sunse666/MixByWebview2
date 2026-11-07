@@ -2136,12 +2136,40 @@ pub async fn suggest_feed(
     window: tauri::Window,
     state: State<'_, AppState>,
     text: String,
-) -> Result<usize, AppError> {
+) -> Result<Vec<Suggestion>, AppError> {
     state
         .suggest_text
         .write()
         .insert(window.label().to_string(), text.clone());
+    // The chrome page keeps the list so the arrow keys can walk it without
+    // asking again, which is what makes the dropdown usable from the keyboard.
     Ok(push_suggestions(&app, window.label(), &state))
+}
+
+/// Highlights one row of the open dropdown; -1 clears it. The address bar keeps
+/// the keyboard, so the selection has to be painted from here.
+#[tauri::command]
+pub async fn suggest_active(
+    app: AppHandle,
+    window: tauri::Window,
+    state: State<'_, AppState>,
+    index: i64,
+) -> Result<(), AppError> {
+    let label = state
+        .overlay
+        .read()
+        .unwrap_or_else(|e| e.into_inner())
+        .get(window.label())
+        .cloned();
+    let Some(label) = label else {
+        return Ok(());
+    };
+    if let Some(webview) = app.get_webview(&label) {
+        let _ = webview.eval(&format!(
+            "window.__mixSuggestActive && window.__mixSuggestActive({index})"
+        ));
+    }
+    Ok(())
 }
 
 /// Re-sends the current suggestions to a page that just finished loading.
@@ -2150,11 +2178,11 @@ pub async fn suggest_refresh(
     app: AppHandle,
     window: tauri::Window,
     state: State<'_, AppState>,
-) -> Result<usize, AppError> {
+) -> Result<Vec<Suggestion>, AppError> {
     Ok(push_suggestions(&app, window.label(), &state))
 }
 
-fn push_suggestions(app: &AppHandle, window_label: &str, state: &AppState) -> usize {
+fn push_suggestions(app: &AppHandle, window_label: &str, state: &AppState) -> Vec<Suggestion> {
     let text = state
         .suggest_text
         .read()
@@ -2173,10 +2201,10 @@ fn push_suggestions(app: &AppHandle, window_label: &str, state: &AppState) -> us
         .cloned();
 
     let Some(label) = label else {
-        return 0;
+        return Vec::new();
     };
     let Some(webview) = app.get_webview(&label) else {
-        return 0;
+        return Vec::new();
     };
 
     let json = serde_json::to_string(&items).unwrap_or_else(|_| "[]".into());
@@ -2186,7 +2214,7 @@ fn push_suggestions(app: &AppHandle, window_label: &str, state: &AppState) -> us
     let width = *state.suggest_width.read();
     let _ = webview.set_size(tauri::LogicalSize::new(width, height));
     let _ = webview.eval(&format!("window.__mixSuggest && window.__mixSuggest({json})"));
-    count
+    items
 }
 
 #[tauri::command]

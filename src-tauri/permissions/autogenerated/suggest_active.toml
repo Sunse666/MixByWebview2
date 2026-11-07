@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-suggest-active"
+description = "Enables the suggest_active command without any pre-configured scope."
+commands.allow = ["suggest_active"]
+
+[[permission]]
+identifier = "deny-suggest-active"
+description = "Denies the suggest_active command without any pre-configured scope."
+commands.deny = ["suggest_active"]
