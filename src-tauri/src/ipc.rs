@@ -291,8 +291,6 @@ pub fn focused_window(app: &AppHandle) -> Option<tauri::Window> {
 }
 
 /// The menu bar sits between the tab strip and the address field.
-/// The menu bar was removed; kept at zero so old settings cannot add a gap.
-pub const MENU_BAR_HEIGHT: f64 = 0.0;
 
 /// Height of the chrome strip: the base plus the optional bookmarks row.
 pub fn chrome_height(app: &AppHandle) -> f64 {
