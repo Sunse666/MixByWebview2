@@ -29,7 +29,7 @@ mod window;
 
 use tauri::Manager;
 
-// embed bump 127
+// embed bump 128
 fn main() {
     let dirs = paths::AppDirs::resolve().ensure();
     logging::init(&dirs.logs);

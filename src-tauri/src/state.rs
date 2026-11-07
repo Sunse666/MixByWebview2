@@ -76,6 +76,8 @@ pub struct Settings {
     pub menu_bar: bool,
     /// Interface language: "en" or "zh".
     pub language: String,
+    /// Suspend tabs beyond the live limit to give memory back.
+    pub memory_saver: bool,
     pub max_live_tabs: usize,
     pub download_dir: Option<String>,
 }
@@ -126,6 +128,7 @@ impl Default for Settings {
             new_tab_page: true,
             menu_bar: true,
             language: "en".into(),
+            memory_saver: true,
             max_live_tabs: 12,
             download_dir: None,
         }

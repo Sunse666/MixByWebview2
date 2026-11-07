@@ -166,6 +166,7 @@ pub struct SettingsPatch {
     pub custom_search: Option<String>,
     pub gestures: Option<bool>,
     pub super_drag: Option<bool>,
+    pub memory_saver: Option<bool>,
     pub drag_hint: Option<bool>,
     pub drag_threshold: Option<u32>,
     pub drag_map: Option<std::collections::BTreeMap<String, String>>,
@@ -405,6 +406,13 @@ pub(crate) fn sync_visibility(app: &AppHandle, label: &str) {
 
 /// Drop the least recently used background tab once too many are alive.
 pub(crate) fn enforce_live_limit(app: &AppHandle, label: &str) {
+    if !app
+        .try_state::<AppState>()
+        .map(|state| state.settings.read().memory_saver)
+        .unwrap_or(false)
+    {
+        return;
+    }
     loop {
         let victim = {
             let state = app.state::<AppState>();
@@ -1581,6 +1589,9 @@ pub async fn settings_set(
         }
         if let Some(value) = patch.baidu_secret {
             guard.baidu_secret = value.trim().to_string();
+        }
+        if let Some(value) = patch.memory_saver {
+            guard.memory_saver = value;
         }
         if let Some(value) = patch.drag_hint {
             guard.drag_hint = value;
