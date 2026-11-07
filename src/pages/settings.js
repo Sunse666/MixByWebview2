@@ -1,161 +1,15 @@
 import { setLanguage, t } from "../i18n.js";
+import { row, toggle, switchEl } from "./settings/ui.js";
+import { addNavItem, groupSections } from "./settings/shell.js";
+import { buildGestures } from "./settings/sections/gestures.js";
+import { buildDrag } from "./settings/sections/drag.js";
+import { buildShortcuts } from "./settings/sections/shortcuts.js";
+import { TOOLBAR_CHOICES, DEFAULT_TOOLBAR } from "./settings/tables.js";
 
 const { invoke } = window.__TAURI__.core;
 
 const nav = document.getElementById("nav");
 const main = document.getElementById("main");
-
-function navItem(glyph, label, active, page) {
-  const item = document.createElement("div");
-  item.className = "nav-item" + (active ? " active" : "");
-  const icon = document.createElement("span");
-  icon.textContent = glyph;
-  const text = document.createElement("span");
-  text.textContent = t(label);
-  item.append(icon, text);
-  if (page) {
-    item.addEventListener("click", () => {
-      invoke("tab_navigate", { url: page }).catch(() => invoke("tab_new", { url: page }).catch(() => {}));
-    });
-  }
-  nav.append(item);
-}
-
-function row(title, detail, control) {
-  const line = document.createElement("div");
-  line.className = "entry";
-  const text = document.createElement("span");
-  text.className = "title";
-  text.textContent = t(title);
-  if (detail) text.title = detail;
-  line.append(text);
-  if (control) line.append(control);
-  return line;
-}
-
-function themePreview() {
-  const holder = document.createElement("div");
-  holder.className = "card-actions";
-  const edit = document.createElement("button");
-  edit.className = "button";
-  edit.textContent = t("Edit");
-  edit.addEventListener("click", () => openThemeEditor(holder));
-  holder.append(edit);
-  return holder;
-}
-
-async function openThemeEditor(holder) {
-  const theme = await invoke("theme_get").catch(() => null);
-  if (!theme) return;
-
-  holder.replaceChildren();
-
-  const draft = {
-    colors: { ...theme.colors },
-    radius: theme.radius,
-    tab_radius: theme.tab_radius,
-    font_size: theme.font_size,
-    font_family: theme.font_family,
-  };
-
-  const fields = [
-    ["Background", "bg"],
-    ["Chrome", "chrome"],
-    ["Accent", "accent"],
-    ["Text", "text"],
-    ["Border", "border"],
-    ["Tab", "tab"],
-    ["URL field", "url_bg"],
-  ];
-
-  for (const [label, key] of fields) {
-    const input = document.createElement("input");
-    input.type = "text";
-    input.className = "hex";
-    input.value = draft.colors[key] || "";
-    input.placeholder = "#RRGGBB";
-    input.addEventListener("input", () => {
-      draft.colors[key] = input.value.trim();
-    });
-    holder.append(row(label, "", input));
-  }
-
-  for (const [label, key, min, max] of [
-    ["Corner radius", "radius", 0, 20],
-    ["Tab radius", "tab_radius", 0, 20],
-    ["Font size", "font_size", 11, 20],
-  ]) {
-    const input = document.createElement("input");
-    input.type = "number";
-    input.className = "num";
-    input.min = String(min);
-    input.max = String(max);
-    input.value = String(draft[key]);
-    input.addEventListener("input", () => {
-      draft[key] = Number(input.value);
-    });
-    holder.append(row(label, "", input));
-  }
-
-  const save = document.createElement("button");
-  save.className = "button";
-  save.textContent = t("Save");
-  save.addEventListener("click", async () => {
-    await invoke("theme_apply", { theme: draft, persist: true }).catch(() => {});
-    holder.replaceChildren(save);
-    holder.firstChild.remove();
-    holder.append(editButton(holder));
-  });
-
-  const reset = document.createElement("button");
-  reset.className = "button";
-  reset.textContent = t("Cancel");
-  reset.addEventListener("click", () => holder.replaceChildren(editButton(holder)));
-
-  const actions = document.createElement("div");
-  actions.className = "card-actions";
-  actions.append(save, reset);
-  holder.append(actions);
-
-  // live preview while editing: applied but not written to theme.json yet
-  const preview = () => invoke("theme_apply", { theme: draft, persist: false }).catch(() => {});
-  holder.addEventListener("input", preview);
-}
-
-function editButton(holder) {
-  const edit = document.createElement("button");
-  edit.className = "button";
-  edit.textContent = t("Edit");
-  edit.addEventListener("click", () => openThemeEditor(holder));
-  return edit;
-}
-
-function toggle(on, onChange) {
-  const button = document.createElement("button");
-  button.className = "switch";
-  button.setAttribute("role", "switch");
-  button.setAttribute("aria-checked", String(on));
-  button.addEventListener("click", async () => {
-    const next = button.getAttribute("aria-checked") !== "true";
-    button.setAttribute("aria-checked", String(next));
-    await onChange(next);
-  });
-  return button;
-}
-
-/** Shared pill switch, so no row falls back to a bare checkbox. */
-function switchEl(checked, onChange) {
-  const button = document.createElement("button");
-  button.className = "switch";
-  button.setAttribute("role", "switch");
-  button.setAttribute("aria-checked", String(Boolean(checked)));
-  button.addEventListener("click", () => {
-    const next = button.getAttribute("aria-checked") !== "true";
-    button.setAttribute("aria-checked", String(next));
-    onChange(next);
-  });
-  return button;
-}
 
 async function boot() {
   let settings = await invoke("settings_get").catch(() => null);
@@ -166,10 +20,10 @@ async function boot() {
     history: "http://tauri.localhost/pages/history.html",
     extensions: "http://tauri.localhost/pages/extensions.html",
   };
-  navItem("⟲", "History", false, pages.history);
-  navItem("☆", "Bookmarks", false, null);
-  navItem("⧉", "Extensions", false, pages.extensions);
-  navItem("⚙", "Settings", true, null);
+  addNavItem(nav, "⟲", "History", false, pages.history);
+  addNavItem(nav, "☆", "Bookmarks", false, null);
+  addNavItem(nav, "⧉", "Extensions", false, pages.extensions);
+  addNavItem(nav, "⚙", "Settings", true, null);
 
   const head = document.createElement("h2");
   head.textContent = t("Settings");
@@ -586,191 +440,6 @@ async function boot() {
     return row(t(label), t(note), control);
   };
 
-  const GESTURE_ACTIONS = {
-    back: "Back",
-    forward: "Forward",
-    reload: "Reload",
-    close_tab: "Close tab",
-    new_tab: "New tab",
-    new_incognito: "New incognito tab",
-    reopen_tab: "Reopen closed tab",
-    next_tab: "Next tab",
-    prev_tab: "Previous tab",
-    new_window: "New window",
-    bookmark: "Bookmark this page",
-    focus_url: "Focus the address bar",
-    downloads: "Downloads",
-    fullscreen: "Fullscreen",
-    devtools: "Dev tools",
-    zoom_in: "Zoom in",
-    scroll_top: "Scroll to top",
-    scroll_bottom: "Scroll to bottom",
-    stop: "Stop loading",
-    duplicate_tab: "Duplicate this tab",
-    close_other_tabs: "Close the other tabs",
-    toggle_pin: "Pin or unpin this tab",
-    copy_url: "Copy the page url",
-    open_home: "Open the home page",
-    open_history: "Open history",
-    open_bookmarks: "Open bookmarks",
-    open_downloads: "Open downloads",
-    open_extensions: "Open extensions",
-    open_settings: "Open settings",
-    translate: "Translate this page",
-    zoom_out: "Zoom out",
-    zoom_reset: "Reset the zoom",
-    minimize: "Minimise",
-    maximize: "Maximise or restore",
-    close_window: "Close the window",
-    none: "Nothing",
-  };
-  const PATTERNS = [
-    ["U", "↑"],
-    ["D", "↓"],
-    ["L", "←"],
-    ["R", "→"],
-    ["UD", "↑↓"],
-    ["DU", "↓↑"],
-    ["LR", "←→"],
-    ["RL", "→←"],
-    ["UR", "↑→"],
-    ["DL", "↓←"],
-    ["UL", "↑←"],
-    ["DR", "↓→"],
-  ];
-  const DEFAULTS_GESTURE = {
-    U: "scroll_top",
-    D: "scroll_bottom",
-    L: "back",
-    R: "forward",
-    UD: "reload",
-    DU: "reopen_tab",
-    LR: "next_tab",
-    RL: "prev_tab",
-    UR: "new_tab",
-    DL: "close_tab",
-    UL: "bookmark",
-    DR: "downloads",
-  };
-  const gestureMap = { ...DEFAULTS_GESTURE, ...(settings.gesture_map || {}) };
-
-  const gestureCard = document.createElement("div");
-  gestureCard.className = "card";
-  gestureCard.style.maxWidth = "720px";
-
-  gestureCard.append(
-    tabToggle("Enable mouse gestures", "Right button drag", settings.gestures, "gestures"),
-    tabToggle("Show the trail", "Draw the path while dragging", settings.gesture_trail, "gesture_trail"),
-  );
-
-  const color = document.createElement("input");
-  color.type = "color";
-  color.value = settings.gesture_color || "#4c8dff";
-  color.style.width = "64px";
-  color.style.height = "28px";
-  color.style.border = "1px solid #3c4043";
-  color.style.borderRadius = "6px";
-  color.style.background = "transparent";
-  color.addEventListener("change", async () => {
-    await invoke("settings_set", { patch: { gesture_color: color.value } }).catch(() => {});
-  });
-  gestureCard.append(row(t("Trail colour"), "", color));
-
-  const width = document.createElement("input");
-  width.type = "range";
-  width.min = "1";
-  width.max = "10";
-  width.value = String(settings.gesture_width ?? 3);
-  width.style.width = "220px";
-  const widthValue = document.createElement("span");
-  widthValue.className = "card-note";
-  widthValue.textContent = width.value;
-  width.addEventListener("input", () => {
-    widthValue.textContent = width.value;
-  });
-  width.addEventListener("change", async () => {
-    await invoke("settings_set", { patch: { gesture_width: Number(width.value) } }).catch(() => {});
-  });
-  const widthHolder = document.createElement("div");
-  widthHolder.style.display = "flex";
-  widthHolder.style.gap = "10px";
-  widthHolder.style.alignItems = "center";
-  widthHolder.append(width, widthValue);
-  gestureCard.append(row(t("Trail width"), "", widthHolder));
-
-  const threshold = document.createElement("input");
-  threshold.type = "range";
-  threshold.min = "10";
-  threshold.max = "120";
-  threshold.value = String(settings.gesture_threshold ?? 34);
-  threshold.style.width = "220px";
-  const thresholdValue = document.createElement("span");
-  thresholdValue.className = "card-note";
-  thresholdValue.textContent = threshold.value;
-  threshold.addEventListener("input", () => {
-    thresholdValue.textContent = threshold.value;
-  });
-  threshold.addEventListener("change", async () => {
-    await invoke("settings_set", {
-      patch: { gesture_threshold: Number(threshold.value) },
-    }).catch(() => {});
-  });
-  const thresholdHolder = document.createElement("div");
-  thresholdHolder.style.display = "flex";
-  thresholdHolder.style.gap = "10px";
-  thresholdHolder.style.alignItems = "center";
-  thresholdHolder.append(threshold, thresholdValue);
-  gestureCard.append(row(t("Threshold"), "Pixels before a direction counts", thresholdHolder));
-
-  const grid = document.createElement("div");
-  grid.style.display = "grid";
-  grid.style.gridTemplateColumns = "repeat(2, 1fr)";
-  grid.style.gap = "10px";
-  grid.style.padding = "14px 18px";
-
-  for (const [pattern, glyph] of PATTERNS) {
-    const cell = document.createElement("div");
-    cell.style.display = "flex";
-    cell.style.alignItems = "center";
-    cell.style.gap = "8px";
-
-    const drawn = document.createElement("span");
-    drawn.textContent = glyph;
-    drawn.style.width = "30px";
-    drawn.style.color = "#8ab4f8";
-    drawn.style.fontSize = "13px";
-
-    const select = document.createElement("select");
-    select.className = "button";
-    select.style.flex = "1";
-    for (const [id, label] of Object.entries(GESTURE_ACTIONS)) {
-      const option = document.createElement("option");
-      option.value = id;
-      option.textContent = t(label);
-      if ((gestureMap[pattern] || "none") === id) option.selected = true;
-      select.append(option);
-    }
-    select.addEventListener("change", async () => {
-      await invoke("settings_set", {
-        patch: { gesture_map: { ...gestureMap, [pattern]: select.value } },
-      }).catch(() => {});
-    });
-
-    cell.append(drawn, select);
-    grid.append(cell);
-  }
-  gestureCard.append(grid);
-
-  const blocked = document.createElement("input");
-  blocked.className = "hex";
-  blocked.style.width = "420px";
-  blocked.placeholder = "example.com, another.com";
-  blocked.value = settings.gesture_blocked || "";
-  blocked.addEventListener("change", async () => {
-    await invoke("settings_set", { patch: { gesture_blocked: blocked.value } }).catch(() => {});
-  });
-  gestureCard.append(row(t("Disable on these hosts"), "Comma separated", blocked));
-
   tabsCard.append(
     tabToggle(
       "Double click closes a tab",
@@ -791,108 +460,12 @@ async function boot() {
       "tab_close_goes_left",
     ),
   );
-  const dragHead = document.createElement("h2");
-  dragHead.textContent = t("Super drag");
-  dragHead.style.margin = "18px 0 10px";
 
-  const dragCard = document.createElement("div");
-  dragCard.className = "card";
-  dragCard.style.maxWidth = "720px";
-  const dragSwitch = switchEl(settings.super_drag !== false, async (next) => {
-    await invoke("settings_set", { patch: { super_drag: next } }).catch(() => {});
-  });
-  const hintSwitch = switchEl(settings.drag_hint !== false, async (next) => {
-    await invoke("settings_set", { patch: { drag_hint: next } }).catch(() => {});
-  });
-
-  const dragThreshold = document.createElement("input");
-  dragThreshold.type = "range";
-  dragThreshold.min = "8";
-  dragThreshold.max = "120";
-  dragThreshold.value = String(settings.drag_threshold ?? 28);
-  dragThreshold.style.width = "220px";
-  const dragValue = document.createElement("span");
-  dragValue.className = "card-note";
-  dragValue.textContent = dragThreshold.value;
-  dragThreshold.addEventListener("input", () => {
-    dragValue.textContent = dragThreshold.value;
-  });
-  dragThreshold.addEventListener("change", async () => {
-    await invoke("settings_set", {
-      patch: { drag_threshold: Number(dragThreshold.value) },
-    }).catch(() => {});
-  });
-  const dragHolder = document.createElement("div");
-  dragHolder.style.display = "flex";
-  dragHolder.style.gap = "10px";
-  dragHolder.style.alignItems = "center";
-  dragHolder.append(dragThreshold, dragValue);
-
-  dragCard.append(
-    row(
-      t("Enable super drag"),
-      t("Drag a link to open it, drag selected text to search it"),
-      dragSwitch,
-    ),
-    row(t("Show the drag badge"), "", hintSwitch),
-    row(t("Threshold"), "", dragHolder),
-  );
-
-  const DRAG_ACTIONS = {
-    none: "Nothing",
-    open: "Open in a new tab",
-    open_background: "Open in a background tab",
-    copy: "Copy to the clipboard",
-    copy_link_text: "Copy the link text",
-    copy_link_both: "Copy the link text and url",
-    search: "Search the text",
-    search_in_site: "Search this site for the text",
-    copy_sel_and_url: "Copy the text and the page url",
-    find_next: "Find the text (next)",
-    find_prev: "Find the text (previous)",
-    save: "Save the target",
-  };
-  const DRAG_DEFAULTS = { L: "open", R: "search", U: "copy", D: "save" };
-  const dragMap = { ...DRAG_DEFAULTS, ...(settings.drag_map || {}) };
-  const dragGrid = document.createElement("div");
-  dragGrid.style.display = "grid";
-  dragGrid.style.gridTemplateColumns = "repeat(2, 1fr)";
-  dragGrid.style.gap = "10px";
-  dragGrid.style.padding = "14px 18px";
-
-  for (const [dir, glyph] of [["U", "↑"], ["D", "↓"], ["L", "←"], ["R", "→"]]) {
-    const cell = document.createElement("div");
-    cell.style.display = "flex";
-    cell.style.alignItems = "center";
-    cell.style.gap = "8px";
-    const drawn = document.createElement("span");
-    drawn.textContent = glyph;
-    drawn.style.width = "30px";
-    drawn.style.color = "#8ab4f8";
-    const select = document.createElement("select");
-    select.className = "button";
-    select.style.flex = "1";
-    for (const [id, label] of Object.entries(DRAG_ACTIONS)) {
-      const option = document.createElement("option");
-      option.value = id;
-      option.textContent = t(label);
-      if ((dragMap[dir] || "none") === id) option.selected = true;
-      select.append(option);
-    }
-    select.addEventListener("change", async () => {
-      await invoke("settings_set", {
-        patch: { drag_map: { ...dragMap, [dir]: select.value } },
-      }).catch(() => {});
-    });
-    cell.append(drawn, select);
-    dragGrid.append(cell);
-  }
-  dragCard.append(dragGrid);
-
-  const gesturesHead = document.createElement("h2");
-  gesturesHead.textContent = t("Mouse gestures");
-  gesturesHead.style.margin = "18px 0 10px";
-  main.append(tabsCard, dragHead, dragCard, gesturesHead, gestureCard);
+  // The gesture and drag sections live in their own modules: they are mostly
+  // tables, and this file only has to place them.
+  main.append(tabsCard);
+  main.append(...buildDrag({ settings, invoke }));
+  main.append(...buildGestures({ settings, invoke }));
 
   const newtabHead = document.createElement("h2");
   newtabHead.textContent = t("New tab page");
@@ -956,85 +529,8 @@ async function boot() {
   );
   main.append(newtabCard);
 
-  const keysHead = document.createElement("h2");
-  keysHead.textContent = t("Shortcuts");
-  keysHead.style.margin = "18px 0 10px";
-  main.append(keysHead);
-
-  const keysCard = document.createElement("div");
-  keysCard.className = "card";
-  keysCard.style.maxWidth = "720px";
-
-  const ACTIONS = {
-    new_tab: "New tab",
-    close_tab: "Close tab",
-    reopen_tab: "Reopen tab",
-    next_tab: "Next tab",
-    prev_tab: "Previous tab",
-    focus_url: "Focus address bar",
-    reload: "Reload",
-    fullscreen: "Fullscreen",
-    zoom_in: "Zoom in",
-    zoom_out: "Zoom out",
-    zoom_reset: "Reset zoom",
-    downloads: "Downloads",
-    bookmark: "Bookmark this page",
-    devtools: "Dev tools",
-  };
-  const DEFAULTS = {
-    new_tab: "ctrl+t",
-    close_tab: "ctrl+w",
-    reopen_tab: "ctrl+shift+t",
-    next_tab: "ctrl+tab",
-    prev_tab: "ctrl+shift+tab",
-    focus_url: "ctrl+l",
-    reload: "ctrl+r",
-    fullscreen: "f11",
-    zoom_in: "ctrl+=",
-    zoom_out: "ctrl+-",
-    zoom_reset: "ctrl+0",
-    downloads: "ctrl+j",
-    bookmark: "ctrl+d",
-    devtools: "f12",
-  };
-  const current = { ...DEFAULTS, ...(settings.shortcuts || {}) };
-  const saved = { ...(settings.shortcuts || {}) };
-
-  const conflict = document.createElement("div");
-  conflict.className = "card-note";
-
-  const checkConflicts = () => {
-    const seen = new Map();
-    const dupes = new Set();
-    for (const [action, combo] of Object.entries(current)) {
-      if (!combo) continue;
-      if (seen.has(combo)) dupes.add(combo);
-      seen.set(combo, action);
-    }
-    conflict.textContent = dupes.size
-      ? t("These combos are used twice") + ": " + [...dupes].join(", ")
-      : "";
-  };
-
-  for (const [action, label] of Object.entries(ACTIONS)) {
-    const input = document.createElement("input");
-    input.className = "hex";
-    input.style.width = "160px";
-    input.value = current[action] || "";
-    input.placeholder = DEFAULTS[action] || "";
-    input.addEventListener("change", async () => {
-      const combo = input.value.trim().toLowerCase();
-      current[action] = combo;
-      if (combo && combo !== DEFAULTS[action]) saved[action] = combo;
-      else delete saved[action];
-      checkConflicts();
-      await invoke("settings_set", { patch: { shortcuts: saved } }).catch(() => {});
-    });
-    keysCard.append(row(t(label), DEFAULTS[action] || "", input));
-  }
-
-  keysCard.append(conflict);
-  main.append(keysCard);
+  // Shortcut fields and the duplicate warning live in their own module.
+  main.append(...buildShortcuts({ settings, invoke }));
   checkConflicts();
 
   const backupHead = document.createElement("h2");
@@ -1113,19 +609,6 @@ async function boot() {
 
   // The strip draws these from settings.toolbar, and the order in that array is
   // the order they appear in, so a position is just an index.
-  const TOOLBAR_CHOICES = [
-    ["home", "Home"],
-    ["reopen", "Reopen closed tab"],
-    ["mute", "Mute tab"],
-    ["shot", "Take a screenshot"],
-    ["translate", "Translate this page"],
-    ["zoom", "Zoom"],
-    ["bookmark", "Bookmark this page"],
-    ["find", "Find in page"],
-    ["extensions", "Extensions"],
-    ["downloads", "Downloads"],
-  ];
-  const DEFAULT_TOOLBAR = ["translate", "zoom", "bookmark", "extensions", "downloads"];
   const toolbarIds = () =>
     Array.isArray(settings.toolbar) && settings.toolbar.length
       ? [...settings.toolbar]
@@ -1175,94 +658,9 @@ async function boot() {
   resetRow.append(toolbarReset);
   toolbarCard.append(resetRow);
 
-
   themeCard.append(toolbarHead, ...toolbarCard.childNodes);
 }
 
-/**
- * The page is built as a flat list of h2 + card pairs; this folds them into
- * sections and puts a category list in the sidebar.
- */
-function groupSections() {
-  const groups = [];
-  let current = null;
-
-  for (const child of [...main.children]) {
-    if (child.tagName === "H2") {
-      current = { title: child.textContent, nodes: [] };
-      groups.push(current);
-      main.removeChild(child);
-      continue;
-    }
-    if (!current) continue;
-    current.nodes.push(child);
-    main.removeChild(child);
-  }
-
-  const order = groups.filter((group) => group.nodes.length);
-  const panels = [];
-
-  for (const group of order) {
-    const panel = document.createElement("section");
-    panel.className = "section";
-    panel.dataset.key = group.title;
-    const head = document.createElement("h2");
-    head.textContent = group.title;
-    panel.append(head, ...group.nodes);
-    main.append(panel);
-    panels.push(panel);
-  }
-
-  const show = (key) => {
-    for (const panel of panels) panel.hidden = panel.dataset.key !== key;
-    for (const link of nav.querySelectorAll(".nav-section")) {
-      link.classList.toggle("active", link.dataset.key === key);
-    }
-    main.scrollTop = 0;
-  };
-
-  const divider = document.createElement("div");
-  divider.className = "nav-divider";
-  nav.append(divider);
-
-  const preferred = [
-    "Startup",
-    "Performance",
-    "Appearance",
-    "New tab page",
-    "Tab settings",
-    "Super drag",
-    "Mouse gestures",
-    "Shortcuts",
-    "Backup",
-    "Default browser",
-    "Clear browsing data",
-  ];
-  const rank = (key) => {
-    const index = preferred.findIndex((name) => name === key || t(name) === key);
-    return index < 0 ? 99 : index;
-  };
-  panels.sort((a, b) => rank(a.dataset.key) - rank(b.dataset.key));
-  main.append(...panels);
-
-  for (const panel of panels) {
-    const link = document.createElement("div");
-    link.className = "nav-item nav-section";
-    link.dataset.key = panel.dataset.key;
-    const glyph = document.createElement("span");
-    glyph.textContent = "·";
-    const text = document.createElement("span");
-    text.textContent = panel.dataset.key;
-    link.append(glyph, text);
-    link.addEventListener("click", () => show(panel.dataset.key));
-    nav.append(link);
-  }
-
-  const wanted = decodeURIComponent((location.hash || "").replace(/^#/, ""));
-  const match = panels.find((panel) => panel.dataset.key === wanted);
-  if (panels.length) show(match ? match.dataset.key : panels[0].dataset.key);
-}
-
 boot().then(() => {
-  groupSections();
+  groupSections(nav, main);
 });
