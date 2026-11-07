@@ -170,12 +170,17 @@ impl Settings {
         if self.toolbar.is_empty() {
             self.toolbar = Settings::default().toolbar;
         }
+        // 68 was the default while the strip was still a constant; the chrome page
+        // reports its real height on boot, so only the stale default is moved.
+        if (self.chrome_height - 68.0).abs() < 1.0 {
+            self.chrome_height = Settings::default().chrome_height;
+        }
         self
     }
 
     pub fn save(&self, path: &Path) -> std::io::Result<()> {
         let json = serde_json::to_string_pretty(self)?;
-        std::fs::write(path, json)
+        crate::paths::write_atomic(path, json.as_bytes())
     }
 
     pub fn load(path: &Path) -> Self {

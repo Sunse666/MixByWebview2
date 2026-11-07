@@ -92,7 +92,7 @@ impl Session {
 
     pub fn save(&self, path: &Path) -> std::io::Result<()> {
         let json = serde_json::to_string_pretty(self)?;
-        std::fs::write(path, json)
+        crate::paths::write_atomic(path, json.as_bytes())
     }
 }
 

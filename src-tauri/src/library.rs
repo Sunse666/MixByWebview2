@@ -54,8 +54,24 @@ pub fn load_visits(path: &Path) -> Vec<Visit> {
     };
     match serde_json::from_str::<VisitsFile>(&raw) {
         Ok(file) => file.visits,
-        Err(_) => Vec::new(),
+        Err(err) => {
+            keep_unreadable(path, "history", &err.to_string());
+            Vec::new()
+        }
     }
+}
+
+/// A file that cannot be parsed is moved aside rather than left in place: the
+/// next save would otherwise overwrite it with an empty list and the entries
+/// would be gone for good.
+fn keep_unreadable(path: &Path, what: &str, reason: &str) {
+    let extension = path
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .unwrap_or("json");
+    let backup = path.with_extension(format!("{extension}.corrupt"));
+    crate::logging::warn(&format!("{what} unreadable ({reason}); keeping {}", backup.display()));
+    let _ = std::fs::rename(path, &backup);
 }
 
 pub fn save_visits(path: &Path, visits: &[Visit]) -> std::io::Result<()> {
@@ -63,7 +79,7 @@ pub fn save_visits(path: &Path, visits: &[Visit]) -> std::io::Result<()> {
         schema_version: SCHEMA,
         visits: visits.to_vec(),
     };
-    std::fs::write(path, serde_json::to_string(&file)?)
+    crate::paths::write_atomic(path, serde_json::to_string(&file)?.as_bytes())
 }
 
 /// Newest first, one entry per url, capped so the file stays small.
@@ -85,7 +101,10 @@ pub fn load_bookmarks(path: &Path) -> Vec<Bookmark> {
     };
     match serde_json::from_str::<BookmarksFile>(&raw) {
         Ok(file) => file.bookmarks,
-        Err(_) => Vec::new(),
+        Err(err) => {
+            keep_unreadable(path, "bookmarks", &err.to_string());
+            Vec::new()
+        }
     }
 }
 
@@ -94,7 +113,7 @@ pub fn save_bookmarks(path: &Path, bookmarks: &[Bookmark]) -> std::io::Result<()
         schema_version: SCHEMA,
         bookmarks: bookmarks.to_vec(),
     };
-    std::fs::write(path, serde_json::to_string(&file)?)
+    crate::paths::write_atomic(path, serde_json::to_string(&file)?.as_bytes())
 }
 
 /// Returns true when the page was added, false when it was removed.

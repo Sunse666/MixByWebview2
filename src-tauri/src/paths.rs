@@ -158,3 +158,38 @@ fn fallback_data_dir() -> PathBuf {
     }
     std::env::temp_dir().join("mix")
 }
+/// Writes through a sibling temporary file and renames it into place, so a
+/// crash or a full disk leaves the previous file intact instead of a truncated
+/// one. Every state file goes through here.
+pub fn write_atomic(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    let dir = path.parent().unwrap_or_else(|| Path::new("."));
+    std::fs::create_dir_all(dir)?;
+    let suffix = path
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .unwrap_or("dat");
+    let tmp = path.with_extension(format!("{suffix}.tmp"));
+    {
+        let mut file = std::fs::File::create(&tmp)?;
+        std::io::Write::write_all(&mut file, bytes)?;
+        // The rename is what makes the write visible; the flush only orders it.
+        let _ = file.sync_all();
+    }
+    std::fs::rename(&tmp, path)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_write_replaces_the_previous_file() {
+        let dir = std::env::temp_dir().join("mix-atomic-write");
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("state.json");
+        write_atomic(&path, b"first").unwrap();
+        write_atomic(&path, b"second").unwrap();
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "second");
+        assert!(!path.with_extension("json.tmp").exists());
+    }
+}
