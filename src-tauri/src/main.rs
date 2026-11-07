@@ -16,6 +16,7 @@ mod logging;
 mod overlay;
 mod paths;
 mod permissions;
+mod persist;
 mod platform;
 mod session;
 mod snap;

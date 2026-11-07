@@ -2321,13 +2321,20 @@ pub(crate) fn attach_title(app: &AppHandle, url: &str, title: &str) {
     let Some(state) = app.try_state::<AppState>() else {
         return;
     };
-    // Memory only: the visit was already written when the url changed, and
-    // writing again here meant a second full rewrite of history.json per page.
-    let mut visits = state.history.write().unwrap_or_else(|e| e.into_inner());
-    if let Some(visit) = visits.iter_mut().find(|visit| visit.url == url) {
-        if visit.title != title {
-            visit.title = title.to_string();
+    // The visit is already in memory; this only fills in the title that arrived
+    // after it, and the flusher decides when the file is rewritten.
+    let changed = {
+        let mut visits = state.history.write().unwrap_or_else(|e| e.into_inner());
+        match visits.iter_mut().find(|visit| visit.url == url) {
+            Some(visit) if visit.title != title => {
+                visit.title = title.to_string();
+                true
+            }
+            _ => false,
         }
+    };
+    if changed {
+        crate::persist::touch_history();
     }
 }
 
@@ -2336,13 +2343,21 @@ pub(crate) fn attach_icon(app: &AppHandle, url: &str, icon: &str) {
     let Some(state) = app.try_state::<AppState>() else {
         return;
     };
-    // Memory only; flushed with the rest of history when the app quits.
-    let mut visits = state.history.write().unwrap_or_else(|e| e.into_inner());
-    if let Some(visit) = visits
-        .iter_mut()
-        .find(|visit| visit.url == url && visit.icon.as_deref() != Some(icon))
-    {
-        visit.icon = Some(icon.to_string());
+    let changed = {
+        let mut visits = state.history.write().unwrap_or_else(|e| e.into_inner());
+        match visits
+            .iter_mut()
+            .find(|visit| visit.url == url && visit.icon.as_deref() != Some(icon))
+        {
+            Some(visit) => {
+                visit.icon = Some(icon.to_string());
+                true
+            }
+            None => false,
+        }
+    };
+    if changed {
+        crate::persist::touch_history();
     }
 }
 
@@ -2353,14 +2368,13 @@ pub(crate) fn record_visit(app: &AppHandle, url: &str, title: &str) {
     let Some(state) = app.try_state::<AppState>() else {
         return;
     };
-    let snapshot = {
+    {
         let mut visits = state.history.write().unwrap_or_else(|e| e.into_inner());
         crate::library::push_visit(&mut visits, url, title);
-        visits.clone()
-    };
-    if let Err(err) = crate::library::save_visits(&state.dirs.history_file, &snapshot) {
-        crate::logging::warn(&format!("history save failed: {err}"));
     }
+    // The flusher writes it once the page has stopped moving; quitting flushes
+    // through the same path, so an orderly exit loses nothing.
+    crate::persist::touch_history();
 }
 
 /// Writes history once, for the paths that only touch memory otherwise.
