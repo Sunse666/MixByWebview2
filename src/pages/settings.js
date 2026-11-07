@@ -551,9 +551,9 @@ async function boot() {
   );
   main.append(newtabCard);
 
-  // Shortcut fields and the duplicate warning live in their own module.
+  // Shortcut fields and the duplicate warning live in their own module; it runs
+  // its own duplicate check when the section is built.
   main.append(...buildShortcuts({ settings, invoke }));
-  checkConflicts();
 
   const backupHead = document.createElement("h2");
   backupHead.textContent = t("Backup");
