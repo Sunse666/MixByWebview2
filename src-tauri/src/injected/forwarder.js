@@ -814,18 +814,10 @@
       element: event.target,
       armedAt: Date.now(),
     };
-    // A visible dot on press: it shows the drag was recognised.
-    showBadge('\u00b7');
-    if (badge) {
-      badge.style.left = event.clientX + 14 + 'px';
-      badge.style.top = event.clientY + 14 + 'px';
-    }
-    // Keep the pointer while dragging: the browser would otherwise start its
-    // own drag and stop delivering moves.
-    try {
-      if (event.target.setPointerCapture) event.target.setPointerCapture(event.pointerId);
-    } catch (error) {}
-    event.preventDefault();
+    // Nothing is intercepted here. A plain click has to reach the page: taking
+    // the pointer and cancelling the default on press stopped the site's own
+    // click handler from ever running, so a card that opened a tab on click
+    // only flashed the drag badge instead.
   }, true);
 
   window.addEventListener('dragstart', function (event) {
@@ -843,6 +835,14 @@
     if (!drag.moved) {
       if (Math.abs(dx) < STEP && Math.abs(dy) < STEP) return;
       drag.moved = true;
+      // The gesture is a drag from here on: keep the pointer stream so the page
+      // does not start a native drag, and stop text selection under the cursor.
+      try {
+        if (drag.element && drag.element.setPointerCapture) {
+          drag.element.setPointerCapture(drag.pointer);
+        }
+      } catch (error) {}
+      document.documentElement.style.userSelect = 'none';
       showBadge(drag.text ? '\uD83D\udd0d' : '\u2197');
     }
     if (badge) {
@@ -856,6 +856,7 @@
     var item = drag;
     drag = null;
     hideBadge();
+    document.documentElement.style.userSelect = '';
     try {
       if (item.element && item.element.releasePointerCapture) {
         item.element.releasePointerCapture(item.pointer);
@@ -946,11 +947,13 @@
   window.addEventListener('pointercancel', function () {
     drag = null;
     hideBadge();
+    document.documentElement.style.userSelect = '';
   }, true);
 
   window.addEventListener('blur', function () {
     drag = null;
     hideBadge();
+    document.documentElement.style.userSelect = '';
   });
 })();
 
