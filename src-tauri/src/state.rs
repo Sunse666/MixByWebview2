@@ -47,6 +47,8 @@ pub struct Settings {
     pub gesture_map: std::collections::BTreeMap<String, String>,
     /// Comma or space separated hosts where gestures are off.
     pub gesture_blocked: String,
+    /// dark or light; overrides the theme file colours.
+    pub theme_mode: String,
     /// Font family forced on page text; empty keeps the site font.
     pub font_family: String,
     /// Base font size in pixels, 0 keeps the site size.
@@ -123,6 +125,7 @@ impl Default for Settings {
             gesture_threshold: 34,
             gesture_map: std::collections::BTreeMap::new(),
             gesture_blocked: String::new(),
+            theme_mode: "dark".to_string(),
             font_family: String::new(),
             font_size: 0,
             default_zoom: 1.0,

@@ -241,6 +241,8 @@ const DICT = {
     "Page font size": "网页字号",
     "Empty keeps the site size, restart to apply": "留空使用网站自己的字号，重启生效",
     "Site default": "跟随网站",
+    "Mode": "模式",
+    "Dark or light palette for the interface": "界面配色：深色或浅色",
     "New tab": "新标签页",
     "New incognito tab": "新建无痕标签页",
     "Reopen closed tab": "重新打开关闭的标签页",

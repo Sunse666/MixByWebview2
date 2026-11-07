@@ -41,6 +41,39 @@ function renderDownloads(tasks) {
   }
 }
 
+const LIGHT_THEME = {
+  bg: "#f4f5f7",
+  panel: "#ffffff",
+  border: "#d8dbe0",
+  text: "#1b1d21",
+  muted: "#5f6672",
+  accent: "#2f6fed",
+  tab: "#e7eaef",
+  tabActive: "#ffffff",
+  url: "#eef1f5",
+};
+
+function applyThemeMode(mode) {
+  const root = document.documentElement;
+  if (mode !== "light") {
+    root.style.colorScheme = "dark";
+    return;
+  }
+  root.style.colorScheme = "light";
+  const map = {
+    "--bg": LIGHT_THEME.bg,
+    "--panel": LIGHT_THEME.panel,
+    "--border": LIGHT_THEME.border,
+    "--text": LIGHT_THEME.text,
+    "--muted": LIGHT_THEME.muted,
+    "--accent": LIGHT_THEME.accent,
+    "--tab": LIGHT_THEME.tab,
+    "--tab-active": LIGHT_THEME.tabActive,
+    "--url-bg": LIGHT_THEME.url,
+  };
+  for (const [key, value] of Object.entries(map)) root.style.setProperty(key, value);
+}
+
 function applyTheme(theme) {
   const s = root.style;
   s.setProperty("--bg", theme.colors.bg);
@@ -778,6 +811,8 @@ async function boot() {
   setTabs(await invoke("tab_list"));
 
   // Report the real strip height: DPI rounding otherwise leaves an empty band.
+  applyThemeMode(settings.theme_mode || "dark");
+
   const fitStrip = () => {
     const rect = document.body.getBoundingClientRect();
     const height = Math.round(rect.height);

@@ -410,8 +410,23 @@ async function boot() {
   const themeText = document.createElement("div");
   themeText.className = "card-note";
   themeText.textContent = t("theme.json can be shared with the same folder layout");
+  const modeSelect = document.createElement("select");
+  modeSelect.className = "button";
+  for (const [value, label] of [["dark", "Dark"], ["light", "Light"]]) {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = t(label);
+    if ((settings.theme_mode || "dark") === value) option.selected = true;
+    modeSelect.append(option);
+  }
+  modeSelect.addEventListener("change", async () => {
+    await invoke("settings_set", { patch: { theme_mode: modeSelect.value } }).catch(() => {});
+    location.reload();
+  });
+
   themeCard.append(
     themeText,
+    row("Mode", "Dark or light palette for the interface", modeSelect),
     themeRow,
     zoomRow,
     row("Page font", "Empty keeps the site font, restart to apply", fontInput),
