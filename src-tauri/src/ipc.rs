@@ -37,10 +37,13 @@ pub struct AppState {
     pub history: RwLock<Vec<Visit>>,
     /// host -> favicon url, shared by history, bookmarks and the new tab page.
     pub favicons: RwLock<crate::favicons::Favicons>,
-    pub suggest_text: parking_lot::RwLock<String>,
+    /// Window label -> what is typed in that window's address bar; two windows
+    /// must not share a suggestion query.
+    pub suggest_text: parking_lot::RwLock<std::collections::HashMap<String, String>>,
     pub suggest_width: parking_lot::RwLock<f64>,
-    /// Recently closed tabs, newest last, so Ctrl+Shift+T can bring them back.
-    pub closed_tabs: RwLock<Vec<(String, String)>>,
+    /// Recently closed tabs per window, newest last, so Ctrl+Shift+T brings
+    /// back one of this window's tabs and never one closed in another.
+    pub closed_tabs: RwLock<std::collections::HashMap<String, Vec<(String, String)>>>,
     pub zoom: parking_lot::RwLock<crate::zoom::ZoomStore>,
     /// Windows whose address bar currently owns the keyboard; the entry carries
     /// an empty string and exists only as a flag.
@@ -90,9 +93,9 @@ impl AppState {
             extensions,
             favicons: RwLock::new(crate::favicons::Favicons::load(&dirs.favicons_file)),
         history: RwLock::new(history),
-            suggest_text: parking_lot::RwLock::new(String::new()),
+            suggest_text: parking_lot::RwLock::new(std::collections::HashMap::new()),
             suggest_width: parking_lot::RwLock::new(420.0),
-            closed_tabs: RwLock::new(Vec::new()),
+            closed_tabs: RwLock::new(std::collections::HashMap::new()),
             zoom: parking_lot::RwLock::new(crate::zoom::ZoomStore::load(&dirs.zoom_file)),
             url_edit: RwLock::new(std::collections::HashMap::new()),
             app_base: parking_lot::RwLock::new(String::new()),
@@ -838,9 +841,10 @@ pub async fn tab_close(app: AppHandle, window: tauri::Window, state: State<'_, A
             let closed = core.tabs[index].clone();
             if !closed.incognito {
                 let mut history = state.closed_tabs.write().unwrap_or_else(|e| e.into_inner());
-                history.push((closed.url, closed.title));
-                if history.len() > 20 {
-                    history.remove(0);
+                let list = history.entry(window.label().to_string()).or_default();
+                list.push((closed.url, closed.title));
+                if list.len() > 20 {
+                    list.remove(0);
                 }
             }
         }
@@ -2120,7 +2124,10 @@ pub async fn suggest_feed(
     state: State<'_, AppState>,
     text: String,
 ) -> Result<usize, AppError> {
-    *state.suggest_text.write() = text.clone();
+    state
+        .suggest_text
+        .write()
+        .insert(window.label().to_string(), text.clone());
     Ok(push_suggestions(&app, window.label(), &state))
 }
 
@@ -2135,7 +2142,12 @@ pub async fn suggest_refresh(
 }
 
 fn push_suggestions(app: &AppHandle, window_label: &str, state: &AppState) -> usize {
-    let text = state.suggest_text.read().clone();
+    let text = state
+        .suggest_text
+        .read()
+        .get(window_label)
+        .cloned()
+        .unwrap_or_default();
     let items = collect_suggestions(state, &text, 8);
     let count = items.len();
 
@@ -3375,7 +3387,8 @@ pub async fn tab_reopen(
         .closed_tabs
         .write()
         .unwrap_or_else(|e| e.into_inner())
-        .pop()
+        .get_mut(window.label())
+        .and_then(|list| list.pop())
     else {
         return Ok(false);
     };
