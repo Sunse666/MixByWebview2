@@ -888,7 +888,7 @@ pub async fn tab_navigate(app: AppHandle, window: tauri::Window, state: State<'_
     // A dead host would land on WebView2's own error page, which we cannot
     // replace, so answer it ourselves before navigating. The probe resolves dns
     // and therefore runs on a blocking thread, never on this command's future.
-    if url.starts_with("http") && !is_internal_url(&url) {
+    if url.starts_with("http") && !trusted_url(&url) {
         let reach = state.reachability.clone();
         let probe_url = url.clone();
         let reachable = tauri::async_runtime::spawn_blocking(move || reach.check(&probe_url))
@@ -968,10 +968,11 @@ pub async fn theme_get(_window: tauri::Window, state: State<'_, AppState>) -> Re
 #[tauri::command]
 pub async fn theme_apply(
     app: AppHandle,
-    _window: tauri::Window, state: State<'_, AppState>,
+    webview: tauri::Webview, state: State<'_, AppState>,
     theme: Theme,
     persist: bool,
 ) -> Result<Theme, AppError> {
+    require_trusted(&webview)?;
     let theme = theme.sanitized();
 
     {
@@ -1533,12 +1534,6 @@ fn set_zoom(app: &AppHandle, label: &str, level: f64) -> Result<(), AppError> {
     Ok(())
 }
 
-/// Pages report their context menu here; dismiss=true closes an open menu.
-/// Pages served by the app itself: no DNS, no TCP, so never probed.
-pub(crate) fn is_internal_url(url: &str) -> bool {
-    url.contains("tauri.localhost") || url.starts_with("data:") || url.starts_with("about:")
-}
-
 /// The chrome strip is only as tall as the toolbar, so a menu drawn inside it
 /// would be clipped; it gets its own overlay like the page menu.
 #[tauri::command]
@@ -1983,11 +1978,13 @@ pub async fn extension_live_list(
 #[tauri::command]
 pub async fn extension_live_set(
     app: AppHandle,
-    window: tauri::Window,
+    webview: tauri::Webview,
     state: State<'_, AppState>,
     id: String,
     enabled: bool,
 ) -> Result<bool, AppError> {
+    require_trusted(&webview)?;
+    let window = webview.window();
     let label = selected_label(&state, &window);
     let Some(webview) = app.get_webview(&label) else {
         return Ok(false);
@@ -2521,10 +2518,12 @@ pub async fn bookmark_toggle(app: AppHandle, window: tauri::Window, state: State
 #[tauri::command]
 pub async fn bookmark_add(
     app: AppHandle,
+    webview: tauri::Webview,
     state: State<'_, AppState>,
     url: String,
     title: String,
 ) -> Result<(), AppError> {
+    require_trusted(&webview)?;
     if !url.starts_with("http://") && !url.starts_with("https://") {
         return Ok(());
     }
@@ -2543,10 +2542,12 @@ pub async fn bookmark_add(
 #[tauri::command]
 pub async fn bookmark_move(
     app: AppHandle,
+    webview: tauri::Webview,
     state: State<'_, AppState>,
     from: String,
     to: usize,
 ) -> Result<(), AppError> {
+    require_trusted(&webview)?;
     let snapshot = {
         let mut bookmarks = state.bookmarks.write().unwrap_or_else(|e| e.into_inner());
         move_bookmark(&mut bookmarks, &from, to);
@@ -2599,11 +2600,12 @@ fn move_bookmark(bookmarks: &mut Vec<Bookmark>, from: &str, to: usize) -> bool {
 #[tauri::command]
 pub async fn bookmark_set_folder(
     app: AppHandle,
-    _window: tauri::Window,
+    webview: tauri::Webview,
     state: State<'_, AppState>,
     url: String,
     folder: String,
 ) -> Result<bool, AppError> {
+    require_trusted(&webview)?;
     let changed = {
         let mut list = state.bookmarks.write().unwrap_or_else(|e| e.into_inner());
         let Some(item) = list.iter_mut().find(|item| item.url == url) else {
@@ -2627,12 +2629,13 @@ pub async fn bookmark_set_folder(
 #[tauri::command]
 pub async fn bookmark_update(
     app: AppHandle,
-    _window: tauri::Window,
+    webview: tauri::Webview,
     state: State<'_, AppState>,
     url: String,
     title: String,
     new_url: Option<String>,
 ) -> Result<bool, AppError> {
+    require_trusted(&webview)?;
     let changed = {
         let mut list = state.bookmarks.write().unwrap_or_else(|e| e.into_inner());
         let Some(item) = list.iter_mut().find(|item| item.url == url) else {
@@ -2664,9 +2667,10 @@ pub async fn bookmark_update(
 #[tauri::command]
 pub async fn bookmark_remove(
     app: AppHandle,
-    _window: tauri::Window, state: State<'_, AppState>,
+    webview: tauri::Webview, state: State<'_, AppState>,
     url: String,
 ) -> Result<(), AppError> {
+    require_trusted(&webview)?;
     let snapshot = {
         let mut bookmarks = state.bookmarks.write().unwrap_or_else(|e| e.into_inner());
         bookmarks.retain(|bookmark| bookmark.url != url);
@@ -2692,10 +2696,12 @@ pub async fn theme_export(app: AppHandle, _window: tauri::Window) -> Result<Stri
 #[tauri::command]
 pub async fn theme_import(
     app: AppHandle,
-    window: tauri::Window,
+    webview: tauri::Webview,
     state: State<'_, AppState>,
     json: String,
 ) -> Result<Theme, AppError> {
+    require_trusted(&webview)?;
+    let window = webview.window();
     let parsed: Theme = serde_json::from_str(&json)
         .map_err(|err| AppError::new("bad_theme", format!("not valid theme json: {err}")))?;
     let theme = parsed.sanitized();
