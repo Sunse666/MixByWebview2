@@ -44,12 +44,20 @@ impl ZoomStore {
             schema_version: SCHEMA,
             sites: self.sites.clone(),
         };
-        std::fs::write(path, serde_json::to_string_pretty(&file)?)
+        crate::paths::write_atomic(path, serde_json::to_string_pretty(&file)?.as_bytes())
     }
 
     pub fn level_for(&self, url: &str) -> f64 {
-        host_of(url)
-            .and_then(|host| self.sites.get(&host).copied())
+        let Some(host) = host_of(url) else {
+            return 1.0;
+        };
+        if let Some(level) = self.sites.get(&host) {
+            return *level;
+        }
+        // Profiles written before "www." was stripped keep working.
+        self.sites
+            .get(&format!("www.{host}"))
+            .copied()
             .unwrap_or(1.0)
     }
 
@@ -72,7 +80,8 @@ pub fn normalize(level: f64) -> f64 {
     (((level * 10.0).round()) / 10.0).clamp(MIN, MAX)
 }
 
-/// "https://www.example.com/a?b" -> "www.example.com".
+/// "https://www.example.com/a?b" -> "example.com"; the www prefix is dropped so
+/// a site keeps its zoom after redirecting between the two forms.
 pub fn host_of(url: &str) -> Option<String> {
     let rest = url.split_once("://").map(|(_, tail)| tail)?;
     let authority = rest.split(['/', '?', '#']).next().unwrap_or_default();
@@ -84,7 +93,7 @@ pub fn host_of(url: &str) -> Option<String> {
     if host.is_empty() || host == "about:blank" {
         return None;
     }
-    Some(host.to_lowercase())
+    Some(host.trim_start_matches("www.").to_lowercase())
 }
 
 #[cfg(test)]
@@ -93,7 +102,8 @@ mod tests {
 
     #[test]
     fn host_is_extracted_from_real_urls() {
-        assert_eq!(host_of("https://www.example.com/a?b=1").as_deref(), Some("www.example.com"));
+        assert_eq!(host_of("https://www.example.com/a?b=1").as_deref(), Some("example.com"));
+        assert_eq!(host_of("https://example.com/").as_deref(), Some("example.com"));
         assert_eq!(host_of("http://example.com:8080").as_deref(), Some("example.com"));
         assert_eq!(host_of("https://user:pw@Example.COM/").as_deref(), Some("example.com"));
         assert_eq!(host_of("about:blank"), None);
@@ -106,6 +116,13 @@ mod tests {
         store.remember("https://a.test/", 1.3);
         assert_eq!(store.level_for("https://a.test/x"), 1.3);
         assert_eq!(store.level_for("https://b.test/"), 1.0);
+    }
+
+    #[test]
+    fn a_legacy_www_entry_still_applies() {
+        let mut store = ZoomStore::default();
+        store.sites.insert("www.example.com".to_string(), 1.4);
+        assert_eq!(store.level_for("https://example.com/x"), 1.4);
     }
 
     #[test]

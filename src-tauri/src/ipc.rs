@@ -2419,7 +2419,6 @@ pub async fn clear_data(
             .favicons
             .write()
             .unwrap_or_else(|e| e.into_inner())
-            .hosts
             .clear();
         let _ = std::fs::remove_dir_all(&state.dirs.favicons_dir);
         let empty = state.favicons.read().unwrap_or_else(|e| e.into_inner()).clone();

@@ -13,6 +13,10 @@ pub struct Favicons {
     /// host -> icon url
     #[serde(default)]
     pub hosts: BTreeMap<String, String>,
+    /// Insertion order. Evicting by key order dropped whichever host sorted
+    /// first, which is rarely the one that has gone unused longest.
+    #[serde(default)]
+    pub order: Vec<String>,
 }
 
 impl Favicons {
@@ -28,8 +32,14 @@ impl Favicons {
 
     pub fn save(&self, path: &Path) {
         if let Ok(json) = serde_json::to_string_pretty(self) {
-            let _ = std::fs::write(path, json);
+            let _ = crate::paths::write_atomic(path, json.as_bytes());
         }
+    }
+
+    /// Drops every entry; used by the clear-data action.
+    pub fn clear(&mut self) {
+        self.hosts.clear();
+        self.order.clear();
     }
 
     pub fn get(&self, host: &str) -> Option<&str> {
@@ -45,11 +55,14 @@ impl Favicons {
             return false;
         }
         self.hosts.insert(host.to_string(), icon.to_string());
+        self.order.retain(|entry| entry != host);
+        self.order.push(host.to_string());
         while self.hosts.len() > MAX_ENTRIES {
-            let Some(first) = self.hosts.keys().next().cloned() else {
+            let Some(oldest) = self.order.first().cloned() else {
                 break;
             };
-            self.hosts.remove(&first);
+            self.order.remove(0);
+            self.hosts.remove(&oldest);
         }
         true
     }
