@@ -549,7 +549,7 @@ footer { margin-top: auto; display: flex; justify-content: flex-end; gap: 8px; }
 .thumb-card {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 5px;
   margin: 6px;
   padding: 6px;
   border-radius: 10px;
@@ -618,3 +618,31 @@ footer { margin-top: auto; display: flex; justify-content: flex-end; gap: 8px; }
   color: #111;
   flex: 0 0 auto;
 }
+
+.thumb-badges {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+.thumb-badge {
+  font-size: 10px;
+  line-height: 1;
+  padding: 3px 5px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text, #e8eaed);
+  white-space: nowrap;
+}
+.thumb-badge.accent {
+  background: var(--accent, #8ab4f8);
+  color: #111;
+}
+.thumb-note {
+  font-size: 10px;
+  opacity: 0.5;
+  padding: 0 2px 2px;
+  color: var(--text, #e8eaed);
+}
+.thumb-card { cursor: pointer; }

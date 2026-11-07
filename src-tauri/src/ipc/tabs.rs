@@ -282,6 +282,12 @@ pub struct ThumbCard {
     icon: Option<String>,
     /// Full-size png as a data url; the card scales it down.
     image: Option<String>,
+    /// How old the picture is. Everything else in this payload is live.
+    image_age_secs: Option<u64>,
+    loading: bool,
+    playing: bool,
+    muted: bool,
+    suspended: bool,
     pinned: bool,
     incognito: bool,
 }
@@ -334,12 +340,22 @@ pub async fn thumb_card(
         .iter()
         .find(|tab| tab.id == id)
         .ok_or_else(|| AppError::new("no_tab", id.clone()))?;
+    // Everything except the picture is read live, so the card still says what the
+    // tab is doing right now even when the picture is from when it was last seen.
+    let audio = _app
+        .get_webview(&id)
+        .and_then(|webview| crate::audio::state(&webview));
     Ok(ThumbCard {
         title: tab.title.clone(),
         url: tab.url.clone(),
         icon: tab.icon.clone(),
         image: crate::thumbs::get(&id)
             .map(|png| format!("data:image/png;base64,{}", crate::extensions::base64(&png))),
+        image_age_secs: crate::thumbs::age(&id),
+        loading: tab.loading,
+        playing: audio.map(|state| state.playing).unwrap_or(false),
+        muted: audio.map(|state| state.muted).unwrap_or(false),
+        suspended: !tab.alive,
         pinned: tab.pinned,
         incognito: tab.incognito,
     })

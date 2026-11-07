@@ -676,7 +676,12 @@ async function bootTabSearch() {
   await bootSearch("tabs");
 }
 
-/** The tab hover card: a picture when one could be taken, the page's name always. */
+/**
+ * The tab hover card. The picture can only be taken from a webview that is on
+ * screen, so for a background tab it shows the frame from when it was last
+ * visited - and everything else on the card is read live: title, address, whether
+ * it is loading, playing sound, or suspended.
+ */
 async function bootThumb() {
   const id = params.get("id") || "";
   const data = await invoke("thumb_card", { id }).catch(() => null);
@@ -687,6 +692,10 @@ async function bootThumb() {
 
   const card = document.createElement("div");
   card.className = "thumb-card" + (data.image ? " with-image" : "");
+  card.addEventListener("click", () => {
+    invoke("tab_select", { id }).catch(() => {});
+    invoke("overlay_close").catch(() => {});
+  });
 
   if (data.image) {
     const frame = document.createElement("div");
@@ -718,13 +727,45 @@ async function bootThumb() {
   body.append(title, url);
 
   line.append(icon, body);
-  if (data.incognito) {
-    const mark = document.createElement("span");
-    mark.className = "thumb-mark";
-    mark.textContent = t("Incognito");
-    line.append(mark);
+
+  const badges = document.createElement("div");
+  badges.className = "thumb-badges";
+  if (data.loading) {
+    const badge = document.createElement("span");
+    badge.className = "thumb-badge";
+    badge.textContent = t("Loading");
+    badges.append(badge);
   }
+  if (data.playing || data.muted) {
+    const badge = document.createElement("span");
+    badge.className = "thumb-badge";
+    badge.textContent = data.muted ? "\ud83d\udd07" : "\ud83d\udd0a";
+    badges.append(badge);
+  }
+  if (data.suspended) {
+    const badge = document.createElement("span");
+    badge.className = "thumb-badge";
+    badge.textContent = t("Suspended");
+    badges.append(badge);
+  }
+  if (data.incognito) {
+    const badge = document.createElement("span");
+    badge.className = "thumb-badge accent";
+    badge.textContent = t("Incognito");
+    badges.append(badge);
+  }
+  line.append(badges);
   card.append(line);
+
+  // A background tab cannot be photographed without showing it, so say when the
+  // picture is a memory rather than a live view.
+  if (data.image && data.image_age_secs !== null && data.image_age_secs > 8) {
+    const note = document.createElement("div");
+    note.className = "thumb-note";
+    note.textContent = t("Picture from when this tab was last open");
+    card.append(note);
+  }
+
   document.body.append(card);
 }
 

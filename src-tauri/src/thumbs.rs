@@ -93,6 +93,14 @@ pub fn get(id: &str) -> Option<Vec<u8>> {
   Some(thumb.png.clone())
 }
 
+/// Age of the stored picture, so the card can say how old the image is.
+pub fn age(id: &str) -> Option<u64> {
+  let guard = store();
+  let map = guard.as_ref()?;
+  let thumb = map.get(id)?;
+  Some(crate::library::now().saturating_sub(thumb.at))
+}
+
 pub fn forget(id: &str) {
   if let Some(map) = store().as_mut() {
     map.remove(id);
