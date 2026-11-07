@@ -177,7 +177,7 @@ button {
   gap: 6px;
   /* Fill whatever the strip has left, so rounding cannot leave a gap. */
   flex: 1;
-  min-height: 43px;
+  min-height: 38px;
   padding: 0 8px;
   background: var(--panel);
 }
@@ -189,7 +189,7 @@ button {
   align-items: center;
   flex: 1;
   min-width: 0;
-  height: 30px;
+  height: 32px;
   padding-right: 4px;
   background: var(--url-bg);
   border: 1px solid var(--border);
