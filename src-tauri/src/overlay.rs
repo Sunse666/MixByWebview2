@@ -121,6 +121,7 @@ pub fn open_url(
     height: f64,
 ) -> Result<(), String> {
     close(app, win.label());
+    remember_owner(app, win.label(), page);
 
     let opts = {
         let state = app.state::<crate::ipc::AppState>();
@@ -174,6 +175,7 @@ pub fn open_at(
     height: f64,
 ) -> Result<(), String> {
     close(app, win.label());
+    remember_owner(app, win.label(), kind);
 
     let opts = {
         let state = app.state::<crate::ipc::AppState>();
@@ -201,6 +203,24 @@ pub fn open_at(
     Ok(())
 }
 
+/// Where the keyboard goes when an overlay closes. A webview exposes no focus
+/// getter, so the kind decides: menus, settings and the translate bubble belong
+/// to the chrome strip, while the context menu, the find bar and the permission
+/// prompt belong to the page that was being used.
+fn belongs_to_page(kind: &str) -> bool {
+    let base = kind.split('&').next().unwrap_or(kind);
+    matches!(base, "context_menu" | "find" | "permission")
+}
+
+fn remember_owner(app: &AppHandle, window_label: &str, kind: &str) {
+    let state = app.state::<crate::ipc::AppState>();
+    let mut owners = state
+        .overlay_from_page
+        .write()
+        .unwrap_or_else(|e| e.into_inner());
+    owners.insert(window_label.to_string(), belongs_to_page(kind));
+}
+
 pub fn close(app: &AppHandle, window_label: &str) {
     let label = {
         let state = app.state::<crate::ipc::AppState>();
@@ -213,9 +233,30 @@ pub fn close(app: &AppHandle, window_label: &str) {
             let _ = webview.close();
             crate::logging::info(&format!("overlay closed ({label})"));
         }
-        // The dropdown had no focus, but closing it must not leave keys nowhere.
-        if let Some(chrome) = app.get_webview(&format!("{window_label}-chrome")) {
-            let _ = chrome.set_focus();
+        // Put the keyboard back where it was before the overlay opened. A page
+        // context menu returns to the page, the app menu to the chrome strip,
+        // and the suggest dropdown to whatever already had focus.
+        let from_page = {
+            let state = app.state::<crate::ipc::AppState>();
+            let flag = state
+                .overlay_from_page
+                .write()
+                .unwrap_or_else(|e| e.into_inner())
+                .remove(window_label);
+            flag.unwrap_or(false)
+        };
+        let page = if from_page {
+            app.try_state::<crate::ipc::AppState>().and_then(|state| {
+                state
+                    .try_read_core(window_label)
+                    .and_then(|core| core.selected.clone())
+            })
+        } else {
+            None
+        };
+        let target = page.unwrap_or_else(|| format!("{window_label}-chrome"));
+        if let Some(webview) = app.get_webview(&target) {
+            let _ = webview.set_focus();
         }
         // Whatever was changed behind the panel shows up now.
         let _ = app.emit_to(

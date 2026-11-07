@@ -30,6 +30,9 @@ pub struct AppState {
     pub menu_context: RwLock<MenuContext>,
     /// Overlay webview label per window, so each window has its own menu.
     pub overlay: RwLock<std::collections::HashMap<String, String>>,
+    /// Window label -> whether its overlay belongs to the page rather than the
+    /// chrome strip, so closing it can hand the keyboard back to the right one.
+    pub overlay_from_page: RwLock<std::collections::HashMap<String, bool>>,
     pub permissions: crate::permissions::PermissionStore,
     pub snap: std::sync::Mutex<crate::snap::SnapState>,
     pub opts: crate::tabs::WebviewOpts,
@@ -116,6 +119,7 @@ impl AppState {
             downloads: RwLock::new(Vec::new()),
             menu_context: RwLock::new(MenuContext::default()),
             overlay: RwLock::new(std::collections::HashMap::new()),
+            overlay_from_page: RwLock::new(std::collections::HashMap::new()),
             permissions: crate::permissions::PermissionStore::default(),
             snap: std::sync::Mutex::new(crate::snap::SnapState::default()),
         }
