@@ -580,7 +580,9 @@ async function bootSearch(mode) {
   const search = async (query) => {
     const text = (query || "").trim().toLowerCase();
     if (mode === "tabs") {
-      const tabs = (await invoke("tab_list").catch(() => [])) || [];
+      // tab_list answers with { tabs, selected }, not a bare array.
+      const listing = (await invoke("tab_list").catch(() => null)) || {};
+      const tabs = Array.isArray(listing) ? listing : listing.tabs || [];
       paint(
         tabs
           .map((tab) => ({

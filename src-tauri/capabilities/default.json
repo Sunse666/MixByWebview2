@@ -102,6 +102,7 @@
     "allow-permission-reply",
     "allow-permission-poll",
     "allow-snap",
+    "allow-drag-action",
     "allow-thumb-show",
     "allow-thumb-image",
     "allow-settings-get",

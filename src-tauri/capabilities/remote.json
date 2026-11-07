@@ -17,6 +17,8 @@
     ]
   },
   "permissions": [
+    "allow-drag-action",
+    "allow-ui-log",
     "allow-shortcut",
     "allow-tab-icon",
     "allow-find-result",

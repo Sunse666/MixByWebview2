@@ -100,6 +100,7 @@ fn main() {
             ipc::tab_pin,
             ipc::tab_close,
             ipc::tab_mute,
+            ipc::drag_action,
             ipc::thumb_show,
             ipc::thumb_image,
             ipc::tab_screenshot,

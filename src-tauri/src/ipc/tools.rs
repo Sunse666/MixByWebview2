@@ -437,6 +437,69 @@ pub async fn clipboard_write(webview: tauri::Webview, text: String) -> Result<()
     board.set_text(text).map_err(|err| AppError::new("clipboard", err.to_string()))
 }
 
+/// The super drag engine runs inside the page, so it gets one narrow entry point
+/// instead of the commands it would otherwise need. A remote origin must not be
+/// able to open tabs, write the clipboard or start downloads by itself, and the
+/// page already decided the action - this only checks the wording.
+#[tauri::command]
+pub async fn drag_action(
+    app: AppHandle,
+    webview: tauri::Webview,
+    state: State<'_, AppState>,
+    kind: String,
+    url: Option<String>,
+    text: Option<String>,
+    background: Option<bool>,
+) -> Result<(), AppError> {
+    // Only a page webview may call this: the gesture starts on the page.
+    let label = webview.label().to_string();
+    let window_label = window_of_tab(&label).to_string();
+    if window_label == label {
+        return Err(AppError::new("untrusted", "super drag comes from a page"));
+    }
+    let web_url = |value: &str| value.starts_with("http://") || value.starts_with("https://");
+    match kind.as_str() {
+        "open" => {
+            let Some(url) = url.filter(|value| web_url(value)) else {
+                return Ok(());
+            };
+            let window = app
+                .get_window(&window_label)
+                .ok_or_else(|| AppError::new("no_window", window_label.clone()))?;
+            tab_new(app, window, state, Some(url), None, Some(background.unwrap_or(false))).await?;
+        }
+        "search" => {
+            let text = text.unwrap_or_default();
+            if text.trim().is_empty() {
+                return Ok(());
+            }
+            let window = app
+                .get_window(&window_label)
+                .ok_or_else(|| AppError::new("no_window", window_label.clone()))?;
+            search_new_tab(app, window, state, text).await?;
+        }
+        "copy" => {
+            let text = text.unwrap_or_default();
+            if text.is_empty() {
+                return Ok(());
+            }
+            let mut board = arboard::Clipboard::new()
+                .map_err(|err| AppError::new("clipboard", err.to_string()))?;
+            board
+                .set_text(text)
+                .map_err(|err| AppError::new("clipboard", err.to_string()))?;
+        }
+        "save" => {
+            let Some(url) = url.filter(|value| web_url(value)) else {
+                return Ok(());
+            };
+            let _ = save_url(app, &state, url, None).await?;
+        }
+        other => return Err(AppError::new("bad_action", other)),
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn download_url(
     app: AppHandle,

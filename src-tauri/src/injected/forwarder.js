@@ -881,28 +881,28 @@
     var linkText = item.linkText || '';
 
     if (action === 'search') {
-      invoke('search_new_tab', { text: text || linkText || url || '' });
+      invoke('drag_action', { kind: 'search', text: text || linkText || url || '' });
       return;
     }
     if (action === 'copy') {
       var value = text || url || linkText;
-      if (value) invoke('clipboard_write', { text: value });
+      if (value) invoke('drag_action', { kind: 'copy', text: value });
       return;
     }
     if (action === 'copy_link_text') {
-      if (linkText) invoke('clipboard_write', { text: linkText });
+      if (linkText) invoke('drag_action', { kind: 'copy', text: linkText });
       return;
     }
     if (action === 'copy_link_both') {
-      if (url) invoke('clipboard_write', { text: (linkText ? linkText + '\n' : '') + url });
+      if (url) invoke('drag_action', { kind: 'copy', text: (linkText ? linkText + '\n' : '') + url });
       return;
     }
     if (action === 'copy_sel_and_url') {
       var picked = text || linkText;
       if (picked) {
-        invoke('clipboard_write', { text: picked + '\n' + location.href });
+        invoke('drag_action', { kind: 'copy', text: picked + '\n' + location.href });
       } else {
-        invoke('clipboard_write', { text: location.href });
+        invoke('drag_action', { kind: 'copy', text: location.href });
       }
       return;
     }
@@ -918,21 +918,21 @@
       var query = text || linkText;
       if (!query) return;
       var host = location.hostname.replace(/^www\./, '');
-      invoke('search_new_tab', { text: query + ' site:' + host });
+      invoke('drag_action', { kind: 'search', text: query + ' site:' + host });
       return;
     }
     if (action === 'save') {
-      if (url) invoke('download_url', { url: url, fileName: null });
+      if (url) invoke('drag_action', { kind: 'save', url: url });
       return;
     }
     if (action === 'open_background') {
-      if (url) invoke('tab_new', { url: url, background: true });
-      else if (text) invoke('search_new_tab', { text: text });
+      if (url) invoke('drag_action', { kind: 'open', url: url, background: true });
+      else if (text) invoke('drag_action', { kind: 'search', text: text });
       return;
     }
     // "open": a link or image opens, text searches.
-    if (url) invoke('tab_new', { url: url });
-    else if (text) invoke('search_new_tab', { text: text });
+    if (url) invoke('drag_action', { kind: 'open', url: url });
+    else if (text) invoke('drag_action', { kind: 'search', text: text });
   }
 
   window.addEventListener('pointerup', finish, true);
