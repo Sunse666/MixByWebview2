@@ -275,7 +275,36 @@ function addressFor(text) {
 }
 
 // Command palette: one search box over actions, history and bookmarks.
+// Menu entries for the command palette. MENU_BAR only names the groups, so the
+// palette keeps its own list of actions.
+const PALETTE_ACTIONS = [
+  ["New tab", "new_tab"],
+  ["New window", "new_window"],
+  ["Incognito tab", "new_incognito"],
+  ["Reopen closed tab", "reopen_tab"],
+  ["Find in page", "find"],
+  ["Translate", "translate"],
+  ["Zoom in", "zoom_in"],
+  ["Zoom out", "zoom_out"],
+  ["Reset zoom", "zoom_reset"],
+  ["Print", "print"],
+  ["Downloads", "open_downloads"],
+  ["History", "open_history"],
+  ["Bookmarks", "open_bookmarks"],
+  ["Extensions", "open_extensions"],
+  ["Settings", "open_settings"],
+  ["Developer tools", "devtools"],
+];
+
+function paletteActions() {
+  return PALETTE_ACTIONS.map(([label, action]) => ({
+    label: t(label),
+    run: () => invoke("shortcut", { action }).catch(() => {}),
+  }));
+}
+
 function openPalette() {
+  if (document.querySelector(".palette-backdrop")) return;
   const back = document.createElement("div");
   back.className = "palette-backdrop";
 
@@ -294,12 +323,7 @@ function openPalette() {
   document.body.append(back);
   input.focus();
 
-  const actions = MENU_BAR.flatMap((group) =>
-    (group.items || []).map((item) => ({
-      label: group.name + " · " + t(item.label || item.name || ""),
-      run: () => item.run && item.run(),
-    })),
-  );
+  const actions = paletteActions();
 
   const close = () => back.remove();
 
@@ -905,7 +929,8 @@ async function boot() {
         case "+": action = "zoom_in"; break;
         case "-": action = "zoom_out"; break;
         case "0": action = "zoom_reset"; break;
-        case "p": action = "print"; break;
+        case "p": action = event.shiftKey ? "palette" : "print"; break;
+        case "f": action = "find"; break;
         case "j": action = "downloads"; break;
         case "d": action = "bookmark"; break;
         case "n": action = event.shiftKey ? "new_incognito" : "new_window"; break;

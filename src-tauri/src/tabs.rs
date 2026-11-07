@@ -552,7 +552,8 @@ const SHORTCUT_FORWARDER: &str = r#"
       case "+": return "zoom_in";
       case "-": return "zoom_out";
       case "0": return "zoom_reset";
-      case "p": return "print";
+      case "p": return event.shiftKey ? "palette" : "print";
+      case "f": return "find";
       case "j": return "downloads";
       case "d": return "bookmark";
       case "n": return event.shiftKey ? "new_incognito" : "new_window";

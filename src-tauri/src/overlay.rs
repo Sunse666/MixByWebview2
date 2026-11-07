@@ -85,13 +85,17 @@ pub fn open(app: &AppHandle, win: &tauri::Window, kind: &str) -> Result<(), Stri
         // Menu bar dropdown; the exact height comes from the caller.
         "menubar_menu" => (232.0, 300.0),
         "chrome_menu" => (190.0, 110.0),
+        // The find bar rides under the address row, right aligned.
+        "find" => (380.0, 44.0),
         _ => DEFAULT,
     };
-    // Never taller than the space under the chrome strip.
+    // Never taller than the space under the chrome strip, but a small panel
+    // keeps its own height even in a short window.
     let chrome_h = crate::ipc::chrome_height(app);
-    let oh = oh.min((win_h - chrome_h - 12.0).max(180.0));
+    let room = (win_h - chrome_h - 12.0).max(oh.min(180.0));
+    let oh = oh.min(room);
 
-    let (x, y) = if base == "app_menu" {
+    let (x, y) = if base == "app_menu" || base == "find" {
         // Right aligned under the menu button, like a desktop app menu.
         ((win_w - ow - 8.0).max(0.0), chrome_h + 6.0)
     } else {
