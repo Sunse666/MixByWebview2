@@ -96,10 +96,22 @@ pub fn remember_later(app: tauri::AppHandle, id: String) {
     // The compositor needs a frame or two after the tab is shown, otherwise the
     // capture catches the page that was there before the switch.
     std::thread::sleep(std::time::Duration::from_millis(350));
-    // The setting can be turned off while the worker is asleep.
+    // Two things can change while the worker sleeps, and both would leave a
+    // wrong picture in the map: the feature can be switched off, and the tab can
+    // stop being the selected one. A hidden webview is not composited any more,
+    // so capturing it returns whatever surface is in that place - which showed up
+    // as another tab's page, or a panel, appearing in the hover card.
     {
       let state = app.state::<crate::ipc::AppState>();
       if !state.settings.read().tab_hover_preview {
+        return;
+      }
+      let window_label = crate::ipc::window_of_tab(&id);
+      let still_selected = state
+        .try_read_core(window_label)
+        .map(|core| core.selected.as_deref() == Some(id.as_str()))
+        .unwrap_or(false);
+      if !still_selected {
         return;
       }
     }

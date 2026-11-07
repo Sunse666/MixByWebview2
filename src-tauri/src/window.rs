@@ -385,10 +385,14 @@ pub fn open_window(
     let state = app.state::<AppState>();
     state.add_window(label);
     let opts = state.opts.clone();
+    // The window background is what shows between hiding the outgoing tab and
+    // showing the incoming one; leaving it white made every switch flash.
+    let window_color = crate::overlay::parse_color(&state.theme.read().colors.bg);
     drop(state);
 
     let win = Window::builder(app, label)
         .title("Mix")
+        .background_color(window_color)
         .inner_size(1100.0, 760.0)
         .min_inner_size(500.0, 600.0)
         .decorations(false)

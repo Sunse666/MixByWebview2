@@ -119,7 +119,13 @@ function renderTabs() {
     if (tab.incognito) classes.push("incognito");
     if (tab.pinned) classes.push("pinned");
     el.className = classes.join(" ");
-    el.title = tab.alive ? tab.url : tab.url + "\n" + t("Suspended to save memory");
+    // With the preview card on, the url and the title are already in the card, so
+    // the native tooltip would only duplicate it under the pointer.
+    if (settings.tab_hover_preview) {
+      el.setAttribute("aria-label", tab.title || tab.url);
+    } else {
+      el.title = tab.alive ? tab.url : tab.url + "\n" + t("Suspended to save memory");
+    }
 
     const label = document.createElement("span");
     const icon = document.createElement(tab.loading ? "span" : tab.icon ? "img" : "span");
