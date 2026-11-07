@@ -228,9 +228,29 @@ async function boot() {
       patch: { default_zoom: Number(zoomSelect.value) },
     }).catch(() => {});
   });
-  card.append(row("Page zoom", "Applied to newly opened pages", zoomSelect));
+  const zoomRow = row("Page zoom", "Applied to newly opened pages", zoomSelect);
 
-  card.append(row("Appearance & theme", "", themePreview()));
+  const fontInput = document.createElement("input");
+  fontInput.className = "hex";
+  fontInput.style.width = "240px";
+  fontInput.placeholder = "Microsoft YaHei";
+  fontInput.value = settings.font_family || "";
+  fontInput.addEventListener("change", async () => {
+    await invoke("settings_set", { patch: { font_family: fontInput.value } }).catch(() => {});
+  });
+
+  const sizeSelect = document.createElement("select");
+  sizeSelect.className = "button";
+  for (const size of [0, 14, 16, 18, 20, 22]) {
+    const option = document.createElement("option");
+    option.value = String(size);
+    option.textContent = size === 0 ? t("Site default") : size + " px";
+    if ((settings.font_size ?? 0) === size) option.selected = true;
+    sizeSelect.append(option);
+  }
+  sizeSelect.addEventListener("change", async () => {
+    await invoke("settings_set", { patch: { font_size: Number(sizeSelect.value) } }).catch(() => {});
+  });
 
   const engine = document.createElement("select");
   engine.className = "button";
@@ -390,7 +410,13 @@ async function boot() {
   const themeText = document.createElement("div");
   themeText.className = "card-note";
   themeText.textContent = t("theme.json can be shared with the same folder layout");
-  themeCard.append(themeText, themeRow);
+  themeCard.append(
+    themeText,
+    themeRow,
+    zoomRow,
+    row("Page font", "Empty keeps the site font, restart to apply", fontInput),
+    row("Page font size", "Empty keeps the site size, restart to apply", sizeSelect),
+  );
   main.append(themeCard);
 
   const perfHead = document.createElement("h2");
@@ -989,10 +1015,8 @@ async function boot() {
   );
   main.append(browserCard);
 
-  const toolbarHead = document.createElement("h2");
-  // Folds into Appearance above, so the nav has one entry like other browsers.
-  toolbarHead.textContent = "";
-  toolbarHead.style.margin = "18px 0 10px";
+  const toolbarHead = document.createElement("div");
+  toolbarHead.style.marginTop = "14px";
   main.append(toolbarHead);
 
   const toolbarCard = document.createElement("div");
@@ -1026,7 +1050,7 @@ async function boot() {
 
 
   main.append(card);
-  main.append(toolbarHead, toolbarCard);
+  themeCard.append(toolbarHead, ...toolbarCard.childNodes);
 }
 
 /**
