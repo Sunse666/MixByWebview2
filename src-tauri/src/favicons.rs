@@ -97,7 +97,8 @@ pub fn store_icon(dir: &Path, host: &str, bytes: &[u8], content_type: &str) -> O
     };
     std::fs::create_dir_all(dir).ok()?;
     let path = dir.join(format!("{host}.{extension}"));
-    std::fs::write(&path, bytes).ok()?;
+    // Write then rename: a torn icon file would be served forever after.
+    crate::paths::write_atomic(&path, bytes).ok()?;
     Some(path)
 }
 

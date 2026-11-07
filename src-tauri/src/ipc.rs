@@ -3290,7 +3290,8 @@ pub(crate) async fn save_url(
 
     let suggested = file_name.unwrap_or_default();
     let target = crate::downloads::target_for(&state.dirs.downloads, &url, &suggested);
-    std::fs::write(&target, &bytes)?;
+    // Same rule as the state files: a half written file must not appear.
+    crate::paths::write_atomic(&target, &bytes)?;
     crate::downloads::record_done(&app, &url, &target);
     crate::logging::info(&format!("saved {}", target.display()));
     Ok(target.display().to_string())
