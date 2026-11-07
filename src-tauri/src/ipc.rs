@@ -178,6 +178,7 @@ pub struct SettingsPatch {
     pub gesture_threshold: Option<u32>,
     pub gesture_map: Option<std::collections::BTreeMap<String, String>>,
     pub gesture_blocked: Option<String>,
+    pub default_zoom: Option<f64>,
     pub tab_double_click_close: Option<bool>,
     pub tab_show_close: Option<bool>,
     pub tab_close_goes_left: Option<bool>,
@@ -705,6 +706,7 @@ pub async fn tab_new(
     };
 
     let created = spawn_tab(&app, window.label(), &id, &target, incognito.unwrap_or(false))?;
+    crate::tabs::apply_default_zoom(&app, &id);
 
     if background.unwrap_or(false) {
         // Created behind the current tab: put the selection back where it was.
@@ -1665,6 +1667,9 @@ pub async fn settings_set(
         }
         if let Some(value) = patch.gestures {
             guard.gestures = value;
+        }
+        if let Some(value) = patch.default_zoom {
+            guard.default_zoom = value.clamp(0.5, 2.0);
         }
         if let Some(value) = patch.tab_double_click_close {
             guard.tab_double_click_close = value;

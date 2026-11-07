@@ -214,6 +214,22 @@ async function boot() {
     location.reload();
   });
 
+  const zoomSelect = document.createElement("select");
+  zoomSelect.className = "button";
+  for (const level of [0.8, 0.9, 1.0, 1.1, 1.25, 1.5]) {
+    const option = document.createElement("option");
+    option.value = String(level);
+    option.textContent = Math.round(level * 100) + "%";
+    if (Math.abs((settings.default_zoom ?? 1) - level) < 0.01) option.selected = true;
+    zoomSelect.append(option);
+  }
+  zoomSelect.addEventListener("change", async () => {
+    await invoke("settings_set", {
+      patch: { default_zoom: Number(zoomSelect.value) },
+    }).catch(() => {});
+  });
+  card.append(row("Page zoom", "Applied to newly opened pages", zoomSelect));
+
   card.append(row("Appearance & theme", "", themePreview()));
 
   const engine = document.createElement("select");

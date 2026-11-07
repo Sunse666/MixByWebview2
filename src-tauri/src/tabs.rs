@@ -1078,6 +1078,19 @@ pub fn parse_url(input: &str) -> Option<Url> {
     None
 }
 
+/// Applies the default page zoom to a freshly created tab.
+pub fn apply_default_zoom(app: &tauri::AppHandle, id: &str) {
+    let zoom = app
+        .try_state::<crate::ipc::AppState>()
+        .map(|state| state.settings.read().default_zoom)
+        .unwrap_or(1.0);
+    if (zoom - 1.0).abs() < f64::EPSILON {
+        return;
+    }
+    if let Some(webview) = app.get_webview(id) {
+        let _ = webview.set_zoom(zoom);
+    }
+}
 pub fn create(
     win: &Window,
     id: &str,

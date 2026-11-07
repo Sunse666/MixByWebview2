@@ -47,6 +47,8 @@ pub struct Settings {
     pub gesture_map: std::collections::BTreeMap<String, String>,
     /// Comma or space separated hosts where gestures are off.
     pub gesture_blocked: String,
+    /// Zoom applied to every page when it opens, 1.0 is 100%.
+    pub default_zoom: f64,
     /// Double click on a tab closes it.
     pub tab_double_click_close: bool,
     /// Show the close button on each tab.
@@ -117,6 +119,7 @@ impl Default for Settings {
             gesture_threshold: 34,
             gesture_map: std::collections::BTreeMap::new(),
             gesture_blocked: String::new(),
+            default_zoom: 1.0,
             tab_double_click_close: true,
             tab_show_close: true,
             tab_close_goes_left: true,

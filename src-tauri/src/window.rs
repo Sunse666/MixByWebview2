@@ -457,6 +457,7 @@ pub fn open_window(
     for (index, (url, _scroll, _pinned)) in urls.iter().enumerate() {
         let id = crate::ipc::tab_label(label, index + 1);
         tabs::create(&win, &id, url, width, height - chrome_h, &opts, false)?;
+        crate::tabs::apply_default_zoom(&app.clone(), &id);
     }
 
     let handle = app.clone();

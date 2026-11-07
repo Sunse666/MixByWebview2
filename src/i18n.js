@@ -234,6 +234,8 @@ const DICT = {
     "Comma separated hosts": "用逗号分隔域名",
     "Mark suspended tabs": "标记挂起的标签",
     "Dashed border and grey icon": "虚线边框和灰色图标",
+    "Page zoom": "网页缩放",
+    "Applied to newly opened pages": "对新打开的页面生效",
     "New tab": "新标签页",
     "New incognito tab": "新建无痕标签页",
     "Reopen closed tab": "重新打开关闭的标签页",
