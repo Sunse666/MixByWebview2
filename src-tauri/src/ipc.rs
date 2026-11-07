@@ -2025,42 +2025,53 @@ fn collect_suggestions(state: &AppState, text: &str, limit: usize) -> Vec<Sugges
     let needle = text.trim().to_lowercase();
     let mut found: Vec<Suggestion> = Vec::new();
 
-    let history = state.history.read().unwrap_or_else(|e| e.into_inner()).clone();
-    for visit in history {
-        found.push(Suggestion {
-            url: visit.url,
-            title: visit.title,
-            kind: "history".into(),
-        });
-    }
-    for bookmark in state.bookmarks.read().unwrap_or_else(|e| e.into_inner()).iter() {
-        found.push(Suggestion {
-            url: bookmark.url.clone(),
-            title: bookmark.title.clone(),
-            kind: "bookmark".into(),
-        });
-    }
-
-    let mut seen: Vec<String> = Vec::new();
-    found.retain(|item| {
-        if seen.contains(&item.url) {
-            return false;
+    // Borrowed, not cloned, and deduped through a set: this runs on every
+    // keystroke in the address bar, and history can hold thousands of entries.
+    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+    {
+        let history = state.history.read().unwrap_or_else(|e| e.into_inner());
+        for visit in history.iter() {
+            if seen.insert(visit.url.clone()) {
+                found.push(Suggestion {
+                    url: visit.url.clone(),
+                    title: visit.title.clone(),
+                    kind: "history".into(),
+                });
+            }
         }
-        seen.push(item.url.clone());
-        true
-    });
+    }
+    {
+        let bookmarks = state.bookmarks.read().unwrap_or_else(|e| e.into_inner());
+        for bookmark in bookmarks.iter() {
+            if seen.insert(bookmark.url.clone()) {
+                found.push(Suggestion {
+                    url: bookmark.url.clone(),
+                    title: bookmark.title.clone(),
+                    kind: "bookmark".into(),
+                });
+            }
+        }
+    }
 
     if !needle.is_empty() {
-        found.retain(|item| {
-            let url = item.url.to_lowercase();
-            let title = item.title.to_lowercase();
-            url.contains(&needle) || title.contains(&needle)
-        });
-        found.sort_by_key(|item| {
-            let url = item.url.to_lowercase();
-            let title = item.title.to_lowercase();
-            if url.contains(&needle) { 0 } else if title.contains(&needle) { 1 } else { 2 }
-        });
+        let mut ranked: Vec<(u8, Suggestion)> = found
+            .into_iter()
+            .filter_map(|item| {
+                let url = item.url.to_lowercase();
+                if url.contains(&needle) {
+                    return Some((0, item));
+                }
+                if item.title.to_lowercase().contains(&needle) {
+                    return Some((1, item));
+                }
+                None
+            })
+            .collect();
+        // History is stored newest first and the sort is stable, so recency
+        // survives inside each rank.
+        ranked.sort_by_key(|(rank, _)| *rank);
+        ranked.truncate(limit);
+        return ranked.into_iter().map(|(_, item)| item).collect();
     }
 
     found.truncate(limit);
