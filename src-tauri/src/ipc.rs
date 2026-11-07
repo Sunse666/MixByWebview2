@@ -2264,18 +2264,14 @@ pub(crate) fn attach_title(app: &AppHandle, url: &str, title: &str) {
     let Some(state) = app.try_state::<AppState>() else {
         return;
     };
-    let snapshot = {
-        let mut visits = state.history.write().unwrap_or_else(|e| e.into_inner());
-        let Some(visit) = visits.iter_mut().find(|visit| visit.url == url) else {
-            return;
-        };
-        if visit.title == title {
-            return;
+    // Memory only: the visit was already written when the url changed, and
+    // writing again here meant a second full rewrite of history.json per page.
+    let mut visits = state.history.write().unwrap_or_else(|e| e.into_inner());
+    if let Some(visit) = visits.iter_mut().find(|visit| visit.url == url) {
+        if visit.title != title {
+            visit.title = title.to_string();
         }
-        visit.title = title.to_string();
-        visits.clone()
-    };
-    let _ = crate::library::save_visits(&state.dirs.history_file, &snapshot);
+    }
 }
 
 /// The favicon arrives after the visit is recorded, so patch the newest match.
@@ -2283,22 +2279,14 @@ pub(crate) fn attach_icon(app: &AppHandle, url: &str, icon: &str) {
     let Some(state) = app.try_state::<AppState>() else {
         return;
     };
-    let snapshot = {
-        let mut visits = state.history.write().unwrap_or_else(|e| e.into_inner());
-        let mut changed = false;
-        for visit in visits.iter_mut() {
-            if visit.url == url && visit.icon.as_deref() != Some(icon) {
-                visit.icon = Some(icon.to_string());
-                changed = true;
-                break;
-            }
-        }
-        if !changed {
-            return;
-        }
-        visits.clone()
-    };
-    let _ = crate::library::save_visits(&state.dirs.history_file, &snapshot);
+    // Memory only; flushed with the rest of history when the app quits.
+    let mut visits = state.history.write().unwrap_or_else(|e| e.into_inner());
+    if let Some(visit) = visits
+        .iter_mut()
+        .find(|visit| visit.url == url && visit.icon.as_deref() != Some(icon))
+    {
+        visit.icon = Some(icon.to_string());
+    }
 }
 
 pub(crate) fn record_visit(app: &AppHandle, url: &str, title: &str) {
@@ -2315,6 +2303,17 @@ pub(crate) fn record_visit(app: &AppHandle, url: &str, title: &str) {
     };
     if let Err(err) = crate::library::save_visits(&state.dirs.history_file, &snapshot) {
         crate::logging::warn(&format!("history save failed: {err}"));
+    }
+}
+
+/// Writes history once, for the paths that only touch memory otherwise.
+pub(crate) fn flush_history(app: &AppHandle) {
+    let Some(state) = app.try_state::<AppState>() else {
+        return;
+    };
+    let snapshot = state.history.read().unwrap_or_else(|e| e.into_inner()).clone();
+    if let Err(err) = crate::library::save_visits(&state.dirs.history_file, &snapshot) {
+        crate::logging::warn(&format!("history flush failed: {err}"));
     }
 }
 
@@ -2688,21 +2687,26 @@ pub async fn app_info() -> Result<AppInfo, AppError> {
 
 /// Restarts so extension changes are picked up: WebView2 loads them at startup.
 #[tauri::command]
-pub async fn app_restart(app: AppHandle, _window: tauri::Window) -> Result<(), AppError> {
+pub async fn app_restart(app: AppHandle, webview: tauri::Webview) -> Result<(), AppError> {
+    require_trusted(&webview)?;
     let exe = std::env::current_exe().map_err(|err| AppError::new("restart", err.to_string()))?;
     let mut command = std::process::Command::new(exe);
     if let Ok(dir) = std::env::current_dir() {
         command.current_dir(dir);
     }
     command.spawn().map_err(|err| AppError::new("restart", err.to_string()))?;
+    save_sessions(&app);
+    flush_history(&app);
     app.exit(0);
     Ok(())
 }
 
 /// Quits for real: the window close button only hides to the tray.
 #[tauri::command]
-pub async fn app_quit(app: AppHandle, _window: tauri::Window) -> Result<(), AppError> {
+pub async fn app_quit(app: AppHandle, webview: tauri::Webview) -> Result<(), AppError> {
+    require_trusted(&webview)?;
     save_sessions(&app);
+    flush_history(&app);
     crate::logging::info("quit from the app menu");
     app.exit(0);
     Ok(())
