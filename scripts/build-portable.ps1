@@ -30,8 +30,15 @@ Copy-Item $exe (Join-Path $stage "mix.exe")
 $loader = Join-Path $build "WebView2Loader.dll"
 if (Test-Path $loader) { Copy-Item $loader (Join-Path $stage "WebView2Loader.dll") }
 
+# docs/ is not tracked, so a fresh clone has no README-friend.md; fall back to
+# the readme that is, rather than shipping a package with no instructions.
 $readme = Join-Path $repo "docs\README-friend.md"
-if (Test-Path $readme) { Copy-Item $readme (Join-Path $stage "README.txt") }
+if (-not (Test-Path $readme)) { $readme = Join-Path $repo "README.md" }
+if (Test-Path $readme) {
+    Copy-Item $readme (Join-Path $stage "README.txt")
+} else {
+    Write-Warning "no readme found; the package will ship without README.txt"
+}
 
 # Created by the app on first run; ship them with a placeholder so the zip keeps them.
 foreach ($dir in @("crx", "javascript")) {
