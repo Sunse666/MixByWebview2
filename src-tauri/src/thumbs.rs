@@ -69,6 +69,73 @@ pub fn capture(_webview: &tauri::Webview) -> Option<Vec<u8>> {
   None
 }
 
+/// Reads the width and height out of a png header.
+fn png_size(png: &[u8]) -> Option<(u32, u32)> {
+  if png.len() < 24 || &png[1..4] != b"PNG" {
+    return None;
+  }
+  let width = u32::from_be_bytes([png[16], png[17], png[18], png[19]]);
+  let height = u32::from_be_bytes([png[20], png[21], png[22], png[23]]);
+  Some((width, height))
+}
+
+/// One screenshot attempt, with or without the compositor surface.
+#[cfg(windows)]
+fn capture_try(webview: &tauri::Webview, params: &str) -> Option<Vec<u8>> {
+  let json = crate::screenshot::call(webview, "Page.captureScreenshot", params)?;
+  let value: serde_json::Value = serde_json::from_str(&json).ok()?;
+  let data = value.get("data")?.as_str()?;
+  let png = crate::screenshot::decode_base64(data)?;
+  if png.is_empty() {
+    None
+  } else {
+    Some(png)
+  }
+}
+
+/// Experiment: can a webview that is hidden still be photographed?
+///
+/// Two attempts, because they answer different questions. "fromSurface": false
+/// asks the renderer for a frame it may still be holding; the plain call is the
+/// control, and if that one answers with a real picture then the surface is still
+/// there as well. A blank page compresses to a few kilobytes, so anything above
+/// MIN_PNG is treated as a real frame. Both outcomes are logged: the sizes and the
+/// png dimensions say which one worked.
+#[cfg(windows)]
+pub fn probe_hidden(webview: &tauri::Webview) -> Option<Vec<u8>> {
+  const MIN_PNG: usize = 12 * 1024;
+  const VIEW: &str =
+    r#"{"format":"png","fromSurface":false,"captureBeyondViewport":false,"optimizeForSpeed":true}"#;
+  const SURFACE: &str =
+    r#"{"format":"png","captureBeyondViewport":false,"optimizeForSpeed":true}"#;
+
+  let label = webview.label();
+  let mut best: Option<Vec<u8>> = None;
+  for (name, params) in [("view", VIEW), ("surface", SURFACE)] {
+    match capture_try(webview, params) {
+      Some(png) => {
+        let size = png_size(&png).unwrap_or((0, 0));
+        crate::logging::info(&format!(
+          "thumbs: hidden {label} {name} -> {} bytes {}x{}",
+          png.len(),
+          size.0,
+          size.1
+        ));
+        if png.len() >= MIN_PNG && best.is_none() {
+          best = Some(png);
+        }
+      }
+      None => crate::logging::warn(&format!("thumbs: hidden {label} {name} -> no answer")),
+    }
+  }
+  best
+}
+
+#[cfg(not(windows))]
+pub fn probe_hidden(_webview: &tauri::Webview) -> Option<Vec<u8>> {
+  None
+}
+
 pub fn remember(id: &str, png: Vec<u8>) {
   let mut guard = store();
   let map = guard.get_or_insert_with(HashMap::new);

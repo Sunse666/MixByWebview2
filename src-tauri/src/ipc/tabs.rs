@@ -312,6 +312,16 @@ pub async fn thumb_show(
             }
         }
     }
+    // A hidden tab has no surface to photograph. This probe is the experiment
+    // that decides whether it can still be done; five second cooldown, because
+    // hovering is no reason to run two protocol calls per mouse move.
+    if !visible && crate::thumbs::needs(&id, 5) {
+        if let Some(webview) = app.get_webview(&id) {
+            if let Some(png) = crate::thumbs::probe_hidden(&webview) {
+                crate::thumbs::remember(&id, png);
+            }
+        }
+    }
     let (win_w, _) = crate::window::logical_size(&window)?;
     let (width, height) = (372.0, 236.0);
     let left = (x - width / 2.0).clamp(6.0, (win_w - width - 6.0).max(6.0));
