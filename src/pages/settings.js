@@ -239,18 +239,71 @@ async function boot() {
     await invoke("settings_set", { patch: { font_family: fontInput.value } }).catch(() => {});
   });
 
+  // Size presets, like the appearance pages of the browsers this imitates:
+  // 0 keeps whatever the site asked for.
+  const SIZE_PRESETS = [
+    [0, "Site default"],
+    [12, "Small"],
+    [14, "Medium"],
+    [16, "Large"],
+    [18, "Extra large"],
+  ];
   const sizeSelect = document.createElement("select");
   sizeSelect.className = "button";
-  for (const size of [0, 14, 16, 18, 20, 22]) {
+  for (const [size, label] of SIZE_PRESETS) {
     const option = document.createElement("option");
     option.value = String(size);
-    option.textContent = size === 0 ? t("Site default") : size + " px";
+    option.textContent = size === 0 ? t(label) : `${t(label)} (${size}px)`;
     if ((settings.font_size ?? 0) === size) option.selected = true;
     sizeSelect.append(option);
   }
   sizeSelect.addEventListener("change", async () => {
     await invoke("settings_set", { patch: { font_size: Number(sizeSelect.value) } }).catch(() => {});
   });
+
+  const MIN_SIZES = [0, 10, 11, 12, 13, 14, 16, 18];
+  const minSelect = document.createElement("select");
+  minSelect.className = "button";
+  for (const size of MIN_SIZES) {
+    const option = document.createElement("option");
+    option.value = String(size);
+    option.textContent = size === 0 ? t("Off") : size + " px";
+    if ((settings.font_min_size ?? 0) === size) option.selected = true;
+    minSelect.append(option);
+  }
+  minSelect.addEventListener("change", async () => {
+    await invoke("settings_set", {
+      patch: { font_min_size: Number(minSelect.value) },
+    }).catch(() => {});
+  });
+
+  const monoInput = document.createElement("input");
+  monoInput.className = "hex";
+  monoInput.style.width = "240px";
+  monoInput.placeholder = "JetBrains Mono";
+  monoInput.value = settings.font_mono || "";
+  monoInput.addEventListener("change", async () => {
+    await invoke("settings_set", { patch: { font_mono: monoInput.value } }).catch(() => {});
+  });
+
+  // Live preview: the same sample line drawn twice, once in each family.
+  const preview = document.createElement("div");
+  preview.style.padding = "10px 0 2px";
+  const previewText = document.createElement("div");
+  previewText.textContent = "16: The quick brown fox jumps over the lazy dog";
+  previewText.style.fontSize = "16px";
+  const previewMono = document.createElement("div");
+  previewMono.textContent = "13: const mix = await open(url);";
+  previewMono.style.fontSize = "13px";
+  preview.append(previewText, previewMono);
+  const paintPreview = () => {
+    previewText.style.fontFamily = fontInput.value.trim() || "";
+    previewMono.style.fontFamily =
+      monoInput.value.trim() || "ui-monospace, Courier New, monospace";
+  };
+  fontInput.addEventListener("input", paintPreview);
+  monoInput.addEventListener("input", paintPreview);
+  paintPreview();
 
   const engine = document.createElement("select");
   engine.className = "button";
@@ -376,7 +429,18 @@ async function boot() {
   startUrl.addEventListener("change", async () => {
     await invoke("settings_set", { patch: { start_url: startUrl.value } }).catch(() => {});
   });
-  startCard.append(row("Start page", "Opened at launch", startUrl));
+  const homeUrl = document.createElement("input");
+  homeUrl.className = "hex";
+  homeUrl.style.width = "320px";
+  homeUrl.placeholder = settings.start_url || "https://example.com";
+  homeUrl.value = settings.home_url || "";
+  homeUrl.addEventListener("change", async () => {
+    await invoke("settings_set", { patch: { home_url: homeUrl.value } }).catch(() => {});
+  });
+  startCard.append(
+    row("Start page", "Opened at launch", startUrl),
+    row(t("Home address"), t("Opened by the home button; empty uses the start page"), homeUrl),
+  );
   main.append(startCard);
 
   const themeHead = document.createElement("h2");
@@ -431,8 +495,11 @@ async function boot() {
     row("Mode", "Dark or light palette for the interface", modeSelect),
     themeRow,
     zoomRow,
-    row("Page font", "Empty keeps the site font, restart to apply", fontInput),
-    row("Page font size", "Empty keeps the site size, restart to apply", sizeSelect),
+    row(t("Standard font"), t("Empty keeps the site font, applies to new pages"), fontInput),
+    row(t("Monospace font"), t("Used for code blocks and text areas"), monoInput),
+    row(t("Font size"), t("Text size for pages that do not set one"), sizeSelect),
+    row(t("Minimum font size"), t("Stops pages from rendering text smaller than this"), minSelect),
+    preview,
   );
   main.append(themeCard);
 

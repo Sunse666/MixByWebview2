@@ -187,7 +187,10 @@ pub struct SettingsPatch {
     pub gesture_blocked: Option<String>,
     pub theme_mode: Option<String>,
     pub font_family: Option<String>,
+    pub font_mono: Option<String>,
     pub font_size: Option<u32>,
+    pub font_min_size: Option<u32>,
+    pub home_url: Option<String>,
     pub default_zoom: Option<f64>,
     pub tab_double_click_close: Option<bool>,
     pub tab_show_close: Option<bool>,
@@ -1402,7 +1405,14 @@ pub async fn shortcut(app: AppHandle, window: tauri::Window, state: State<'_, Ap
         "close_window" => window_of(&window).close()?,
         "open_home" | "open_history" | "open_bookmarks" | "open_settings" | "open_extensions" | "open_downloads" => {
             let page = match action.as_str() {
-                "open_home" => state.settings.read().start_url.clone(),
+                "open_home" => {
+                    let settings = state.settings.read();
+                    if settings.home_url.trim().is_empty() {
+                        settings.start_url.clone()
+                    } else {
+                        settings.home_url.clone()
+                    }
+                }
                 "open_history" => "http://tauri.localhost/pages/history.html".to_string(),
                 "open_bookmarks" => "http://tauri.localhost/pages/bookmarks.html".to_string(),
                 "open_settings" => "http://tauri.localhost/pages/settings.html".to_string(),
@@ -1819,8 +1829,17 @@ pub(crate) fn apply_settings_patch(
         if let Some(value) = patch.font_family {
             guard.font_family = value.trim().to_string();
         }
+        if let Some(value) = patch.font_mono {
+            guard.font_mono = value.trim().to_string();
+        }
         if let Some(value) = patch.font_size {
             guard.font_size = value.min(32);
+        }
+        if let Some(value) = patch.font_min_size {
+            guard.font_min_size = value.min(24);
+        }
+        if let Some(value) = patch.home_url {
+            guard.home_url = value.trim().to_string();
         }
         if let Some(value) = patch.default_zoom {
             guard.default_zoom = value.clamp(0.5, 2.0);

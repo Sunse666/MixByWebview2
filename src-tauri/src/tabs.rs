@@ -177,10 +177,27 @@ fn build_custom_css(dirs: &AppDirs, settings: &crate::state::Settings) -> String
             settings.font_family.replace('"', "")
         ));
     }
+    if !settings.font_mono.trim().is_empty() {
+        // Generic families (serif, monospace) cannot be redefined from css, and
+        // WebView2 exposes no font settings, so the elements that conventionally
+        // ask for a monospaced face get the choice applied directly.
+        css.push_str(&format!(
+            "\ncode, pre, kbd, samp, tt, textarea {{ font-family: \"{}\" !important; }}\n",
+            settings.font_mono.replace('"', "")
+        ));
+    }
     if settings.font_size > 0 {
         css.push_str(&format!(
             "\nbody {{ font-size: {}px !important; }}\n",
             settings.font_size
+        ));
+    }
+    if settings.font_min_size > 0 {
+        // 1em resolves to the inherited size, so max() is a floor that still lets
+        // a page grow its own text.
+        css.push_str(&format!(
+            "\n:where(p, li, td, th, dd, dt, span, div, a, label, button, input, select, textarea, blockquote, figcaption) {{ font-size: max(1em, {}px) !important; }}\n",
+            settings.font_min_size
         ));
     }
     css

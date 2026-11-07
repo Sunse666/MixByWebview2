@@ -52,8 +52,14 @@ pub struct Settings {
     pub theme_mode: String,
     /// Font family forced on page text; empty keeps the site font.
     pub font_family: String,
+    /// Font family forced on code and other monospaced elements.
+    pub font_mono: String,
     /// Base font size in pixels, 0 keeps the site size.
     pub font_size: u32,
+    /// Smallest size the page may render text at, 0 leaves it alone.
+    pub font_min_size: u32,
+    /// Opened by the home button; empty falls back to start_url.
+    pub home_url: String,
     /// Zoom applied to every page when it opens, 1.0 is 100%.
     pub default_zoom: f64,
     /// Double click on a tab closes it.
@@ -126,7 +132,10 @@ impl Default for Settings {
             gesture_blocked: String::new(),
             theme_mode: "dark".to_string(),
             font_family: String::new(),
+            font_mono: String::new(),
             font_size: 0,
+            font_min_size: 0,
+            home_url: String::new(),
             default_zoom: 1.0,
             tab_double_click_close: true,
             tab_show_close: true,
