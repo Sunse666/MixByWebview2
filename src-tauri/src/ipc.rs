@@ -289,6 +289,58 @@ impl From<serde_json::Error> for AppError {
     }
 }
 
+/// Pages the app serves itself: the chrome strip, the overlay panels and the
+/// bundled html pages. Remote sites never match, which is what keeps privileged
+/// commands away from page content even if a capability is widened by mistake.
+pub(crate) fn trusted_url(url: &str) -> bool {
+    let trimmed = url.trim();
+    if trimmed.starts_with("about:blank") || trimmed.starts_with("about:srcdoc") {
+        return true;
+    }
+    let Some((scheme, rest)) = trimmed.split_once("://") else {
+        return false;
+    };
+    // macOS and Linux serve the bundle through a custom scheme; Windows uses
+    // http://tauri.localhost through the asset protocol.
+    let scheme = scheme.to_ascii_lowercase();
+    if matches!(scheme.as_str(), "tauri" | "asset" | "ipc") {
+        return true;
+    }
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or_default();
+    let authority = authority
+        .rsplit_once('@')
+        .map(|(_, tail)| tail)
+        .unwrap_or(authority);
+    let host = authority.split(':').next().unwrap_or_default().to_ascii_lowercase();
+    matches!(host.as_str(), "tauri.localhost" | "ipc.localhost")
+}
+
+/// The caller's own address decides whether it may run a privileged command.
+pub(crate) fn trusted(webview: &tauri::Webview) -> bool {
+    webview
+        .url()
+        .map(|url| trusted_url(url.as_str()))
+        .unwrap_or(false)
+}
+
+fn untrusted() -> AppError {
+    AppError::new("untrusted", "only app pages may run this command")
+}
+
+/// Rejects a caller that is not an app page. Used by every command that can
+/// destroy data, spawn a webview or reach the clipboard.
+pub(crate) fn require_trusted(webview: &tauri::Webview) -> Result<(), AppError> {
+    if trusted(webview) {
+        Ok(())
+    } else {
+        crate::logging::warn(&format!(
+            "denied privileged command for {}",
+            webview.label()
+        ));
+        Err(untrusted())
+    }
+}
+
 /// The window the user is working in; falls back to the primary one.
 pub fn focused_window(app: &AppHandle) -> Option<tauri::Window> {
     app.windows()
@@ -939,7 +991,8 @@ pub async fn download_list(_window: tauri::Window, state: State<'_, AppState>) -
 
 /// Zips the whole profile so it can be restored on another machine.
 #[tauri::command]
-pub async fn backup_export(_window: tauri::Window, state: State<'_, AppState>) -> Result<String, AppError> {
+pub async fn backup_export(webview: tauri::Webview, state: State<'_, AppState>) -> Result<String, AppError> {
+    require_trusted(&webview)?;
     let default_name = format!(
         "Mix-backup-{}.zip",
         std::time::SystemTime::now()
@@ -1001,7 +1054,8 @@ pub async fn backup_export(_window: tauri::Window, state: State<'_, AppState>) -
 
 /// Restores a backup over the current profile; the app restarts afterwards.
 #[tauri::command]
-pub async fn backup_import(_window: tauri::Window, state: State<'_, AppState>) -> Result<String, AppError> {
+pub async fn backup_import(webview: tauri::Webview, state: State<'_, AppState>) -> Result<String, AppError> {
+    require_trusted(&webview)?;
     let Some(source) = rfd::FileDialog::new()
         .add_filter("zip", &["zip"])
         .pick_file()
@@ -1043,7 +1097,8 @@ pub async fn backup_import(_window: tauri::Window, state: State<'_, AppState>) -
 /// Makes Mix a candidate default browser, then opens the Windows picker: the
 /// app must never take handlers away from the user silently.
 #[tauri::command]
-pub async fn register_browser() -> Result<String, AppError> {
+pub async fn register_browser(webview: tauri::Webview) -> Result<String, AppError> {
+    require_trusted(&webview)?;
     let exe = crate::browser_reg::register()?;
     #[cfg(windows)]
     let _ = std::process::Command::new("cmd")
@@ -1079,7 +1134,8 @@ pub(crate) fn reveal_path(path: &std::path::Path) -> Result<(), AppError> {
 /// Opens the file a download produced.
 /// Drops finished entries from the list; files on disk stay.
 #[tauri::command]
-pub async fn download_clear(_window: tauri::Window, state: State<'_, AppState>) -> Result<(), AppError> {
+pub async fn download_clear(webview: tauri::Webview, state: State<'_, AppState>) -> Result<(), AppError> {
+    require_trusted(&webview)?;
     let mut tasks = state.downloads.write().unwrap_or_else(|e| e.into_inner());
     tasks.retain(|task| task.state == "started");
     Ok(())
@@ -1454,13 +1510,15 @@ pub async fn chrome_menu(
 /// The address field cannot read the clipboard itself: the webview clipboard API
 /// is gated behind a permission prompt that never appears, so go through the OS.
 #[tauri::command]
-pub async fn clipboard_read() -> Result<String, AppError> {
+pub async fn clipboard_read(webview: tauri::Webview) -> Result<String, AppError> {
+    require_trusted(&webview)?;
     let mut board = arboard::Clipboard::new().map_err(|err| AppError::new("clipboard", err.to_string()))?;
     board.get_text().map_err(|err| AppError::new("clipboard", err.to_string()))
 }
 
 #[tauri::command]
-pub async fn clipboard_write(text: String) -> Result<(), AppError> {
+pub async fn clipboard_write(webview: tauri::Webview, text: String) -> Result<(), AppError> {
+    require_trusted(&webview)?;
     let mut board = arboard::Clipboard::new().map_err(|err| AppError::new("clipboard", err.to_string()))?;
     board.set_text(text).map_err(|err| AppError::new("clipboard", err.to_string()))
 }
@@ -1469,12 +1527,20 @@ pub async fn clipboard_write(text: String) -> Result<(), AppError> {
 #[tauri::command]
 pub async fn url_action(
     app: AppHandle,
-    window: tauri::Window,
+    webview: tauri::Webview,
     action: String,
 ) -> Result<(), AppError> {
-    if let Some(chrome) = app.get_webview(&format!("{}-chrome", window.label())) {
-        let script = format!("window.__mixUrlAction && window.__mixUrlAction(\"{action}\")");
-        let _ = chrome.eval(&script);
+    require_trusted(&webview)?;
+    // The action travels to the chrome page through eval, so the set is closed
+    // and the value is encoded; interpolating it would let page script run in
+    // the privileged chrome context.
+    if !matches!(action.as_str(), "cut" | "copy" | "paste" | "select-all") {
+        return Err(AppError::new("bad_action", action));
+    }
+    let label = webview.window().label().to_string();
+    if let Some(chrome) = app.get_webview(&format!("{label}-chrome")) {
+        let encoded = serde_json::to_string(&action).unwrap_or_else(|_| "\"\"".to_string());
+        let _ = chrome.eval(&format!("window.__mixUrlAction && window.__mixUrlAction({encoded})"));
     }
     Ok(())
 }
@@ -2228,10 +2294,11 @@ pub async fn history_list(_window: tauri::Window, state: State<'_, AppState>, li
 /// Removes the rows the history page has selected.
 #[tauri::command]
 pub async fn history_remove(
-    _window: tauri::Window,
+    webview: tauri::Webview,
     state: State<'_, AppState>,
     entries: Vec<(String, u64)>,
 ) -> Result<usize, AppError> {
+    require_trusted(&webview)?;
     let removed = {
         let mut visits = state.history.write().unwrap_or_else(|e| e.into_inner());
         let before = visits.len();
@@ -2257,10 +2324,11 @@ pub async fn history_remove(
 #[tauri::command]
 pub async fn clear_data(
     app: AppHandle,
-    _window: tauri::Window,
+    webview: tauri::Webview,
     state: State<'_, AppState>,
     kinds: Vec<String>,
 ) -> Result<Vec<String>, AppError> {
+    require_trusted(&webview)?;
     let mut done = Vec::new();
 
     if kinds.iter().any(|kind| kind == "history") {
@@ -2306,7 +2374,8 @@ pub async fn clear_data(
 }
 
 #[tauri::command]
-pub async fn history_clear(_window: tauri::Window, state: State<'_, AppState>) -> Result<(), AppError> {
+pub async fn history_clear(webview: tauri::Webview, state: State<'_, AppState>) -> Result<(), AppError> {
+    require_trusted(&webview)?;
     {
         let mut visits = state.history.write().unwrap_or_else(|e| e.into_inner());
         visits.clear();
@@ -2540,7 +2609,8 @@ pub async fn theme_import(
 }
 
 #[tauri::command]
-pub async fn diag_export(app: AppHandle) -> Result<String, AppError> {
+pub async fn diag_export(app: AppHandle, webview: tauri::Webview) -> Result<String, AppError> {
+    require_trusted(&webview)?;
     let path = crate::diag::export(&app).map_err(|err| AppError::new("diag", err))?;
     crate::logging::info(&format!("diagnostics written: {}", path.display()));
     Ok(path.display().to_string())
@@ -2585,15 +2655,36 @@ pub async fn ui_log(message: String) -> Result<(), AppError> {
     Ok(())
 }
 
+/// A userscript path arrives from the page, so it is resolved and checked
+/// against the scripts folder before anything is renamed or deleted.
+fn script_path_inside(state: &AppState, path: &str) -> Result<std::path::PathBuf, AppError> {
+    let candidate = std::path::PathBuf::from(path);
+    let resolved = candidate
+        .canonicalize()
+        .map_err(|err| AppError::new("bad_script", err.to_string()))?;
+    let root = state
+        .dirs
+        .scripts
+        .canonicalize()
+        .unwrap_or_else(|_| state.dirs.scripts.clone());
+    if !resolved.starts_with(&root) {
+        crate::logging::warn(&format!("script path outside the scripts folder: {path}"));
+        return Err(AppError::new("bad_script", "script is outside the scripts folder"));
+    }
+    Ok(resolved)
+}
+
 /// Userscripts are files, so disabling means renaming the suffix: the scanner
 /// only picks up names ending in ".user.js".
 #[tauri::command]
 pub async fn script_set_enabled(
-    _window: tauri::Window,
+    webview: tauri::Webview,
+    state: State<'_, AppState>,
     path: String,
     enabled: bool,
 ) -> Result<String, AppError> {
-    let source = std::path::PathBuf::from(&path);
+    require_trusted(&webview)?;
+    let source = script_path_inside(&state, &path)?;
     let name = source
         .file_name()
         .and_then(|name| name.to_str())
@@ -2623,9 +2714,15 @@ pub async fn script_set_enabled(
 }
 
 #[tauri::command]
-pub async fn script_remove(_window: tauri::Window, path: String) -> Result<(), AppError> {
-    std::fs::remove_file(&path).map_err(|err| AppError::new("script", err.to_string()))?;
-    crate::logging::info(&format!("userscript removed: {path}"));
+pub async fn script_remove(
+    webview: tauri::Webview,
+    state: State<'_, AppState>,
+    path: String,
+) -> Result<(), AppError> {
+    require_trusted(&webview)?;
+    let target = script_path_inside(&state, &path)?;
+    std::fs::remove_file(&target).map_err(|err| AppError::new("script", err.to_string()))?;
+    crate::logging::info(&format!("userscript removed: {}", target.display()));
     Ok(())
 }
 
@@ -2994,7 +3091,19 @@ pub async fn translate_page(
 #[tauri::command]
 pub async fn download_url(
     app: AppHandle,
+    webview: tauri::Webview,
     state: State<'_, AppState>,
+    url: String,
+    file_name: Option<String>,
+) -> Result<String, AppError> {
+    require_trusted(&webview)?;
+    save_url(app, &state, url, file_name).await
+}
+
+/// Fetches a url into the downloads folder; shared with the support hook.
+pub(crate) async fn save_url(
+    app: AppHandle,
+    state: &AppState,
     url: String,
     file_name: Option<String>,
 ) -> Result<String, AppError> {
@@ -3240,7 +3349,8 @@ pub async fn overlay_close(app: AppHandle, window: tauri::Window) -> Result<(), 
 
 /// Creates the user stylesheet if missing, then reveals the folder.
 #[tauri::command]
-pub async fn custom_css_open(_window: tauri::Window, state: State<'_, AppState>) -> Result<String, AppError> {
+pub async fn custom_css_open(webview: tauri::Webview, state: State<'_, AppState>) -> Result<String, AppError> {
+    require_trusted(&webview)?;
     let path = state.dirs.user_data.join("custom.css");
     if !path.exists() {
         let starter = "/* Styles here are applied to every page. */\n\n/*\n.example {\n  outline: 1px solid #4c8dff;\n}\n*/\n";
@@ -3250,7 +3360,8 @@ pub async fn custom_css_open(_window: tauri::Window, state: State<'_, AppState>)
     Ok(path.display().to_string())
 }
 #[tauri::command]
-pub async fn open_dir(_window: tauri::Window, state: State<'_, AppState>, which: String) -> Result<(), AppError> {
+pub async fn open_dir(webview: tauri::Webview, state: State<'_, AppState>, which: String) -> Result<(), AppError> {
+    require_trusted(&webview)?;
     let dirs = &state.dirs;
     let path = match which.as_str() {
         "userdata" => &dirs.user_data,
@@ -3287,6 +3398,33 @@ fn reveal(path: &std::path::Path) -> std::io::Result<()> {
     };
     cmd.spawn().map(|_| ())
 }
+#[cfg(test)]
+mod trusted_caller_tests {
+    use super::*;
+
+    #[test]
+    fn app_pages_are_trusted() {
+        // Windows serves the bundle through the asset protocol, macOS and Linux
+        // through a custom scheme.
+        assert!(trusted_url("http://tauri.localhost/index.html"));
+        assert!(trusted_url("http://tauri.localhost/pages/settings.html"));
+        assert!(trusted_url("https://tauri.localhost/overlay.html#app_menu"));
+        assert!(trusted_url("tauri://localhost/index.html"));
+        assert!(trusted_url("about:blank"));
+    }
+
+    #[test]
+    fn remote_pages_are_not_trusted() {
+        assert!(!trusted_url("https://example.com/"));
+        assert!(!trusted_url("http://example.com/tauri.localhost"));
+        assert!(!trusted_url("https://tauri.localhost.evil.test/"));
+        assert!(!trusted_url("https://user@evil.test/?x=http://tauri.localhost"));
+        assert!(!trusted_url("data:text/html,<p>hi</p>"));
+        assert!(!trusted_url("file:///C:/Windows/System32/drivers/etc/hosts"));
+        assert!(!trusted_url(""));
+    }
+}
+
 #[cfg(test)]
 mod tab_order_tests {
     use super::*;

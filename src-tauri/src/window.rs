@@ -256,7 +256,7 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
             let target = handle.clone();
             let _ = handle.run_on_main_thread(move || {
                 let state = target.state::<AppState>();
-                let call = crate::ipc::download_url(target.clone(), state, url, None);
+                let call = crate::ipc::save_url(target.clone(), &state, url, None);
                 match tauri::async_runtime::block_on(call) {
                     Ok(path) => crate::logging::info(&format!("debug save: {path}")),
                     Err(err) => crate::logging::warn(&format!("debug save failed: {}", err.message)),
