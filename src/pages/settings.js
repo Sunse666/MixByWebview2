@@ -1113,6 +1113,7 @@ async function boot() {
     ["home", "Home"],
     ["reopen", "Reopen closed tab"],
     ["mute", "Mute tab"],
+    ["shot", "Take a screenshot"],
     ["translate", "Translate this page"],
     ["zoom", "Zoom"],
     ["bookmark", "Bookmark this page"],

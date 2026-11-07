@@ -460,9 +460,22 @@ function renderMenuBar() {
 // Tab id -> { playing, muted }, pushed by the backend poller.
 const audioState = {};
 
+// The backend writes the png and answers with its path; only the file name is
+// worth showing.
+async function takeScreenshot() {
+  try {
+    const path = await invoke("tab_screenshot");
+    const name = String(path).split(/[\\/]/).pop();
+    showToast(t("Screenshot saved") + ": " + name);
+  } catch (error) {
+    showToast(String(error));
+  }
+}
+
 const TOOLBAR_ITEMS = {
   home: { glyph: "\u2302", label: "Home", where: "outside", run: () => invoke("shortcut", { action: "open_home" }) },
   mute: { glyph: "\u{1F508}", label: "Mute tab", where: "outside", run: () => invoke("tab_mute") },
+  shot: { glyph: "\u{1F4F7}", label: "Take a screenshot", where: "outside", run: () => takeScreenshot() },
   reopen: { glyph: "\u21ba", label: "Reopen closed tab", where: "outside", run: () => invoke("shortcut", { action: "reopen_tab" }) },
   translate: { glyph: "\u6587", label: "Translate this page", where: "inside", run: () => toggleTranslate() },
   zoom: { glyph: "\u2315", label: "Zoom", where: "inside", run: () => invoke("overlay_toggle", { kind: "zoom" }) },

@@ -314,6 +314,8 @@ const DICT = {
     "Right": "右侧",
     "Reset to defaults": "重置为默认设置",
     "Mute tab": "静音标签页",
+    "Take a screenshot": "网页截图",
+    "Screenshot saved": "截图已保存",
     "Unmute tab": "取消静音",
     "Standard font": "标准字体",
     "Monospace font": "等宽字体",

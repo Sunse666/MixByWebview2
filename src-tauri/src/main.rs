@@ -20,6 +20,7 @@ mod permissions;
 mod persist;
 mod platform;
 mod session;
+mod screenshot;
 mod snap;
 mod translate;
 mod tray;
@@ -98,6 +99,7 @@ fn main() {
             ipc::tab_pin,
             ipc::tab_close,
             ipc::tab_mute,
+            ipc::tab_screenshot,
             ipc::tab_navigate,
             ipc::tab_nav,
             ipc::theme_get,

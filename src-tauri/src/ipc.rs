@@ -881,6 +881,28 @@ pub async fn tab_close(app: AppHandle, window: tauri::Window, state: State<'_, A
     Ok(())
 }
 
+/// Saves a png of the visible page into the downloads folder.
+#[tauri::command]
+pub async fn tab_screenshot(
+    app: AppHandle,
+    window: tauri::Window,
+    state: State<'_, AppState>,
+) -> Result<String, AppError> {
+    let id = selected_label(&state, &window);
+    let Some(webview) = app.get_webview(&id) else {
+        return Err(AppError::new("no_tab", "there is no tab to capture"));
+    };
+    let Some(bytes) = crate::screenshot::capture(&webview) else {
+        return Err(AppError::new("capture", "the page did not answer with an image"));
+    };
+    let name = format!("Mix-shot-{}.png", crate::library::now());
+    let target = crate::downloads::target_for(&state.dirs.downloads, "mix://screenshot", &name);
+    crate::paths::write_atomic(&target, &bytes)?;
+    crate::downloads::record_done(&app, "mix://screenshot", &target);
+    crate::logging::info(&format!("screenshot {}", target.display()));
+    Ok(target.display().to_string())
+}
+
 /// Mutes or unmutes the selected tab; with no argument it flips. The mute
 /// button in the toolbar drives this.
 #[tauri::command]
@@ -1951,6 +1973,7 @@ pub(crate) fn apply_settings_patch(
                 "home",
                 "reopen",
                 "mute",
+                "shot",
             ];
             guard.toolbar = value
                 .into_iter()
