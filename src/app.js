@@ -49,7 +49,7 @@ const LIGHT_THEME = {
   muted: "#5f6672",
   accent: "#2f6fed",
   tab: "#e7eaef",
-  tabActive: "#ffffff",
+  tabText: "#1b1d21",
   url: "#eef1f5",
 };
 
@@ -68,7 +68,8 @@ function applyThemeMode(mode) {
     "--muted": LIGHT_THEME.muted,
     "--accent": LIGHT_THEME.accent,
     "--tab": LIGHT_THEME.tab,
-    "--tab-active": LIGHT_THEME.tabActive,
+    "--tab-text": LIGHT_THEME.text,
+    "--hover": "#e4e8ee",
     "--url-bg": LIGHT_THEME.url,
   };
   for (const [key, value] of Object.entries(map)) root.style.setProperty(key, value);
