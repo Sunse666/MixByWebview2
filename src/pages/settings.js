@@ -358,7 +358,7 @@ async function boot() {
   main.append(startCard);
 
   const themeHead = document.createElement("h2");
-  themeHead.textContent = t("Theme file");
+  themeHead.textContent = t("Appearance");
   themeHead.style.margin = "18px 0 10px";
   main.append(themeHead);
 
@@ -990,7 +990,8 @@ async function boot() {
   main.append(browserCard);
 
   const toolbarHead = document.createElement("h2");
-  toolbarHead.textContent = t("Toolbar buttons");
+  // Folds into Appearance above, so the nav has one entry like other browsers.
+  toolbarHead.textContent = "";
   toolbarHead.style.margin = "18px 0 10px";
   main.append(toolbarHead);
 
@@ -1077,12 +1078,11 @@ function groupSections() {
   const preferred = [
     "Startup",
     "Performance",
+    "Appearance",
+    "New tab page",
     "Tab settings",
     "Super drag",
     "Mouse gestures",
-    "New tab page",
-    "Theme file",
-    "Toolbar buttons",
     "Shortcuts",
     "Backup",
     "Default browser",
