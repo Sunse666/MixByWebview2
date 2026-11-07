@@ -61,6 +61,17 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
         None
     };
 
+    // Also the check the baseline script uses: a session that failed to load
+    // would otherwise be measured as a single tab without any complaint.
+    match &restored {
+        Some(session) => crate::logging::info(&format!(
+            "session restore: {} window(s), {} tab(s)",
+            session.windows.len(),
+            session.windows.iter().map(|window| window.tabs.len()).sum::<usize>()
+        )),
+        None => crate::logging::info("session restore: nothing to restore"),
+    }
+
     match restored {
         Some(session) => {
             for (index, window) in session.windows.iter().enumerate() {

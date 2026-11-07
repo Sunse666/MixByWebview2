@@ -63,14 +63,21 @@ function New-Sandbox([string]$Name, [int]$Tabs) {
     New-Item -ItemType Directory -Path $data -Force | Out-Null
     $urls = @()
     for ($i = 1; $i -le $Tabs; $i++) { $urls += "https://example.com/?tab=$i" }
-    $session = @{ schema_version = 1; tabs = $urls; selected = 0 } | ConvertTo-Json -Compress
+    # The current shape: { schema_version, windows: [{ tabs, selected, window }] }.
+    # The old flat { tabs: [url] } form loads as "no windows", which silently
+    # measured a single tab for every row.
+    $tabEntries = @($urls | ForEach-Object { @{ url = $_; scroll = 0.0; pinned = $false } })
+    $session = @{
+        schema_version = 3
+        windows = @(@{ tabs = $tabEntries; selected = 0; window = $null })
+    } | ConvertTo-Json -Compress -Depth 8
     [IO.File]::WriteAllText((Join-Path $data 'session.json'), $session, (New-Object System.Text.UTF8Encoding($false)))
-    $settings = @{ schema_version = 1; start_url = 'https://example.com'; restore_session = $true; chrome_height = 68.0; max_live_tabs = 64 } | ConvertTo-Json -Compress
+    $settings = @{ schema_version = 1; start_url = 'https://example.com'; restore_session = $true; chrome_height = 86.0; max_live_tabs = 64 } | ConvertTo-Json -Compress
     [IO.File]::WriteAllText((Join-Path $data 'settings.json'), $settings, (New-Object System.Text.UTF8Encoding($false)))
     return $dir
 }
 
-function Invoke-Run([string]$Dir, [int]$SettleSeconds) {
+function Invoke-Run([string]$Dir, [int]$SettleSeconds, [int]$Expected) {
     Get-Process mix, msedgewebview2 -ErrorAction SilentlyContinue | Stop-Process -Force
     Start-Sleep -Milliseconds 600
     $log = Join-Path $Dir 'UserData\logs\mix.log'
@@ -87,6 +94,13 @@ function Invoke-Run([string]$Dir, [int]$SettleSeconds) {
         }
     }
     Start-Sleep -Seconds $SettleSeconds
+    if (-not $startup) { throw "no startup line in $log" }
+    $restored = Select-String -Path $log -Pattern 'session restore: \d+ window\(s\), (\d+) tab' | Select-Object -Last 1
+    if (-not $restored) { throw "no session restore line in $log" }
+    $count = [int]$restored.Matches[0].Groups[1].Value
+    if ($count -ne $Expected) {
+        throw "session restored $count tab(s), expected ${Expected}: the session format moved again"
+    }
     $memory = Get-TreeMemory $proc.Id
     $procs = 1 + (Get-Descendants $proc.Id).Count
     Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
@@ -96,13 +110,14 @@ function Invoke-Run([string]$Dir, [int]$SettleSeconds) {
 
 $rows = @()
 foreach ($tabs in @(1, 5, 10)) {
+    Write-Host "measuring $tabs tab(s)"
     $dir = New-Sandbox "tabs$tabs" $tabs
     $startups = @()
     $privates = @()
     $workings = @()
     $counts = @()
     for ($i = 1; $i -le $Runs; $i++) {
-        $run = Invoke-Run $dir 6
+        $run = Invoke-Run $dir 6 $tabs
         if ($run.Startup) { $startups += $run.Startup }
         $privates += $run.PrivateMB
         $workings += $run.WorkingMB
@@ -145,6 +160,9 @@ $md += 'and inflates the total badly.'
 $md += ''
 $md += 'Tab switching time is not measured: it needs real input, and this machine'
 $md += 'cannot be driven from a script.'
+$md += ''
+$md += 'Each row restores a session.json written by this script; if the session format'
+$md += 'changes again the run fails instead of reporting one tab three times.'
 
 $path = Join-Path $repo $OutFile
 [IO.File]::WriteAllText($path, ($md -join [Environment]::NewLine), (New-Object System.Text.UTF8Encoding($false)))
