@@ -478,6 +478,202 @@ async function bootSuggest() {
   await invoke("suggest_refresh").catch(() => {});
 }
 
+/**
+ * Ctrl+Shift+P / Ctrl+Shift+A. Both are the same box: a filterable list that
+ * runs something when a row is picked. They live here rather than in the chrome
+ * strip because that webview is only as tall as the tab strip.
+ */
+const PALETTE_ACTIONS = [
+  ["New tab", "new_tab"],
+  ["New window", "new_window"],
+  ["Incognito tab", "new_incognito"],
+  ["Reopen closed tab", "reopen_tab"],
+  ["Find in page", "find"],
+  ["Translate", "translate"],
+  ["Zoom in", "zoom_in"],
+  ["Zoom out", "zoom_out"],
+  ["Reset zoom", "zoom_reset"],
+  ["Print", "print"],
+  ["Downloads", "open_downloads"],
+  ["History", "open_history"],
+  ["Bookmarks", "open_bookmarks"],
+  ["Extensions", "open_extensions"],
+  ["Settings", "open_settings"],
+  ["Developer tools", "devtools"],
+];
+
+/** Subsequence match with a bonus for runs and word starts. */
+function matchScore(text, query) {
+  if (!query) return 1;
+  const hay = String(text || "").toLowerCase();
+  if (hay.startsWith(query)) return 100;
+  const direct = hay.indexOf(query);
+  if (direct >= 0) return 60 - Math.min(direct, 40) * 0.5;
+  let at = 0;
+  let points = 0;
+  let previous = -2;
+  for (const char of query) {
+    const found = hay.indexOf(char, at);
+    if (found < 0) return 0;
+    points += found === previous + 1 ? 3 : 1;
+    if (found === 0 || /[\s\/._-]/.test(hay[found - 1] || "")) points += 2;
+    previous = found;
+    at = found + 1;
+  }
+  return points;
+}
+
+async function bootSearch(mode) {
+  const backdrop = document.createElement("div");
+  backdrop.id = "palette-backdrop";
+  const box = document.createElement("div");
+  box.className = "palette";
+  const input = document.createElement("input");
+  input.className = "palette-input";
+  input.placeholder = mode === "tabs" ? t("Search open tabs") : t("Type a command or a site");
+  const list = document.createElement("div");
+  list.className = "palette-list";
+  box.append(input, list);
+  backdrop.append(box);
+  document.body.append(backdrop);
+  input.focus();
+
+  let rows = [];
+
+  const close = () => invoke("overlay_close").catch(() => {});
+
+  const paint = (entries) => {
+    rows = entries;
+    list.replaceChildren();
+    if (!entries.length) {
+      const empty = document.createElement("div");
+      empty.className = "palette-empty";
+      empty.textContent = t("Nothing matches");
+      list.append(empty);
+      return;
+    }
+    entries.forEach((entry, index) => {
+      const line = document.createElement("div");
+      line.className = "palette-row" + (index === 0 ? " active" : "");
+      const label = document.createElement("span");
+      label.textContent = entry.label;
+      line.append(label);
+      if (entry.hint) {
+        const hint = document.createElement("span");
+        hint.className = "palette-hint";
+        hint.textContent = entry.hint;
+        line.append(hint);
+      }
+      line.addEventListener("click", () => {
+        close();
+        entry.run();
+      });
+      list.append(line);
+    });
+  };
+
+  const actions = PALETTE_ACTIONS.map(([label, action]) => ({
+    label: t(label),
+    run: () => invoke("shortcut", { action }).catch(() => {}),
+  }));
+
+  const search = async (query) => {
+    const text = (query || "").trim().toLowerCase();
+    if (mode === "tabs") {
+      const tabs = (await invoke("tab_list").catch(() => [])) || [];
+      paint(
+        tabs
+          .map((tab) => ({
+            tab,
+            points: Math.max(matchScore(tab.title, text), matchScore(tab.url, text) * 0.9),
+          }))
+          .filter((entry) => entry.points > 0)
+          .sort((a, b) => b.points - a.points)
+          .slice(0, 40)
+          .map(({ tab }) => ({
+            label: (tab.pinned ? "\ud83d\udccc " : "") + (tab.title || t("New tab")),
+            hint: tab.url,
+            run: () => invoke("tab_select", { id: tab.id }).catch(() => {}),
+          })),
+      );
+      return;
+    }
+
+    const found = actions
+      .map((action) => ({ action, points: matchScore(action.label, text) }))
+      .filter((entry) => entry.points > 0)
+      .sort((a, b) => b.points - a.points)
+      .slice(0, 8)
+      .map(({ action }) => ({ label: action.label, run: action.run }));
+
+    if (text.length >= 2) {
+      const history = (await invoke("history_list", { limit: 200 }).catch(() => [])) || [];
+      const seen = new Set();
+      for (const visit of history.filter((entry) => !seen.has(entry.url) && seen.add(entry.url))) {
+        if (found.length >= 14) break;
+        if (matchScore(visit.url + " " + (visit.title || ""), text) <= 0) continue;
+        found.push({
+          label: visit.title || visit.url,
+          hint: visit.url,
+          run: () => invoke("tab_navigate", { url: visit.url }).catch(() => {}),
+        });
+      }
+    }
+    paint(found);
+  };
+
+  const move = (step) => {
+    const items = [...list.children].filter((row) => row.classList.contains("palette-row"));
+    if (!items.length) return;
+    const current = items.findIndex((row) => row.classList.contains("active"));
+    const next = (current + step + items.length) % items.length;
+    items.forEach((row, index) => row.classList.toggle("active", index === next));
+    items[next].scrollIntoView({ block: "nearest" });
+  };
+
+  const choose = () => {
+    const items = [...list.children].filter((row) => row.classList.contains("palette-row"));
+    const index = items.findIndex((row) => row.classList.contains("active"));
+    const entry = rows[index < 0 ? 0 : index];
+    if (!entry) return;
+    close();
+    entry.run();
+  };
+
+  input.addEventListener("input", () => search(input.value));
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      close();
+      return;
+    }
+    if (event.key === "Enter") {
+      event.preventDefault();
+      choose();
+      return;
+    }
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      move(1);
+      return;
+    }
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      move(-1);
+    }
+  });
+
+  await search("");
+}
+
+async function bootPalette() {
+  await bootSearch("command");
+}
+
+async function bootTabSearch() {
+  await bootSearch("tabs");
+}
+
 /** The tab hover card: a preview image and the page it belongs to. */
 async function bootThumb() {
   const id = params.get("id") || "";
@@ -909,6 +1105,14 @@ async function boot() {
   }
   if (kind === "thumb") {
     await bootThumb();
+    return;
+  }
+  if (kind === "palette") {
+    await bootPalette();
+    return;
+  }
+  if (kind === "tab_search") {
+    await bootTabSearch();
     return;
   }
   if (kind === "zoom") {

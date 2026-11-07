@@ -253,8 +253,15 @@ pub async fn overlay_open_at(
         "tools" => 254.0,
         _ => 96.0,
     };
-    let (menu_w, menu_h) = (232.0, menu_h);
-    let _ = crate::overlay::open_at(&app, &window, &kind, x, y, menu_w, menu_h);
+    // The palettes are wide search panels, not menus: the chrome strip is only
+    // as tall as the tabs and address row, so they cannot live in it.
+    let palette = kind == "palette" || kind == "tab_search";
+    let (width, height) = if palette {
+        (560.0, 420.0)
+    } else {
+        (232.0, menu_h)
+    };
+    let _ = crate::overlay::open_at(&app, &window, &kind, x, y, width, height);
     Ok(())
 }
 
