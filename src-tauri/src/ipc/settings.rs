@@ -92,7 +92,10 @@ pub async fn settings_set(
     let _ = webview
         .app_handle()
         .emit_to(label.clone(), "settings:changed", ());
-    // The sidebar changes the page geometry, and only a relayout applies that.
+    // The sidebar changes the page geometry, and only a relayout applies that. Turning
+    // it on also needs the webview itself, created here rather than in relayout, which
+    // runs from the window's resize handler.
+    crate::window::ensure_sidebar(webview.app_handle(), &label);
     let _ = crate::window::relayout(webview.app_handle(), &label);
     Ok(settings)
 }
