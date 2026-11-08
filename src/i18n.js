@@ -327,6 +327,9 @@ const DICT = {
     "Page": "本页",
     "Total": "总计",
     "Browser": "浏览器",
+    "Enabled": "已启用",
+    "Disabled": "已禁用",
+    "The browser refused that; restart and try again": "浏览器拒绝了这次操作，请重启后再试",
     "An extension turned off here does not come back on its own":
       "在这里关闭的扩展不会自己恢复（浏览器会把这个状态记进配置里）",
     "Bring disabled extensions back (needs a restart)": "恢复被禁用的扩展（需重启）",

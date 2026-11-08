@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-extension-add"
+description = "Enables the extension_add command without any pre-configured scope."
+commands.allow = ["extension_add"]
+
+[[permission]]
+identifier = "deny-extension-add"
+description = "Denies the extension_add command without any pre-configured scope."
+commands.deny = ["extension_add"]

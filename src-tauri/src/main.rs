@@ -128,6 +128,7 @@ fn main() {
             ipc::overlay_open,
             ipc::overlay_close,
             ipc::ext_list,
+            ipc::extension_add,
             ipc::extension_reset,
             ipc::script_set_enabled,
             ipc::script_remove,

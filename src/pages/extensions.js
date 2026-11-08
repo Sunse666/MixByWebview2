@@ -138,7 +138,6 @@ async function boot() {
   }
 
   const hidden = new Set(settings.hidden_extensions || []);
-  let disabledNow = [...(settings.disabled_extensions || [])];
 
   for (const ext of loaded) {
     const card = document.createElement("div");
@@ -205,20 +204,28 @@ async function boot() {
     });
     actions.append(bar);
 
+    // One control, both directions: turning it off asks the browser to unload the
+    // extension, turning it on hands the browser the folder again, which is the only
+    // handle left once an extension has been switched off.
+    const liveEntry = live.find((item) => item.name === ext.name);
     const toggle = document.createElement("button");
     toggle.className = "switch";
     toggle.setAttribute("role", "switch");
-    toggle.setAttribute("aria-checked", "true");
+    toggle.setAttribute("aria-checked", String(Boolean(liveEntry && liveEntry.enabled)));
     toggle.title = t("Enabled");
     toggle.addEventListener("click", async () => {
       const on = toggle.getAttribute("aria-checked") === "true";
+      toggle.disabled = true;
+      const done = on
+        ? await invoke("extension_live_set", { id: liveEntry.id, enabled: false }).catch(() => false)
+        : await invoke("extension_add", { dir: ext.dir }).catch(() => false);
+      toggle.disabled = false;
+      if (!done) {
+        note2.textContent = t("The browser refused that; restart and try again");
+        return;
+      }
       toggle.setAttribute("aria-checked", String(!on));
-      const disabled = new Set(disabledNow);
-      if (on) disabled.add(ext.source || ext.name);
-      else disabled.delete(ext.source || ext.name);
-      disabledNow = [...disabled];
-      await invoke("settings_set", { patch: { disabled_extensions: [...disabled] } }).catch(() => {});
-      restartBar.hidden = false;
+      note2.textContent = on ? t("Disabled") : t("Enabled");
     });
     actions.append(toggle);
 

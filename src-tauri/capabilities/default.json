@@ -11,6 +11,7 @@
     "allow-extension-live-list",
     "allow-extension-live-set",
     "allow-extension-reset",
+    "allow-extension-add",
     "allow-window-control",
     "allow-window-drag",
     "allow-window-resize",

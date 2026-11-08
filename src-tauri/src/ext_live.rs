@@ -192,3 +192,52 @@ pub fn forget_disabled_state(profile: &std::path::Path) -> Result<bool, String> 
   crate::paths::write_atomic(&file, &bytes).map_err(|err| err.to_string())?;
   Ok(true)
 }
+
+/// Loads one extension from a directory and enables it.
+///
+/// This is the way back from the one-way switch: an extension that was turned off
+/// stays off in the profile and vanishes from the list the toggle read, so the only
+/// handle on it is the folder it was loaded from. Adding that folder again gives a
+/// fresh extension object, which comes back enabled.
+#[cfg(windows)]
+pub fn add(webview: &tauri::Webview, dir: &str) -> bool {
+  use webview2_com::{
+    Microsoft::Web::WebView2::Win32::ICoreWebView2Profile7, ProfileAddBrowserExtensionCompletedHandler,
+  };
+  use windows_core::Interface;
+
+  let path = windows_core::HSTRING::from(dir);
+  let (sender, receiver) = std::sync::mpsc::channel::<bool>();
+  let fallback = sender.clone();
+  let request = webview.with_webview(move |platform| unsafe {
+    let done = std::sync::mpsc::Sender::clone(&sender);
+    let result = (|| -> windows_core::Result<()> {
+      let controller = platform.controller();
+      let core = controller.CoreWebView2()?;
+      let profile = core.cast::<ICoreWebView2_13>()?.Profile()?;
+      let profile7 = profile.cast::<ICoreWebView2Profile7>()?;
+      let sender_for_handler = std::sync::mpsc::Sender::clone(&done);
+      let handler = ProfileAddBrowserExtensionCompletedHandler::create(Box::new(
+        move |error, extension| {
+          let _ = sender_for_handler.send(error.is_ok() && extension.is_some());
+          Ok(())
+        },
+      ));
+      profile7.AddBrowserExtension(&path, &handler)
+    })();
+    if result.is_err() {
+      let _ = std::sync::mpsc::Sender::send(&fallback, false);
+    }
+  });
+  if request.is_err() {
+    return false;
+  }
+  receiver
+    .recv_timeout(std::time::Duration::from_secs(5))
+    .unwrap_or(false)
+}
+
+#[cfg(not(windows))]
+pub fn add(_webview: &tauri::Webview, _dir: &str) -> bool {
+  false
+}

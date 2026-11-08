@@ -234,6 +234,25 @@ pub async fn extension_reset(
     Ok("restart".to_string())
 }
 
+/// Loads one extension from its folder again: the way back from a disabled switch.
+#[tauri::command]
+pub async fn extension_add(
+    app: AppHandle,
+    webview: tauri::Webview,
+    state: State<'_, AppState>,
+    dir: String,
+) -> Result<bool, AppError> {
+    require_trusted(&webview)?;
+    let window = webview.window();
+    let label = selected_label(&state, &window);
+    let Some(page) = app.get_webview(&label) else {
+        return Ok(false);
+    };
+    let ok = crate::ext_live::add(&page, &dir);
+    crate::logging::info(&format!("extension add {dir}: {ok}"));
+    Ok(ok)
+}
+
 /// Enables or disables a loaded extension without restarting the app.
 #[tauri::command]
 pub async fn extension_live_set(
