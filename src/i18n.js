@@ -98,6 +98,8 @@ const DICT = {
     "Menu bar": "菜单栏",
     "Delete selected": "删除所选",
     "Enabled": "已启用",
+    "What the browser actually loaded, built into it included; the switches are on the cards below":
+      "浏览器实际加载的扩展（含内置）；开关在下面的卡片里",
     "Disabled": "已停用",
     "Restart to apply": "重启后生效",
     "Background": "背景",

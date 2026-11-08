@@ -61,6 +61,11 @@ async function boot() {
     head.textContent = t("Loaded by the browser");
     head.style.margin = "0 0 10px";
     main.append(head);
+    const liveNote = document.createElement("div");
+    liveNote.className = "card-note";
+    liveNote.style.margin = "0 0 8px";
+    liveNote.textContent = t("What the browser actually loaded, built into it included; the switches are on the cards below");
+    main.append(liveNote);
 
     const liveCard = document.createElement("div");
     liveCard.className = "card";
@@ -77,23 +82,14 @@ async function boot() {
       id.className = "host";
       id.textContent = item.id;
 
-      const toggle = document.createElement("button");
-      toggle.className = "switch";
-      toggle.setAttribute("role", "switch");
-      toggle.setAttribute("aria-checked", String(Boolean(item.enabled)));
-      toggle.addEventListener("click", async () => {
-        const enable = toggle.getAttribute("aria-checked") !== "true";
-        toggle.setAttribute("aria-checked", String(enable));
-        const ok = await invoke("extension_live_set", { id: item.id, enabled: enable }).catch(
-          () => false,
-        );
-        await invoke("ui_log", {
-          message: "live toggle " + item.id + " -> " + enable + ": " + ok,
-        }).catch(() => {});
-        toggle.setAttribute("aria-checked", String(Boolean(ok) ? enable : !enable));
-      });
+      // Status only: the switch belongs on the card below, which carries the folder
+      // and can switch an extension back on as well as off. Two switches doing the
+      // same thing in two places was the confusing part of this page.
+      const state = document.createElement("span");
+      state.className = "card-note";
+      state.textContent = item.enabled ? t("Enabled") : t("Disabled");
 
-      line.append(name, id, toggle);
+      line.append(name, id, state);
       liveCard.append(line);
     }
     main.append(liveCard);
