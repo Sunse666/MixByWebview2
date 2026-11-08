@@ -308,6 +308,30 @@ function fillTab(el, tab) {
   }
 }
 
+/** Milliseconds of stillness before the card appears. */
+const HOVER_DELAY = 650;
+
+/**
+ * Waits for the pointer to stop before opening the card.
+ *
+ * Every movement restarts the wait, so crossing the strip to reach another tab never
+ * pops anything, while resting on one does - the timer measures stillness, not presence.
+ * The earlier version cancelled on any movement past a few pixels, which a normal mouse
+ * produces just by arriving on a tab, so the card never came up at all.
+ */
+function armHover(id, el) {
+  clearTimeout(hoverThumb);
+  hoverThumb = setTimeout(async () => {
+    hoverThumb = null;
+    const box = el.getBoundingClientRect();
+    const shown = await invoke("thumb_show", {
+      id,
+      x: box.left + box.width / 2,
+    }).catch(() => false);
+    if (shown) thumbOpen = true;
+  }, HOVER_DELAY);
+}
+
 /** Wires the handlers a tab element keeps for its whole life. */
 function wireTab(el, id) {
   // Not draggable: with the attribute on, the browser starts its own drag session on
@@ -345,29 +369,10 @@ function wireTab(el, id) {
   });
   if (settings.tab_hover_preview) {
     el.addEventListener("mouseenter", (enter) => {
-      clearTimeout(hoverThumb);
-      // The card is for resting on a tab; any real movement cancels it, so crossing the
-      // strip on the way somewhere else never pops one.
-      const originX = enter.clientX;
-      const originY = enter.clientY;
-      const cancel = (move) => {
-        if (Math.abs(move.clientX - originX) + Math.abs(move.clientY - originY) > 12) {
-          clearTimeout(hoverThumb);
-          hoverThumb = null;
-          el.removeEventListener("mousemove", cancel);
-        }
-      };
-      el.addEventListener("mousemove", cancel);
-      hoverThumb = setTimeout(async () => {
-        el.removeEventListener("mousemove", cancel);
-        const box = el.getBoundingClientRect();
-        const shown = await invoke("thumb_show", {
-          id,
-          x: box.left + box.width / 2,
-        }).catch(() => false);
-        if (shown) thumbOpen = true;
-      }, 900);
+      void enter;
+      armHover(id, el);
     });
+    el.addEventListener("mousemove", () => armHover(id, el));
     el.addEventListener("mouseleave", () => {
       clearTimeout(hoverThumb);
       hoverThumb = null;
