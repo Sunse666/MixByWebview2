@@ -682,6 +682,12 @@ async function bootTabSearch() {
  * visited - and everything else on the card is read live: title, address, whether
  * it is loading, playing sound, or suspended.
  */
+/** A count, shortened once it gets long enough to be noise. */
+function count(value) {
+  if (value >= 10000) return Math.round(value / 1000) + "k";
+  return String(value);
+}
+
 /** Bytes as a short, readable size. */
 function megabytes(bytes) {
   const mb = bytes / (1024 * 1024);
@@ -763,20 +769,33 @@ async function bootThumb() {
   line.append(badges);
   card.append(line);
 
-  // Memory: the whole browser and this page's javascript heap. WebView2 does not
-  // map processes back to tabs, so a per-tab working set would be a guess.
-  const parts = [];
-  if (data.memory_tab) {
-    parts.push(t("Page") + " " + megabytes(data.memory_tab));
+  // Memory. The page's own numbers come first, because they belong to this tab; the
+  // browser total is summed over its processes, and the average is labelled as one
+  // since WebView2 cannot say which renderer serves which tab.
+  const pageParts = [];
+  if (data.memory_tab) pageParts.push(megabytes(data.memory_tab));
+  if (data.nodes) pageParts.push(count(data.nodes) + " " + t("nodes"));
+  if (data.listeners) pageParts.push(count(data.listeners) + " " + t("listeners"));
+  if (pageParts.length) {
+    const line = document.createElement("div");
+    line.className = "thumb-note thumb-memory";
+    line.textContent = t("Page") + " " + pageParts.join(" · ");
+    card.append(line);
   }
-  if (data.memory_total) {
-    parts.push(t("Total") + " " + megabytes(data.memory_total));
+
+  const totalParts = [];
+  if (data.memory_total) totalParts.push(t("Total") + " " + megabytes(data.memory_total));
+  if (data.memory_average) {
+    // The divisor is shown so nobody reads this as the tab's own footprint.
+    totalParts.push(
+      t("Average") + " " + megabytes(data.memory_average) + " / " + data.live_tabs,
+    );
   }
-  if (parts.length) {
-    const memory = document.createElement("div");
-    memory.className = "thumb-note thumb-memory";
-    memory.textContent = parts.join("  ·  ");
-    card.append(memory);
+  if (totalParts.length) {
+    const line = document.createElement("div");
+    line.className = "thumb-note thumb-memory";
+    line.textContent = totalParts.join("  ·  ");
+    card.append(line);
   }
 
   // A background tab cannot be photographed without showing it, so say when the

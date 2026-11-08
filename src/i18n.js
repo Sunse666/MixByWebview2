@@ -326,6 +326,9 @@ const DICT = {
     "Live previews": "实时缩略图",
     "Page": "本页",
     "Total": "总计",
+    "Average": "平均",
+    "nodes": "节点",
+    "listeners": "监听",
     "Wakes a background tab for a moment so its picture is current; pages notice this and may resume work":
       "悬停后台标签时短暂唤醒它，让画面是当前状态；页面会收到一次可见性变化（暂停的视频可能恢复）",
     "Search open tabs": "搜索标签页",

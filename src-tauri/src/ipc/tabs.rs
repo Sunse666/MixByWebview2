@@ -292,8 +292,16 @@ pub struct ThumbCard {
     incognito: bool,
     /// Working set of every process the browser owns, in bytes.
     memory_total: Option<u64>,
+    /// Total divided by the live tabs of this window: an average, labelled as one.
+    memory_average: Option<u64>,
     /// The page's own javascript heap, in bytes.
     memory_tab: Option<u64>,
+    /// DOM counters, which do belong to this tab alone.
+    nodes: u64,
+    listeners: u64,
+    documents: u64,
+    /// Live tabs of this window, the divisor behind the average.
+    live_tabs: u64,
 }
 
 #[tauri::command]
@@ -366,6 +374,11 @@ pub async fn thumb_card(
     let audio = _app
         .get_webview(&id)
         .and_then(|webview| crate::audio::state(&webview));
+    // Memory: the whole browser can be summed, one tab's working set cannot be
+    // isolated, so the card shows the page's own counters and a labelled average.
+    let memory_total = _app.get_webview(&id).and_then(|webview| crate::mem::total(&webview));
+    let metrics = _app.get_webview(&id).and_then(|webview| crate::mem::tab_metrics(&webview));
+    let live = core.tabs.iter().filter(|tab| tab.alive).count().max(1) as u64;
     Ok(ThumbCard {
         title: tab.title.clone(),
         url: tab.url.clone(),
@@ -379,8 +392,13 @@ pub async fn thumb_card(
         suspended: !tab.alive,
         pinned: tab.pinned,
         incognito: tab.incognito,
-        memory_total: _app.get_webview(&id).and_then(|webview| crate::mem::total(&webview)),
+        memory_total,
+        memory_average: memory_total.map(|total| total / live.max(1)),
         memory_tab: _app.get_webview(&id).and_then(|webview| crate::mem::tab_heap(&webview)),
+        nodes: metrics.map(|m| m.nodes).unwrap_or(0),
+        listeners: metrics.map(|m| m.listeners).unwrap_or(0),
+        documents: metrics.map(|m| m.documents).unwrap_or(0),
+        live_tabs: live,
     })
 }
 

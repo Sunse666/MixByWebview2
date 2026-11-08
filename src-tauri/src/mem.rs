@@ -114,3 +114,42 @@ pub fn tab_heap(webview: &tauri::Webview) -> Option<u64> {
 pub fn tab_heap(_webview: &tauri::Webview) -> Option<u64> {
   None
 }
+
+/// What one page is made of, in counts rather than bytes: these are the numbers a
+/// page can report about itself, and unlike a working set they really do belong to
+/// one tab.
+#[derive(Clone, Copy, Default, serde::Serialize)]
+pub struct TabMetrics {
+  pub documents: u64,
+  pub nodes: u64,
+  pub listeners: u64,
+}
+
+/// Reads the page's DOM counters through the protocol; nothing has to be painted,
+/// so a tab that is not on screen answers this fine.
+#[cfg(windows)]
+pub fn tab_metrics(webview: &tauri::Webview) -> Option<TabMetrics> {
+  let json = crate::screenshot::call_timeout(
+    webview,
+    "Memory.getDOMCounters",
+    "{}",
+    std::time::Duration::from_millis(600),
+  )?;
+  let value: serde_json::Value = serde_json::from_str(&json).ok()?;
+  let number = |key: &str| value.get(key).and_then(|item| item.as_u64()).unwrap_or(0);
+  let metrics = TabMetrics {
+    documents: number("documents"),
+    nodes: number("nodes"),
+    listeners: number("jsEventListeners"),
+  };
+  if metrics.nodes == 0 && metrics.documents == 0 {
+    None
+  } else {
+    Some(metrics)
+  }
+}
+
+#[cfg(not(windows))]
+pub fn tab_metrics(_webview: &tauri::Webview) -> Option<TabMetrics> {
+  None
+}
