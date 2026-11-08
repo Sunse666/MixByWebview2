@@ -242,10 +242,21 @@ pub fn add(webview: &tauri::Webview, dir: &str) -> Result<bool, String> {
           }
           // Added but still switched off: turn it on and wait for the answer.
           let sender_for_enable = std::sync::mpsc::Sender::clone(&sender_for_handler);
+          let probe = extension.clone();
           let handler = BrowserExtensionEnableCompletedHandler::create(Box::new(move |status| {
-            let _ = sender_for_enable.send(match status {
-              Ok(()) => Ok("enabled".to_string()),
-              Err(err) => Err(format!("enable refused: {err:?}")),
+            if let Err(err) = status {
+              let _ = sender_for_enable.send(Err(format!("enable refused: {err:?}")));
+              return Ok(());
+            }
+            // Ask the extension what it thinks now: Enable answering ok is not the
+            // same as the extension being on, and that gap is what kept a switch
+            // showing on for something the browser still had switched off.
+            let mut now = windows_core::BOOL(0);
+            let _ = probe.IsEnabled(&mut now);
+            let _ = sender_for_enable.send(if now.as_bool() {
+              Ok("enabled".to_string())
+            } else {
+              Err("the browser reports it as still off".to_string())
             });
             Ok(())
           }));

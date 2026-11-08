@@ -206,7 +206,17 @@ pub async fn extension_live_list(
         return Ok(Vec::new());
     };
     let listed = crate::ext_live::list(&webview);
-    crate::logging::info(&format!("live extensions: {}", listed.len()));
+    // Names and ids, so the page's cards can be told apart from what the browser has:
+    // matching them by name is all we have, and a mismatch silently looks like "off".
+    let described: Vec<String> = listed
+        .iter()
+        .map(|ext| format!("{}={} ({})", ext.name, ext.enabled, &ext.id[..ext.id.len().min(8)]))
+        .collect();
+    crate::logging::info(&format!(
+        "live extensions ({}): {}",
+        listed.len(),
+        described.join(", ")
+    ));
     Ok(listed)
 }
 

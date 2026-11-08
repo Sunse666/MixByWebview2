@@ -182,7 +182,12 @@ async function boot() {
     // One control, both directions: turning it off asks the browser to unload the
     // extension, turning it on hands the browser the folder again, which is the only
     // handle left once an extension has been switched off.
-    const liveEntry = live.find((item) => item.name === ext.name);
+    // Matching by name is the only handle we have; compare loosely so a difference in
+    // case or spacing does not read as "not loaded".
+    const norm = (value) => String(value || "").toLowerCase().replace(/\s+/g, "");
+    const liveEntry = live.find((item) => norm(item.name) === norm(ext.name))
+      || live.find((item) => norm(item.name).includes(norm(ext.name)))
+      || live.find((item) => norm(ext.name).includes(norm(item.name)) && norm(item.name).length > 3);
     // The live list is asked first; when it says nothing about an extension, the state
     // the browser confirmed when it was switched is used instead, so the switch does
     // not fall back to "off" on every visit.
