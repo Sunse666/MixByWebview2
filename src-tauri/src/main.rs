@@ -89,7 +89,17 @@ fn main() {
                     logging::warn(&format!("cannot save settings after extension reset: {err}"));
                 }
             }
-            let ext_infos = extensions::scan(&dirs, &settings.disabled_extensions);
+            // The old "disabled" list is gone: the browser's own state is the only
+            // truth now, and a stale entry here would keep an extension unloaded with
+            // no way to switch it back on.
+            if !settings.disabled_extensions.is_empty() {
+                logging::info("clearing the old disabled extension list");
+                settings.disabled_extensions.clear();
+                if let Err(err) = settings.save(&dirs.settings_file) {
+                    logging::warn(&format!("cannot save settings: {err}"));
+                }
+            }
+            let ext_infos = extensions::scan(&dirs);
             let scripts = userscripts::scan(&dirs.scripts);
             // One call fills every init script and the stylesheet; settings_set
             // calls the same function again when something changes.

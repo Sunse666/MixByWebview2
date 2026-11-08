@@ -175,10 +175,14 @@ pub fn set_enabled(_webview: &tauri::Webview, _id: &str, _enabled: bool) -> bool
 /// exists, when nothing else is holding the file - makes the next start load them
 /// again.
 pub fn forget_disabled_state(profile: &std::path::Path) -> Result<bool, String> {
-  let file = profile.join("Default").join("Preferences");
-  if !file.exists() {
+  // WebView2 puts the chromium profile one level down, inside EBWebView.
+  let candidates = [
+    profile.join("EBWebView").join("Default").join("Preferences"),
+    profile.join("Default").join("Preferences"),
+  ];
+  let Some(file) = candidates.into_iter().find(|path| path.exists()) else {
     return Ok(false);
-  }
+  };
   let text = std::fs::read_to_string(&file).map_err(|err| err.to_string())?;
   let mut value: serde_json::Value = serde_json::from_str(&text).map_err(|err| err.to_string())?;
   let removed = value
