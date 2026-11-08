@@ -646,3 +646,9 @@ footer { margin-top: auto; display: flex; justify-content: flex-end; gap: 8px; }
   color: var(--text, #e8eaed);
 }
 .thumb-card { cursor: pointer; }
+
+/* Memory line under the badges. */
+.thumb-memory {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.65;
+}

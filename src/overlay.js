@@ -682,6 +682,12 @@ async function bootTabSearch() {
  * visited - and everything else on the card is read live: title, address, whether
  * it is loading, playing sound, or suspended.
  */
+/** Bytes as a short, readable size. */
+function megabytes(bytes) {
+  const mb = bytes / (1024 * 1024);
+  return mb >= 100 ? Math.round(mb) + " MB" : mb.toFixed(1) + " MB";
+}
+
 async function bootThumb() {
   const id = params.get("id") || "";
   const data = await invoke("thumb_card", { id }).catch(() => null);
@@ -756,6 +762,22 @@ async function bootThumb() {
   }
   line.append(badges);
   card.append(line);
+
+  // Memory: the whole browser and this page's javascript heap. WebView2 does not
+  // map processes back to tabs, so a per-tab working set would be a guess.
+  const parts = [];
+  if (data.memory_tab) {
+    parts.push(t("Page") + " " + megabytes(data.memory_tab));
+  }
+  if (data.memory_total) {
+    parts.push(t("Total") + " " + megabytes(data.memory_total));
+  }
+  if (parts.length) {
+    const memory = document.createElement("div");
+    memory.className = "thumb-note thumb-memory";
+    memory.textContent = parts.join("  ·  ");
+    card.append(memory);
+  }
 
   // A background tab cannot be photographed without showing it, so say when the
   // picture is a memory rather than a live view.

@@ -290,6 +290,10 @@ pub struct ThumbCard {
     suspended: bool,
     pinned: bool,
     incognito: bool,
+    /// Working set of every process the browser owns, in bytes.
+    memory_total: Option<u64>,
+    /// The page's own javascript heap, in bytes.
+    memory_tab: Option<u64>,
 }
 
 #[tauri::command]
@@ -375,6 +379,8 @@ pub async fn thumb_card(
         suspended: !tab.alive,
         pinned: tab.pinned,
         incognito: tab.incognito,
+        memory_total: _app.get_webview(&id).and_then(|webview| crate::mem::total(&webview)),
+        memory_tab: _app.get_webview(&id).and_then(|webview| crate::mem::tab_heap(&webview)),
     })
 }
 

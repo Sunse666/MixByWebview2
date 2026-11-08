@@ -14,6 +14,7 @@ mod ipc;
 mod library;
 mod net;
 mod logging;
+mod mem;
 mod overlay;
 mod paths;
 mod permissions;
