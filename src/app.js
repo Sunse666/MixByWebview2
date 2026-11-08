@@ -191,6 +191,7 @@ function onDragMove(event) {
   if (!press.moved) {
     if (Math.abs(event.clientX - press.x) + Math.abs(event.clientY - press.y) < 6) return;
     press.moved = true;
+    invoke("ui_log", { message: "tab drag start " + press.id }).catch(() => {});
     clearTimeout(hoverThumb);
     const source = tabNodes.get(press.id);
     if (source) {
@@ -229,7 +230,14 @@ function onDragEnd(event) {
   const target = under.dataset.tab;
   if (!target || target === held.id) return;
   const to = tabs.findIndex((item) => item.id === target);
-  if (to >= 0) invoke("tab_move", { id: held.id, to }).catch(() => {});
+  invoke("ui_log", {
+    message: `tab drag: ${held.id} -> ${target} at ${to}`,
+  }).catch(() => {});
+  if (to >= 0) {
+    invoke("tab_move", { id: held.id, to }).catch((error) =>
+      invoke("ui_log", { message: "tab drag failed: " + error }).catch(() => {}),
+    );
+  }
 }
 
 document.addEventListener("mousemove", onDragMove);

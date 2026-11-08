@@ -596,9 +596,14 @@ pub async fn tab_icon(
                 .map(|tab| (tab.url.clone(), tab.incognito))
         })
         .unwrap_or_default();
-    // A private tab leaves no trace in history or in the shared icon cache, and
-    // the app's own pages have no site icon to cache: their fallback url is
-    // /favicon.ico on tauri.localhost, which only ever 404s.
+    // The app's own pages have no site icon: the address the page reports is
+    // /favicon.ico on tauri.localhost, which only ever 404s, and storing that as the
+    // tab's icon is what left the browser's broken-image glyph in the strip and in the
+    // address bar. Nothing to show is the honest answer.
+    if trusted_url(&page_url) {
+        return Ok(());
+    }
+    // A private tab leaves no trace in history or in the shared icon cache.
     if !page_url.is_empty() && !incognito && !trusted_url(&page_url) {
         attach_icon(&app, &page_url, &icon);
         let host = crate::favicons::host_of(&page_url);

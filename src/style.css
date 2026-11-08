@@ -545,3 +545,7 @@ body.tab-dragging .tab { transition: none; }
 body.tab-dragging .tab.dragging {
   opacity: 0.35;
 }
+
+body.tab-dragging, body.tab-dragging * {
+  user-select: none;
+}
