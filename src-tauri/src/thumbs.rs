@@ -147,7 +147,17 @@ pub fn capture_later(app: tauri::AppHandle, id: String, window_label: String) {
     };
     // A frozen page cannot paint, so wake it for the photograph.
     crate::freeze::thaw(&webview);
-    if let Some(png) = capture_live(selected.as_ref(), &webview) {
+    // One retry: a tab that has just been woken sometimes answers the devtools call
+    // before it has a surface, and that is exactly the case that left the frame empty.
+    let mut shot = capture_live(selected.as_ref(), &webview);
+    if shot.is_none() {
+      std::thread::sleep(std::time::Duration::from_millis(150));
+      shot = capture_live(selected.as_ref(), &webview);
+    }
+    if shot.is_none() {
+      crate::logging::warn(&format!("thumbs: no picture for {id} after two tries"));
+    }
+    if let Some(png) = shot {
       remember(&id, png.clone());
       // The card may already be open with nothing in it; hand it the picture rather
       // than making the pointer wait for the next hover.

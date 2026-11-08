@@ -694,8 +694,32 @@ function megabytes(bytes) {
   return mb >= 100 ? Math.round(mb) + " MB" : mb.toFixed(1) + " MB";
 }
 
+/** Puts a picture into the frame and marks the card as having one. */
+let thumbFilled = false;
+function fillThumb(frame, image, card, src) {
+  if (!src || thumbFilled) return;
+  thumbFilled = true;
+  image.src = src;
+  frame.classList.remove("pending");
+  card.classList.add("with-image");
+}
+
 async function bootThumb() {
   const id = params.get("id") || "";
+  thumbFilled = false;
+  // The listener goes up before the card is even asked for. The picture for a
+  // background tab is taken on a worker and can finish before this page exists, and an
+  // event nobody was listening for is simply gone - which is why the frame stayed empty
+  // roughly whenever the capture was quick.
+  const ready = listen("thumbs:ready", (event) => {
+    const payload = event.payload || {};
+    if (payload.id !== id) return;
+    const frame = document.querySelector(".thumb-frame");
+    const image = document.querySelector(".thumb-image");
+    const card = document.querySelector(".thumb-card");
+    if (frame && image && card) fillThumb(frame, image, card, payload.image);
+  }).catch(() => {});
+  void ready;
   const data = await invoke("thumb_card", { id }).catch(() => null);
   if (!data) {
     invoke("overlay_close").catch(() => {});
@@ -725,13 +749,24 @@ async function bootThumb() {
   frame.append(image);
   card.append(frame);
 
-  listen("thumbs:ready", (event) => {
-    const payload = event.payload || {};
-    if (payload.id !== id || !payload.image) return;
-    image.src = payload.image;
-    frame.classList.remove("pending");
-    card.classList.add("with-image");
-  }).catch(() => {});
+  if (data.image) fillThumb(frame, image, card, data.image);
+
+  // And if there is still no picture, ask again a few times. The event can be missed for
+  // reasons this page cannot see, but the picture itself lives in the backend either way,
+  // so a short poll settles it.
+  if (!data.image) {
+    (async () => {
+      for (let attempt = 0; attempt < 8 && !thumbFilled; attempt += 1) {
+        await new Promise((done) => setTimeout(done, 250));
+        if (thumbFilled) return;
+        const again = await invoke("thumb_card", { id }).catch(() => null);
+        if (again && again.image) fillThumb(frame, image, card, again.image);
+      }
+      // Give up quietly: an empty frame with the tab's details is better than a card
+      // that never appears.
+      if (!thumbFilled) frame.classList.remove("pending");
+    })();
+  }
 
   const line = document.createElement("div");
   line.className = "thumb-line";
