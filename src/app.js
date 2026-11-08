@@ -152,6 +152,14 @@ function closeGroupMenu() {
  */
 function openGroupMenu(group, x, y) {
   closeGroupMenu();
+  // The card is a separate webview on top of the page: while it is open the click that
+  // opens this menu can land on it instead, and it would take the focus with it.
+  clearTimeout(hoverThumb);
+  hoverThumb = null;
+  if (thumbOpen) {
+    thumbOpen = false;
+    invoke("overlay_close").catch(() => {});
+  }
   const menu = document.createElement("div");
   menu.className = "group-menu";
 
@@ -399,6 +407,9 @@ const HOVER_DELAY = 650;
  * produces just by arriving on a tab, so the card never came up at all.
  */
 function armHover(id, el) {
+  // A card opening while the group menu is up would take the keyboard away from the
+  // name field, so the strip stays quiet until the menu closes.
+  if (groupMenu) return;
   clearTimeout(hoverThumb);
   hoverThumb = setTimeout(async () => {
     hoverThumb = null;
