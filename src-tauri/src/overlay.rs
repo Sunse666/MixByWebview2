@@ -204,6 +204,23 @@ pub fn open_at(
     if !kind.starts_with("suggest") && !kind.starts_with("thumb") {
         let _ = webview.set_focus();
     }
+    // A card is looked at, not typed into. Creating a child webview hands it the
+    // keyboard - WebView2 focuses a new controller - which took focus away from the
+    // strip and from the group menu's name field. The strip gets it back, now and once
+    // more after the controller has settled.
+    if kind.starts_with("thumb") {
+        let chrome_label = format!("{}-chrome", win.label());
+        if let Some(chrome) = app.get_webview(&chrome_label) {
+            let _ = chrome.set_focus();
+        }
+        let app = app.clone();
+        tauri::async_runtime::spawn_blocking(move || {
+            std::thread::sleep(std::time::Duration::from_millis(80));
+            if let Some(chrome) = app.get_webview(&chrome_label) {
+                let _ = chrome.set_focus();
+            }
+        });
+    }
     {
         let state = app.state::<crate::ipc::AppState>();
         let mut slots = state.overlay.write().unwrap_or_else(|e| e.into_inner());
