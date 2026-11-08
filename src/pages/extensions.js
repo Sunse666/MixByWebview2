@@ -112,7 +112,7 @@ async function boot() {
   }
 
   const hidden = new Set(settings.hidden_extensions || []);
-  const enabledDirs = new Set();
+  const disabledList = settings.disabled_extensions || [];
 
   for (const ext of loaded) {
     const card = document.createElement("div");
@@ -188,10 +188,9 @@ async function boot() {
     const liveEntry = live.find((item) => norm(item.name) === norm(ext.name))
       || live.find((item) => norm(item.name).includes(norm(ext.name)))
       || live.find((item) => norm(ext.name).includes(norm(item.name)) && norm(item.name).length > 3);
-    // The browser's own list is the only state that counts. A local record makes the
-    // switch claim an extension is on when the browser has it off, which is the wrong
-    // half of the two ways to be wrong.
-    const enabledNow = Boolean(liveEntry && liveEntry.enabled);
+    // The settings list is the state: the browser's own off switch is one way, so it
+    // cannot be the place a switch keeps its answer.
+    const enabledNow = !(disabledList || []).includes(ext.name);
     const toggle = document.createElement("button");
     toggle.className = "switch";
     toggle.setAttribute("role", "switch");
@@ -200,34 +199,21 @@ async function boot() {
     toggle.addEventListener("click", async () => {
       const on = toggle.getAttribute("aria-checked") === "true";
       toggle.disabled = true;
-      if (on) {
-        enabledDirs.delete(ext.dir);
-        const done = await invoke("extension_live_set", {
-          id: liveEntry.id,
-          enabled: false,
-          dir: ext.dir,
-        })
-          .then(() => true)
-          .catch(() => false);
-        toggle.disabled = false;
-        if (!done) {
-          enabledDirs.add(ext.dir);
-          note2.textContent = t("The browser refused that; restart and try again");
-          return;
-        }
-        toggle.setAttribute("aria-checked", "false");
-        note2.textContent = t("Disabled");
-        return;
-      }
-      const added = await invoke("extension_add", { dir: ext.dir }).catch(() => null);
+      const done = await invoke("extension_set", {
+        name: ext.name,
+        enabled: !on,
+        dir: ext.dir,
+      })
+        .then(() => true)
+        .catch(() => false);
       toggle.disabled = false;
-      if (!added) {
-        note2.textContent = t("Restart Mix: the browser keeps this extension off until then");
+      if (!done) {
+        note2.textContent = t("Could not save:");
         return;
       }
-      enabledDirs.add(ext.dir);
-      toggle.setAttribute("aria-checked", "true");
-      note2.textContent = t("Enabled");
+      toggle.setAttribute("aria-checked", String(!on));
+      // The folder changes right away; the browser reads it on the next start.
+      note2.textContent = on ? t("Off after a restart") : t("On after a restart");
     });
     actions.append(toggle);
 

@@ -288,6 +288,54 @@ fn remember_extension_state(state: &AppState, dir: &str, enabled: bool) {
     }
 }
 
+/// Switches one extension off or on, by taking its unpacked folder away or putting it
+/// back.
+///
+/// The browser's own enable call is one way: switching an extension off there is
+/// durable and cannot be undone through the same API, which is why a switch built on it
+/// could never remember "on". The folder is the handle this app controls, and the list
+/// of names it belongs to lives in settings, where it survives restarts.
+#[tauri::command]
+pub async fn extension_set(
+    app: AppHandle,
+    webview: tauri::Webview,
+    state: State<'_, AppState>,
+    name: String,
+    enabled: bool,
+    dir: Option<String>,
+) -> Result<(), AppError> {
+    require_trusted(&webview)?;
+    {
+        let mut settings = state.settings.write();
+        settings.disabled_extensions.retain(|entry| entry != &name);
+        if !enabled {
+            settings.disabled_extensions.push(name.clone());
+        }
+        settings
+            .save(&state.dirs.settings_file)
+            .map_err(|err| AppError::new("settings", err.to_string()))?;
+    }
+    crate::logging::info(&format!("extension {name} enabled={enabled}"));
+
+    let window = webview.window();
+    let label = selected_label(&state, &window);
+    if let Some(page) = app.get_webview(&label) {
+        if enabled {
+            // The folder is what the next start reads, so putting it back is the part
+            // that matters; asking the browser to load it now is a bonus.
+            if let Some(dir) = dir.as_deref() {
+                let _ = crate::ext_live::add(&page, dir);
+            }
+        } else if let Some(entry) = crate::ext_live::list(&page)
+            .into_iter()
+            .find(|live| live.name == name)
+        {
+            let _ = crate::ext_live::set_enabled(&page, &entry.id, false);
+        }
+    }
+    Ok(())
+}
+
 /// Loads one extension from its folder again: the way back from a disabled switch.
 #[tauri::command]
 pub async fn extension_add(

@@ -330,6 +330,8 @@ const DICT = {
     "Total": "总计",
     "Browser": "浏览器",
     "Saved": "已保存",
+    "Off after a restart": "关闭（重启后生效）",
+    "On after a restart": "开启（重启后生效）",
     "Could not save:": "保存失败：",
     "Enabled": "已启用",
     "Disabled": "已禁用",

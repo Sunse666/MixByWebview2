@@ -12,6 +12,7 @@
     "allow-extension-live-set",
 
     "allow-extension-add",
+    "allow-extension-set",
     "allow-window-control",
     "allow-window-drag",
     "allow-window-resize",

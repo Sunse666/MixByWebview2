@@ -41,11 +41,11 @@ struct Manifest {
 /// rebuilt whenever the source file is newer.
 /// Copies what is in crx/ into the folder WebView2 loads from.
 ///
-/// Nothing is skipped here on purpose: whether an extension is enabled is the
-/// browser's own state, switched through its profile, and keeping a second list of
-/// "off" extensions meant the two disagreed - an extension removed from this folder
-/// could not be switched on again, because the folder was the only handle on it.
-pub fn scan(dirs: &AppDirs) -> Vec<ExtInfo> {
+/// An extension the user switched off is not copied, and any copy left from before is
+/// removed: the folder is what the browser loads, so taking it away is the switch that
+/// actually holds. The list of names lives in settings, which is the only state this
+/// app can keep reliably - the browser's own enable call is one way.
+pub fn scan(dirs: &AppDirs, disabled: &[String]) -> Vec<ExtInfo> {
     let Ok(entries) = std::fs::read_dir(&dirs.crx) else {
         return Vec::new();
     };
@@ -73,6 +73,11 @@ pub fn scan(dirs: &AppDirs) -> Vec<ExtInfo> {
             .unwrap_or("extension")
             .to_string();
         let target = dirs.extensions.join(slug(&label));
+        if disabled.iter().any(|name| name == &label || name == &slug(&label)) {
+            crate::logging::info(&format!("extension {label}: off, not copied"));
+            let _ = std::fs::remove_dir_all(&target);
+            continue;
+        }
         // A name that slugifies to nothing must never resolve to the shared root.
         if target == dirs.extensions {
             crate::logging::warn(&format!("extension {label}: unusable file name, skipped"));
