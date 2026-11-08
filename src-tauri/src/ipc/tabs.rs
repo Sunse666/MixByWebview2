@@ -312,10 +312,23 @@ pub async fn thumb_show(
             }
         }
     }
-    // A hidden tab cannot be photographed: its page does not paint at all, and the
-    // protocol answers with the frame from when it was last visible - measured, see
-    // the fingerprints in the log. So the card shows that frame and says what the
-    // tab is doing now through the live fields.
+    // A hidden tab does not paint, so its stored picture is the frame from when it
+    // was last visited. With live previews on, the tab is shown for a moment
+    // underneath the current one, photographed, and hidden again: the only way to
+    // get a fresh frame. The page does notice the visibility change, which is why
+    // this is a setting of its own.
+    if !visible && _state.settings.read().live_thumbs {
+        let selected = _state
+            .read_core(window.label())
+            .selected
+            .clone()
+            .and_then(|label| app.get_webview(&label));
+        if let Some(webview) = app.get_webview(&id) {
+            if let Some(png) = crate::thumbs::capture_live(selected.as_ref(), &webview) {
+                crate::thumbs::remember(&id, png);
+            }
+        }
+    }
     let (win_w, _) = crate::window::logical_size(&window)?;
     let (width, height) = (372.0, 236.0);
     let left = (x - width / 2.0).clamp(6.0, (win_w - width - 6.0).max(6.0));

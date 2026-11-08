@@ -6,8 +6,8 @@ use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, RECT, WPARAM};
 use windows::Win32::UI::HiDpi::GetDpiForWindow;
 use windows::Win32::UI::Shell::{DefSubclassProc, SetWindowSubclass};
 use windows::Win32::UI::WindowsAndMessaging::{
-    GetWindowRect, IsZoomed, HTBOTTOM, HTBOTTOMLEFT, HTBOTTOMRIGHT, HTLEFT, HTRIGHT, HTTOP,
-    HTTOPLEFT, HTTOPRIGHT, WM_NCHITTEST,
+    GetWindowRect, IsZoomed, SetWindowPos, HTBOTTOM, HTBOTTOMLEFT, HTBOTTOMRIGHT, HTLEFT, HTRIGHT,
+    HTTOP, HTTOPLEFT, HTTOPRIGHT, HWND_TOP, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, WM_NCHITTEST,
 };
 
 const BASE_EDGE: f32 = 5.0;
@@ -96,4 +96,27 @@ unsafe fn edge_code(hwnd: HWND, lparam: LPARAM) -> Option<u32> {
     };
 
     Some(code)
+}
+/// Puts a child webview at the top of the stacking order without moving,
+/// resizing or activating it.
+pub fn raise_webview(webview: &tauri::Webview) {
+    use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2Controller;
+
+    let _ = webview.with_webview(|platform| unsafe {
+        let controller = platform.controller();
+        let controller: &ICoreWebView2Controller = &controller;
+        let mut hwnd = HWND::default();
+        if controller.ParentWindow(&mut hwnd).is_err() || hwnd.0.is_null() {
+            return;
+        }
+        let _ = SetWindowPos(
+            hwnd,
+            Some(HWND_TOP),
+            0,
+            0,
+            0,
+            0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
+        );
+    });
 }

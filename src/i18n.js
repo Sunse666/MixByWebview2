@@ -323,6 +323,9 @@ const DICT = {
     "Unmute tab": "取消静音",
     "Toolbar": "工具栏",
     "Preview on hover": "悬停预览",
+    "Live previews": "实时缩略图",
+    "Wakes a background tab for a moment so its picture is current; pages notice this and may resume work":
+      "悬停后台标签时短暂唤醒它，让画面是当前状态；页面会收到一次可见性变化（暂停的视频可能恢复）",
     "Search open tabs": "搜索标签页",
     "Type a command or a site": "输入命令或网址",
     "Nothing matches": "没有匹配项",

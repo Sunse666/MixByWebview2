@@ -22,6 +22,10 @@ export function buildTabs({ settings, invoke }) {
   const preview = switchEl(settings.tab_hover_preview === true, async (next) => {
     await invoke("settings_set", { patch: { tab_hover_preview: next } }).catch(() => {});
   });
+  // Off by default, and only meaningful with the card on: this one wakes the page.
+  const live = switchEl(settings.live_thumbs === true, async (next) => {
+    await invoke("settings_set", { patch: { live_thumbs: next } }).catch(() => {});
+  });
 
   tabsCard.append(
     tabToggle(
@@ -46,6 +50,11 @@ export function buildTabs({ settings, invoke }) {
       t("Preview on hover"),
       t("Shows a picture of the tab when the pointer rests on it"),
       preview,
+    ),
+    row(
+      t("Live previews"),
+      t("Wakes a background tab for a moment so its picture is current; pages notice this and may resume work"),
+      live,
     ),
   );
 
