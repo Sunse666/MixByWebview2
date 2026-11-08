@@ -8,11 +8,11 @@
 
 /// Memory of the browser's own processes, leaving the gpu out.
 ///
-/// Other browsers report page memory without their gpu process, so summing all of
-/// them made this number look a quarter larger than theirs for the same work. The
-/// gpu side is returned separately, where a decoder belongs.
+/// Other browsers do not count their gpu process in the memory shown next to a
+/// page, so neither does this: summing it in made the same work look a quarter
+/// heavier. The gpu figure is still in the breakdown line in the log.
 #[cfg(windows)]
-pub fn totals(webview: &tauri::Webview) -> Option<(u64, u64)> {
+pub fn total(webview: &tauri::Webview) -> Option<u64> {
   use webview2_com::Microsoft::Web::WebView2::Win32::{
     ICoreWebView2Environment8, ICoreWebView2_2,
   };
@@ -51,21 +51,21 @@ pub fn totals(webview: &tauri::Webview) -> Option<(u64, u64)> {
     return None;
   }
   let mut pages = 0u64;
-  let mut gpu = 0u64;
   for (kind, pid) in processes {
-    let bytes = working_set(pid).unwrap_or(0);
     // COREWEBVIEW2_PROCESS_KIND_GPU is 4.
-    if kind == 4 {
-      gpu += bytes;
-    } else {
-      pages += bytes;
+    if kind != 4 {
+      pages += working_set(pid).unwrap_or(0);
     }
   }
-  Some((pages, gpu))
+  if pages == 0 {
+    None
+  } else {
+    Some(pages)
+  }
 }
 
 #[cfg(not(windows))]
-pub fn totals(_webview: &tauri::Webview) -> Option<(u64, u64)> {
+pub fn total(_webview: &tauri::Webview) -> Option<u64> {
   None
 }
 
