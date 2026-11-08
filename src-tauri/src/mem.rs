@@ -153,3 +153,118 @@ pub fn tab_metrics(webview: &tauri::Webview) -> Option<TabMetrics> {
 pub fn tab_metrics(_webview: &tauri::Webview) -> Option<TabMetrics> {
   None
 }
+
+/// One line per environment, broken down by process kind, written to the log.
+///
+/// The page environment and the ui environment are separate: they do not share a
+/// browser process, so a total that only covers the pages undercounts what the app
+/// really costs. This prints both, at most every thirty seconds, so a hover is
+/// enough to sample it without flooding the log.
+pub fn report(app: &tauri::AppHandle) {
+  use std::sync::atomic::{AtomicU64, Ordering};
+  use tauri::Manager;
+  static LAST: AtomicU64 = AtomicU64::new(0);
+  let now = crate::library::now();
+  let last = LAST.load(Ordering::Relaxed);
+  if now.saturating_sub(last) < 30 {
+    return;
+  }
+  LAST.store(now, Ordering::Relaxed);
+
+  // webviews() answers label/webview pairs.
+  let all = app.webviews();
+  let page = all
+    .iter()
+    .find(|(label, _)| label.starts_with('w') && !label.contains("chrome"))
+    .map(|(_, webview)| webview.clone());
+  if let Some(webview) = page {
+    if let Some(line) = breakdown(&webview) {
+      crate::logging::info(&format!("mem pages: {line}"));
+    }
+  }
+  let chrome = all
+    .iter()
+    .find(|(label, _)| label.ends_with("-chrome"))
+    .map(|(_, webview)| webview.clone());
+  if let Some(chrome) = chrome {
+    if let Some(line) = breakdown(&chrome) {
+      crate::logging::info(&format!("mem ui:    {line}"));
+    }
+  }
+}
+
+/// Count and working set per process kind inside one environment.
+#[cfg(windows)]
+fn breakdown(webview: &tauri::Webview) -> Option<String> {
+  use webview2_com::Microsoft::Web::WebView2::Win32::{
+    ICoreWebView2Environment8, ICoreWebView2_2,
+  };
+  use windows_core::Interface;
+
+  let (sender, receiver) = std::sync::mpsc::channel::<Vec<(i32, u32)>>();
+  let _ = webview.with_webview(move |platform| unsafe {
+    let found = (|| -> windows_core::Result<Vec<(i32, u32)>> {
+      let controller = platform.controller();
+      let core = controller.CoreWebView2()?;
+      let env = core.cast::<ICoreWebView2_2>()?.Environment()?;
+      let env = env.cast::<ICoreWebView2Environment8>()?;
+      let infos = env.GetProcessInfos()?;
+      let mut count = 0u32;
+      infos.Count(&mut count)?;
+      let mut out = Vec::with_capacity(count as usize);
+      for index in 0..count {
+        let info = infos.GetValueAtIndex(index)?;
+        let mut pid = 0i32;
+        let mut kind = Default::default();
+        info.ProcessId(&mut pid)?;
+        info.Kind(&mut kind)?;
+        out.push((kind.0, pid.max(0) as u32));
+      }
+      Ok(out)
+    })()
+    .unwrap_or_default();
+    let _ = sender.send(found);
+  });
+  let processes = receiver
+    .recv_timeout(std::time::Duration::from_millis(600))
+    .unwrap_or_default();
+  if processes.is_empty() {
+    return None;
+  }
+
+  let mut groups: std::collections::BTreeMap<i32, (u32, u64)> = std::collections::BTreeMap::new();
+  for (kind, pid) in processes {
+    let bytes = working_set(pid).unwrap_or(0);
+    let entry = groups.entry(kind).or_insert((0, 0));
+    entry.0 += 1;
+    entry.1 += bytes;
+  }
+  // The kinds WebView2 reports, in the order the enum defines them.
+  let name = |kind: i32| match kind {
+    0 => "browser",
+    1 => "renderer",
+    2 => "gpu",
+    3 => "utility",
+    4 => "sandbox",
+    5 => "worker",
+    _ => "other",
+  };
+  let mut total = 0u64;
+  let mut parts = Vec::new();
+  for (kind, (count, bytes)) in groups {
+    total += bytes;
+    parts.push(format!(
+      "{}({})={}MB",
+      name(kind),
+      count,
+      bytes / (1024 * 1024)
+    ));
+  }
+  parts.push(format!("total={}MB", total / (1024 * 1024)));
+  Some(parts.join(" "))
+}
+
+#[cfg(not(windows))]
+fn breakdown(_webview: &tauri::Webview) -> Option<String> {
+  None
+}

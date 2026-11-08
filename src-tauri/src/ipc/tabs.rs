@@ -376,6 +376,7 @@ pub async fn thumb_card(
         .and_then(|webview| crate::audio::state(&webview));
     // Memory: the whole browser can be summed, one tab's working set cannot be
     // isolated, so the card shows the page's own counters and a labelled average.
+    crate::mem::report(&_app);
     let memory_total = _app.get_webview(&id).and_then(|webview| crate::mem::total(&webview));
     let metrics = _app.get_webview(&id).and_then(|webview| crate::mem::tab_metrics(&webview));
     let live = core.tabs.iter().filter(|tab| tab.alive).count().max(1) as u64;
