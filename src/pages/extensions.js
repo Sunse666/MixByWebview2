@@ -117,9 +117,11 @@ async function boot() {
   for (const ext of loaded) {
     const card = document.createElement("div");
     card.className = "card";
+    // The status line a switch writes into. It was created but never added to the card,
+    // which is why every message about a restart went nowhere.
     const note2 = document.createElement("div");
     note2.className = "card-note";
-    note2.textContent = t("Restart to apply");
+    note2.textContent = "";
 
     const top = document.createElement("div");
     top.className = "card-head";
@@ -217,7 +219,7 @@ async function boot() {
     });
     actions.append(toggle);
 
-    card.append(actions);
+    card.append(note2, actions);
     grid.append(card);
   }
 }

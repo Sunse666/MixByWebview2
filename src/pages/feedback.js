@@ -28,6 +28,7 @@ const WRITES = new Set([
   "settings_set",
   "extension_live_set",
   "extension_add",
+  "extension_set",
   "bookmark_toggle",
   "script_set_enabled",
   "history_remove",
