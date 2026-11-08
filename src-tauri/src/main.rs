@@ -73,8 +73,22 @@ fn main() {
         ))
 
         .setup(move |app| {
-            let settings = state::Settings::load(&dirs.settings_file);
+            let mut settings = state::Settings::load(&dirs.settings_file);
             let theme = theme::Theme::load(&dirs.theme_file);
+            // Before any webview exists, nothing else has the profile open, which is
+            // the only safe moment to forget the extension state a previous session
+            // recorded: a disabled extension cannot be reached through the API again.
+            if settings.reset_extensions {
+                match ext_live::forget_disabled_state(&dirs.profile) {
+                    Ok(true) => logging::info("extension state cleared; extensions load again"),
+                    Ok(false) => logging::info("extension state already clear"),
+                    Err(err) => logging::warn(&format!("cannot clear extension state: {err}")),
+                }
+                settings.reset_extensions = false;
+                if let Err(err) = settings.save(&dirs.settings_file) {
+                    logging::warn(&format!("cannot save settings after extension reset: {err}"));
+                }
+            }
             let ext_infos = extensions::scan(&dirs, &settings.disabled_extensions);
             let scripts = userscripts::scan(&dirs.scripts);
             // One call fills every init script and the stylesheet; settings_set
@@ -114,6 +128,7 @@ fn main() {
             ipc::overlay_open,
             ipc::overlay_close,
             ipc::ext_list,
+            ipc::extension_reset,
             ipc::script_set_enabled,
             ipc::script_remove,
             ipc::script_list,

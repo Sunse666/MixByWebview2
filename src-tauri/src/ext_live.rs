@@ -165,3 +165,30 @@ pub fn list(_webview: &tauri::Webview) -> Vec<LiveExtension> {
 pub fn set_enabled(_webview: &tauri::Webview, _id: &str, _enabled: bool) -> bool {
     false
 }
+
+/// Forgets the enabled state of every extension in the profile.
+///
+/// Turning an extension off through the browser's own API is durable: it disappears
+/// from the list it was toggled from and the profile remembers that it is off, with
+/// no API to list or re-enable it afterwards. The state lives in the profile's
+/// Preferences file, so clearing the extensions section there - before any webview
+/// exists, when nothing else is holding the file - makes the next start load them
+/// again.
+pub fn forget_disabled_state(profile: &std::path::Path) -> Result<bool, String> {
+  let file = profile.join("Default").join("Preferences");
+  if !file.exists() {
+    return Ok(false);
+  }
+  let text = std::fs::read_to_string(&file).map_err(|err| err.to_string())?;
+  let mut value: serde_json::Value = serde_json::from_str(&text).map_err(|err| err.to_string())?;
+  let removed = value
+    .as_object_mut()
+    .map(|map| map.remove("extensions").is_some())
+    .unwrap_or(false);
+  if !removed {
+    return Ok(false);
+  }
+  let bytes = serde_json::to_vec(&value).map_err(|err| err.to_string())?;
+  crate::paths::write_atomic(&file, &bytes).map_err(|err| err.to_string())?;
+  Ok(true)
+}

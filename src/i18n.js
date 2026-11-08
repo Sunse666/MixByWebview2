@@ -327,6 +327,11 @@ const DICT = {
     "Page": "本页",
     "Total": "总计",
     "Browser": "浏览器",
+    "An extension turned off here does not come back on its own":
+      "在这里关闭的扩展不会自己恢复（浏览器会把这个状态记进配置里）",
+    "Bring disabled extensions back (needs a restart)": "恢复被禁用的扩展（需重启）",
+    "Restart Mix to load them again": "已记录，重启 Mix 后会重新加载",
+    "Could not reset:": "重置失败：",
     "Freeze background tabs": "冻结后台标签",
     "Stops timers and animations in tabs you are not looking at; tabs playing sound are left alone":
       "停掉不在前台标签的定时器和动画以省内存；正在放声音的标签不会被冻结",

@@ -99,6 +99,29 @@ async function boot() {
     main.append(liveCard);
   }
 
+  // Turning an extension off is durable in the browser's own profile, and it stops
+  // showing in the live list above, so offer the way back instead of leaving it
+  // hidden with no control.
+  const resetNote = document.createElement("div");
+  resetNote.className = "card";
+  resetNote.style.maxWidth = "720px";
+  resetNote.style.marginBottom = "18px";
+  const resetText = document.createElement("span");
+  resetText.className = "title";
+  resetText.textContent = t("An extension turned off here does not come back on its own");
+  const resetButton = document.createElement("button");
+  resetButton.className = "button";
+  resetButton.textContent = t("Bring disabled extensions back (needs a restart)");
+  resetButton.addEventListener("click", async () => {
+    const answer = await invoke("extension_reset").catch((error) => String(error));
+    resetText.textContent =
+      answer === "restart"
+        ? t("Restart Mix to load them again")
+        : t("Could not reset:") + " " + String(answer);
+  });
+  resetNote.append(resetText, resetButton);
+  main.append(resetNote);
+
   const grid = document.createElement("div");
   grid.className = "grid";
   main.append(grid);

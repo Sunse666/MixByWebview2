@@ -10,6 +10,7 @@
     "core:default",
     "allow-extension-live-list",
     "allow-extension-live-set",
+    "allow-extension-reset",
     "allow-window-control",
     "allow-window-drag",
     "allow-window-resize",

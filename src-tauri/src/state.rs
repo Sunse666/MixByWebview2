@@ -101,6 +101,10 @@ pub struct Settings {
     pub tab_hover_preview: bool,
     /// Stop the timers of a background tab that is not playing sound.
     pub freeze_background: bool,
+    /// Set by the extensions page: clear the profile's extension state on the next
+    /// start, because a disabled extension cannot be reached through the API again.
+    #[serde(default)]
+    pub reset_extensions: bool,
     /// Wake a background tab for a moment to photograph it instead of showing the
     /// picture from when it was last visited.
     pub live_thumbs: bool,
@@ -164,6 +168,7 @@ impl Default for Settings {
             mark_suspended: true,
             tab_hover_preview: false,
             freeze_background: true,
+            reset_extensions: false,
             live_thumbs: false,
             max_live_tabs: 12,
             download_dir: None,
