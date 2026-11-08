@@ -69,31 +69,37 @@ pub fn total(_webview: &tauri::Webview) -> Option<u64> {
   None
 }
 
-/// Private working set of one process: the memory nobody else shares with it.
-///
-/// Summing plain working sets was wrong by a wide margin - every process counts the
-/// code and data it shares with its siblings, so ten processes reported 1252 MB
-/// where the task manager showed 714 MB for the same tree. Private is also what the
-/// task manager's memory column shows, which makes the two numbers comparable.
+/// Private working set of one process: what the task manager's memory column shows.
 #[cfg(windows)]
 fn working_set(pid: u32) -> Option<u64> {
+  private_counters(pid).map(|(private, _)| private)
+}
+
+/// Both memory numbers Windows reports for a process: the private working set and
+/// the commit charge. They differ by everything paged out, and only the first is
+/// what the task manager shows, so the log prints both until the two agree.
+#[cfg(windows)]
+fn private_counters(pid: u32) -> Option<(u64, u64)> {
   use windows::Win32::System::ProcessStatus::{
-    K32GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS, PROCESS_MEMORY_COUNTERS_EX,
+    K32GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS, PROCESS_MEMORY_COUNTERS_EX2,
   };
   use windows::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION};
 
   unsafe {
     let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid).ok()?;
-    let mut counters = PROCESS_MEMORY_COUNTERS_EX::default();
-    let size = std::mem::size_of::<PROCESS_MEMORY_COUNTERS_EX>() as u32;
+    let mut counters = PROCESS_MEMORY_COUNTERS_EX2::default();
+    let size = std::mem::size_of::<PROCESS_MEMORY_COUNTERS_EX2>() as u32;
     let ok = K32GetProcessMemoryInfo(
       handle,
-      &mut counters as *mut PROCESS_MEMORY_COUNTERS_EX as *mut PROCESS_MEMORY_COUNTERS,
+      &mut counters as *mut PROCESS_MEMORY_COUNTERS_EX2 as *mut PROCESS_MEMORY_COUNTERS,
       size,
     );
     let _ = windows::Win32::Foundation::CloseHandle(handle);
     if ok.as_bool() {
-      Some(counters.PrivateUsage as u64)
+      Some((
+        counters.PrivateWorkingSetSize as u64,
+        counters.PrivateUsage as u64,
+      ))
     } else {
       None
     }
@@ -254,8 +260,11 @@ fn breakdown(webview: &tauri::Webview) -> Option<String> {
 
   let mut groups: std::collections::BTreeMap<i32, (u32, u64)> = std::collections::BTreeMap::new();
   let mut detail = Vec::new();
+  let mut commit_total = 0u64;
   for (kind, pid) in processes {
-    let bytes = working_set(pid).unwrap_or(0);
+    let counters = private_counters(pid);
+    let bytes = counters.map(|(private, _)| private).unwrap_or(0);
+    commit_total += counters.map(|(_, commit)| commit).unwrap_or(0);
     detail.push(format!("{}:{}/{}MB", pid, kind, bytes / (1024 * 1024)));
     let entry = groups.entry(kind).or_insert((0, 0));
     entry.0 += 1;
@@ -283,7 +292,11 @@ fn breakdown(webview: &tauri::Webview) -> Option<String> {
       bytes / (1024 * 1024)
     ));
   }
-  parts.push(format!("total={}MB", total / (1024 * 1024)));
+  parts.push(format!(
+    "total={}MB commit={}MB",
+    total / (1024 * 1024),
+    commit_total / (1024 * 1024)
+  ));
   // pid:kind/mb, so a line can be matched against Task Manager.
   parts.push(format!("[{}]", detail.join(" ")));
   Some(parts.join(" "))
