@@ -49,7 +49,11 @@ fn capture_once(webview: &tauri::Webview) -> Option<Vec<u8>> {
   let json = crate::screenshot::call(
     webview,
     "Page.captureScreenshot",
-    r#"{"format":"png","captureBeyondViewport":false,"optimizeForSpeed":true}"#,
+    // Jpeg rather than png: a full-window png runs to about 900 KB for a page with
+    // pictures in it, and that is a 1.2 MB data url through the ipc for every card - the
+    // ones that big were the ones that arrived broken. At quality 70 the same frame is a
+    // fraction of the size and the card is 372 px wide anyway.
+    r#"{"format":"jpeg","quality":70,"captureBeyondViewport":false,"optimizeForSpeed":true}"#,
   )?;
   let value: serde_json::Value = serde_json::from_str(&json).ok()?;
   let data = value.get("data")?.as_str()?;
@@ -161,7 +165,12 @@ pub fn capture_later(app: tauri::AppHandle, id: String, window_label: String) {
             .contains(&window_label)
           {
             use tauri::Emitter;
-            let payload = serde_json::json!({ "id": id, "png": png });
+            // A data url, not the raw bytes: the page puts this straight into an img
+            // src, and a byte array there is just a broken picture.
+            let payload = serde_json::json!({
+              "id": id,
+              "image": format!("data:image/jpeg;base64,{}", crate::extensions::base64(&png)),
+            });
             let _ = app.emit_to(overlay, "thumbs:ready", payload);
           }
         }

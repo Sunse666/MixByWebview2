@@ -727,8 +727,8 @@ async function bootThumb() {
 
   listen("thumbs:ready", (event) => {
     const payload = event.payload || {};
-    if (payload.id !== id || !payload.png) return;
-    image.src = payload.png;
+    if (payload.id !== id || !payload.image) return;
+    image.src = payload.image;
     frame.classList.remove("pending");
     card.classList.add("with-image");
   }).catch(() => {});

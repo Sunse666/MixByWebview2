@@ -389,7 +389,7 @@ pub async fn thumb_card(
         url: tab.url.clone(),
         icon: tab.icon.clone(),
         image: crate::thumbs::get(&id)
-            .map(|png| format!("data:image/png;base64,{}", crate::extensions::base64(&png))),
+            .map(|png| format!("data:image/jpeg;base64,{}", crate::extensions::base64(&png))),
         image_age_secs: crate::thumbs::age(&id),
         loading: tab.loading,
         playing: audio.map(|state| state.playing).unwrap_or(false),
