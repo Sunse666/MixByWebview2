@@ -9,7 +9,7 @@
 3. 首次启动会在同目录生成 `UserData/`、`crx/`、`javascript/`
 
 ## 目录结构
- 
+
 ```
 Mix/
 ├── mix.exe

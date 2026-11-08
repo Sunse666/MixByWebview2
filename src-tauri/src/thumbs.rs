@@ -128,56 +128,51 @@ pub fn needs(id: &str, seconds: u64) -> bool {
     None => true,
   }
 }
-/// How long a live preview is reused before another wake-up is allowed.
-const LIVE_COOLDOWN_SECS: u64 = 20;
+/// A live preview is refreshed when the stored picture is older than this. Short
+/// enough that a video tab looks alive while hovering it, long enough that moving
+/// the pointer across the strip does not wake a page over and over.
+const LIVE_REFRESH_SECS: u64 = 4;
 
-static LIVE_AT: Mutex<Option<HashMap<String, u64>>> = Mutex::new(None);
-
-fn live_due(id: &str) -> bool {
-  let mut guard = LIVE_AT.lock().unwrap_or_else(|e| e.into_inner());
-  let map = guard.get_or_insert_with(HashMap::new);
-  let now = crate::library::now();
-  match map.get(id) {
-    Some(at) if now.saturating_sub(*at) < LIVE_COOLDOWN_SECS => false,
-    _ => {
-      map.insert(id.to_string(), now);
-      true
-    }
-  }
-}
+/// How long the wake-up is given to paint before the photograph is taken.
+///
+/// Showing a webview does not paint it on the spot: the compositor produces the
+/// next frame a little later, so an immediate capture hands back the frame from
+/// before the wake-up - which is exactly why the card seemed frozen.
+const LIVE_PAINT_WAIT: std::time::Duration = std::time::Duration::from_millis(160);
 
 /// Takes a picture of a tab that is not the selected one.
 ///
 /// A hidden webview does not paint, so the only way to get a fresh frame is to
 /// show it for a moment - underneath the tab the user is looking at, so nothing
-/// becomes visible - photograph it, and hide it again. The current tab is raised
-/// above it first, because a webview that is shown again comes up on its own and
-/// would otherwise cover the page for a frame.
+/// becomes visible - let it paint, photograph it, and hide it again.
 ///
 /// The page does see a visibility change while this happens, which is why it is a
 /// setting of its own.
 pub fn capture_live(selected: Option<&tauri::Webview>, target: &tauri::Webview) -> Option<Vec<u8>> {
   let id = target.label().to_string();
-  if !live_due(&id) {
-    return None;
-  }
   if let Some(selected) = selected {
     if selected.label() == target.label() {
       return None;
     }
   }
+  if !needs(&id, LIVE_REFRESH_SECS) {
+    return None;
+  }
 
   target.show().ok()?;
-  // Explicitly underneath the tab on screen, so the photograph cannot show itself.
+  // Underneath the tab on screen, so the photograph cannot catch itself.
   if let Some(selected) = selected {
     crate::platform::place_below(target, selected);
   }
+  std::thread::sleep(LIVE_PAINT_WAIT);
   let png = capture(target);
   let _ = target.hide();
   crate::logging::info(&format!(
     "thumbs: live {id} -> {}",
     match &png {
-      Some(bytes) => format!("{} bytes", bytes.len()),
+      // The fingerprint says whether the wake-up really produced a new frame or
+      // handed back the one the card was already showing.
+      Some(bytes) => format!("{} bytes fp={:x}", bytes.len(), fingerprint(bytes)),
       None => "nothing".to_string(),
     }
   ));
