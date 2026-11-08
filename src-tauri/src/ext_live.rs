@@ -168,33 +168,62 @@ pub fn set_enabled(_webview: &tauri::Webview, _id: &str, _enabled: bool) -> bool
 
 /// Forgets the enabled state of every extension in the profile.
 ///
-/// Turning an extension off through the browser's own API is durable: it disappears
-/// from the list it was toggled from and the profile remembers that it is off, with
-/// no API to list or re-enable it afterwards. The state lives in the profile's
-/// Preferences file, so clearing the extensions section there - before any webview
-/// exists, when nothing else is holding the file - makes the next start load them
-/// again.
+/// Turning an extension off through the browser's own API is durable, and switching it
+/// back on does not always stick: Enable answers ok, IsEnabled agrees for a moment,
+/// and the next listing says off again. The state lives in two places that only the
+/// browser can write - the Extension State store and the extensions section of
+/// Preferences - and neither is reachable through the API once an extension is off.
+///
+/// So this deletes both, which is only safe before a webview exists: Chromium rebuilds
+/// them from the folders on the next start, with every extension enabled. Extension
+/// settings (their own storage) are left alone.
 pub fn forget_disabled_state(profile: &std::path::Path) -> Result<bool, String> {
-  // WebView2 puts the chromium profile one level down, inside EBWebView.
-  let candidates = [
-    profile.join("EBWebView").join("Default").join("Preferences"),
-    profile.join("Default").join("Preferences"),
-  ];
-  let Some(file) = candidates.into_iter().find(|path| path.exists()) else {
-    return Ok(false);
-  };
-  let text = std::fs::read_to_string(&file).map_err(|err| err.to_string())?;
-  let mut value: serde_json::Value = serde_json::from_str(&text).map_err(|err| err.to_string())?;
-  let removed = value
-    .as_object_mut()
-    .map(|map| map.remove("extensions").is_some())
-    .unwrap_or(false);
-  if !removed {
-    return Ok(false);
+  let mut touched = false;
+
+  // The important-prefs store, where Chromium keeps extension prefs as a leveldb.
+  let state = profile.join("EBWebView").join("Default").join("Extension State");
+  if state.exists() && std::fs::remove_dir_all(&state).is_ok() {
+    touched = true;
   }
-  let bytes = serde_json::to_vec(&value).map_err(|err| err.to_string())?;
-  crate::paths::write_atomic(&file, &bytes).map_err(|err| err.to_string())?;
-  Ok(true)
+
+  // The extensions section of both preference files, if they carry one.
+  for name in ["Preferences", "Secure Preferences"] {
+    let file = profile.join("EBWebView").join("Default").join(name);
+    if !file.exists() {
+      continue;
+    }
+    let Ok(text) = std::fs::read_to_string(&file) else {
+      continue;
+    };
+    let Ok(mut value) = serde_json::from_str::<serde_json::Value>(&text) else {
+      continue;
+    };
+    let Some(map) = value.as_object_mut() else {
+      continue;
+    };
+    if let Some(settings) = map
+      .get_mut("extensions")
+      .and_then(|ext| ext.as_object_mut())
+      .and_then(|ext| ext.get_mut("settings"))
+      .and_then(|settings| settings.as_object_mut())
+    {
+      if settings.values().any(|entry| entry.get("state").is_some()) {
+        for entry in settings.values_mut() {
+          if let Some(entry) = entry.as_object_mut() {
+            entry.remove("state");
+          }
+        }
+        touched = true;
+      }
+    }
+    if touched {
+      if let Ok(bytes) = serde_json::to_vec(&value) {
+        let _ = crate::paths::write_atomic(&file, &bytes);
+      }
+    }
+  }
+
+  Ok(touched)
 }
 
 /// Loads one extension from a directory and turns it on.

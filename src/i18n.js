@@ -334,6 +334,8 @@ const DICT = {
     "Enabled": "已启用",
     "Disabled": "已禁用",
     "The browser refused that; restart and try again": "浏览器拒绝了这次操作，请重启后再试",
+    "Restart Mix: the browser keeps this extension off until then":
+      "请重启 Mix：浏览器会一直保持它是关闭的，重启后才会重新加载",
     "Freeze background tabs": "冻结后台标签",
     "Stops timers and animations in tabs you are not looking at; tabs playing sound are left alone":
       "停掉不在前台标签的定时器和动画以省内存；正在放声音的标签不会被冻结",

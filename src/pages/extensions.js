@@ -226,7 +226,7 @@ async function boot() {
       const added = await invoke("extension_add", { dir: ext.dir }).catch(() => null);
       toggle.disabled = false;
       if (!added) {
-        note2.textContent = t("The browser refused that; restart and try again");
+        note2.textContent = t("Restart Mix: the browser keeps this extension off until then");
         return;
       }
       enabledDirs.add(ext.dir);

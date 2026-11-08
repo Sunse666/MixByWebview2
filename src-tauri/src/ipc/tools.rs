@@ -220,6 +220,20 @@ pub async fn extension_live_list(
     Ok(listed)
 }
 
+/// Records that the profile's extension state has to be cleared on the next start.
+fn request_extension_reset(state: &AppState) {
+    let mut settings = state.settings.write();
+    if settings.reset_extensions {
+        return;
+    }
+    settings.reset_extensions = true;
+    if let Err(err) = settings.save(&state.dirs.settings_file) {
+        crate::logging::warn(&format!("cannot save settings: {err}"));
+    } else {
+        crate::logging::info("extension state will be cleared on the next start");
+    }
+}
+
 /// Remembers the state the browser confirmed, so the extensions page does not have to
 /// guess from a list that sometimes omits it.
 fn remember_extension_state(state: &AppState, dir: &str, enabled: bool) {
@@ -253,14 +267,20 @@ pub async fn extension_add(
             Ok("enabled".to_string())
         }
         Ok(false) => {
-            // The browser took the folder and left it switched off: say so instead of
-            // reporting a success the live list does not back up.
+            // The browser took the folder and left it switched off. Its own record of
+            // "off" cannot be changed through the API, so ask for a clean reload on the
+            // next start instead of pretending it worked.
             crate::logging::warn(&format!("extension add {dir}: added but still off"));
             remember_extension_state(&state, &dir, false);
-            Err(AppError::new("extension", "the browser added it but left it off"))
+            request_extension_reset(&state);
+            Err(AppError::new(
+                "extension",
+                "the browser keeps it off; restart Mix and it will load again",
+            ))
         }
         Err(err) => {
             crate::logging::warn(&format!("extension add {dir} failed: {err}"));
+            request_extension_reset(&state);
             Err(AppError::new("extension", err))
         }
     }
