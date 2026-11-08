@@ -210,30 +210,6 @@ pub async fn extension_live_list(
     Ok(listed)
 }
 
-/// Asks for the profile's extension state to be cleared on the next start.
-///
-/// A disabled extension cannot be reached through the browser's API again, so the
-/// only way back is to forget what the profile recorded about it - which has to
-/// happen before any webview exists. This records the request; main acts on it.
-#[tauri::command]
-pub async fn extension_reset(
-    app: AppHandle,
-    webview: tauri::Webview,
-    state: State<'_, AppState>,
-) -> Result<String, AppError> {
-    require_trusted(&webview)?;
-    {
-        let mut settings = state.settings.write();
-        settings.reset_extensions = true;
-        settings
-            .save(&state.dirs.settings_file)
-            .map_err(|err| AppError::new("settings", err.to_string()))?;
-    }
-    let _ = app.emit("settings:changed", ());
-    crate::logging::info("extension reset requested: next start will load them again");
-    Ok("restart".to_string())
-}
-
 /// Loads one extension from its folder again: the way back from a disabled switch.
 #[tauri::command]
 pub async fn extension_add(

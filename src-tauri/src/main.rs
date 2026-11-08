@@ -75,9 +75,11 @@ fn main() {
         .setup(move |app| {
             let mut settings = state::Settings::load(&dirs.settings_file);
             let theme = theme::Theme::load(&dirs.theme_file);
-            // Before any webview exists, nothing else has the profile open, which is
-            // the only safe moment to forget the extension state a previous session
-            // recorded: a disabled extension cannot be reached through the API again.
+            // Left over from the page's reset button, which is gone now that an
+            // extension can be switched back on by loading its folder again. A flag
+            // set by that button is still honoured once, here, because this is the
+            // only safe moment to touch the profile's extension state: before any
+            // webview exists and has the file open.
             if settings.reset_extensions {
                 match ext_live::forget_disabled_state(&dirs.profile) {
                     Ok(true) => logging::info("extension state cleared; extensions load again"),
@@ -139,7 +141,6 @@ fn main() {
             ipc::overlay_close,
             ipc::ext_list,
             ipc::extension_add,
-            ipc::extension_reset,
             ipc::script_set_enabled,
             ipc::script_remove,
             ipc::script_list,
