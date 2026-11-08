@@ -137,6 +137,7 @@ fn main() {
             ipc::group_style,
             ipc::group_dissolve,
             ipc::group_remove,
+            ipc::thumb_stats,
             ipc::script_set_enabled,
             ipc::script_remove,
             ipc::script_list,

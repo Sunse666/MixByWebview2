@@ -18,6 +18,7 @@
     "allow-group-style",
     "allow-group-dissolve",
     "allow-group-remove",
+    "allow-thumb-stats",
     "allow-window-control",
     "allow-window-drag",
     "allow-window-resize",

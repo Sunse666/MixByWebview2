@@ -371,18 +371,10 @@ pub async fn thumb_card(
     let audio = _app
         .get_webview(&id)
         .and_then(|webview| crate::audio::state(&webview));
-    // Memory: the whole browser can be summed, one tab's working set cannot be
-    // isolated, so the card shows the page's own counters and a labelled average.
-    // The counters below live in the renderer, so a frozen page has to be woken for
-    // them. It is hidden anyway, and hiding it again freezes it again.
-    if let Some(webview) = _app.get_webview(&id) {
-        if crate::freeze::is_frozen(&id) {
-            crate::freeze::thaw(&webview);
-        }
-    }
-    crate::mem::report(&_app);
-    let memory_total = _app.get_webview(&id).and_then(|webview| crate::mem::total(&webview));
-    let metrics = _app.get_webview(&id).and_then(|webview| crate::mem::tab_metrics(&webview));
+    // The numbers are a separate call on purpose. Reading them means several devtools
+    // round trips per process and per page, and on a hidden or frozen tab they can take
+    // seconds or time out - which left the card as an empty grey panel while it waited.
+    // The card is drawn from this call alone; thumb_stats fills the numbers in after.
     let live = core.tabs.iter().filter(|tab| tab.alive).count().max(1) as u64;
     Ok(ThumbCard {
         title: tab.title.clone(),
@@ -397,13 +389,65 @@ pub async fn thumb_card(
         suspended: !tab.alive,
         pinned: tab.pinned,
         incognito: tab.incognito,
-        memory_total,
-        memory_average: memory_total.map(|total| total / live.max(1)),
-        memory_tab: _app.get_webview(&id).and_then(|webview| crate::mem::tab_heap(&webview)),
+        memory_total: None,
+        memory_average: None,
+        memory_tab: None,
+        nodes: 0,
+        listeners: 0,
+        documents: 0,
+        live_tabs: live,
+    })
+}
+
+#[derive(serde::Serialize)]
+pub struct ThumbStats {
+    memory_total: Option<u64>,
+    memory_average: Option<u64>,
+    memory_tab: Option<u64>,
+    nodes: u64,
+    listeners: u64,
+    documents: u64,
+    live_tabs: u64,
+}
+
+/// The numbers on the hover card, read separately from the card itself.
+///
+/// This runs on a worker because it costs several devtools round trips - one per browser
+/// process, plus the page's own counters - and any of them can stall on a hidden tab.
+#[tauri::command]
+pub async fn thumb_stats(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: String,
+) -> Result<ThumbStats, AppError> {
+    let live = state
+        .try_read_core(&window_of_tab(&id))
+        .map(|core| core.tabs.iter().filter(|tab| tab.alive).count().max(1) as u64)
+        .unwrap_or(1);
+    let handle = app.clone();
+    let worker_id = id.clone();
+    let stats = tauri::async_runtime::spawn_blocking(move || ThumbStats {
+        memory_total: handle
+            .get_webview(&worker_id)
+            .and_then(|webview| crate::mem::total(&webview)),
+        memory_average: None,
+        memory_tab: handle
+            .get_webview(&worker_id)
+            .and_then(|webview| crate::mem::tab_heap(&webview)),
+        nodes: 0,
+        listeners: 0,
+        documents: 0,
+        live_tabs: live,
+    })
+    .await
+    .map_err(|err| AppError::new("stats", err.to_string()))?;
+    let metrics = app.get_webview(&id).and_then(|webview| crate::mem::tab_metrics(&webview));
+    Ok(ThumbStats {
+        memory_average: stats.memory_total.map(|total| total / live.max(1)),
         nodes: metrics.map(|m| m.nodes).unwrap_or(0),
         listeners: metrics.map(|m| m.listeners).unwrap_or(0),
         documents: metrics.map(|m| m.documents).unwrap_or(0),
-        live_tabs: live,
+        ..stats
     })
 }
 

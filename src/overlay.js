@@ -786,33 +786,44 @@ async function bootThumb() {
   // Memory. The page's own numbers come first, because they belong to this tab; the
   // browser total is summed over its processes, and the average is labelled as one
   // since WebView2 cannot say which renderer serves which tab.
-  const pageParts = [];
-  if (data.memory_tab) pageParts.push(megabytes(data.memory_tab));
-  if (data.nodes) pageParts.push(count(data.nodes) + " " + t("nodes"));
-  if (data.listeners) pageParts.push(count(data.listeners) + " " + t("listeners"));
-  if (pageParts.length) {
-    const line = document.createElement("div");
-    line.className = "thumb-note thumb-memory";
-    line.textContent = t("Page") + " " + pageParts.join(" · ");
-    card.append(line);
-  }
-
-  const totalParts = [];
-  // "Browser", not "Total": this is every process the browser owns, and a card about
-  // one tab that says "total" invites the reader to think it means this tab.
-  if (data.memory_total) totalParts.push(t("Browser") + " " + megabytes(data.memory_total));
-  // With a single tab the "average" is just the total again, so it is left out.
-  if (data.memory_average && data.live_tabs > 1) {
-    totalParts.push(
-      t("Average") + " " + megabytes(data.memory_average) + " / " + data.live_tabs,
-    );
-  }
-  if (totalParts.length) {
-    const line = document.createElement("div");
-    line.className = "thumb-note thumb-memory";
-    line.textContent = totalParts.join("  ·  ");
-    card.append(line);
-  }
+  // The numbers arrive on their own call and are appended when they do: reading them
+  // costs several devtools round trips, and waiting for those is what left the card as
+  // an empty panel.
+  const notes = document.createElement("div");
+  notes.className = "thumb-notes";
+  card.append(notes);
+  invoke("thumb_stats", { id })
+    .then((stats) => {
+      if (!stats) return;
+      const pageParts = [];
+      if (stats.memory_tab) pageParts.push(megabytes(stats.memory_tab));
+      if (stats.nodes) pageParts.push(count(stats.nodes) + " " + t("nodes"));
+      if (stats.listeners) pageParts.push(count(stats.listeners) + " " + t("listeners"));
+      if (pageParts.length) {
+        const line = document.createElement("div");
+        line.className = "thumb-note thumb-memory";
+        line.textContent = t("Page") + " " + pageParts.join(" · ");
+        notes.append(line);
+      }
+      const totalParts = [];
+      // "Browser", not "Total": every process the browser owns, on a card about one tab.
+      if (stats.memory_total) {
+        totalParts.push(t("Browser") + " " + megabytes(stats.memory_total));
+      }
+      // With a single tab the "average" is the total again, so it is left out.
+      if (stats.memory_average && stats.live_tabs > 1) {
+        totalParts.push(
+          t("Average") + " " + megabytes(stats.memory_average) + " / " + stats.live_tabs,
+        );
+      }
+      if (totalParts.length) {
+        const line = document.createElement("div");
+        line.className = "thumb-note thumb-memory";
+        line.textContent = totalParts.join("  ·  ");
+        notes.append(line);
+      }
+    })
+    .catch(() => {});
 
   // A background tab cannot be photographed without showing it, so say when the
   // picture is a memory rather than a live view.
