@@ -168,8 +168,9 @@ pub fn capture_live(selected: Option<&tauri::Webview>, target: &tauri::Webview) 
   }
 
   target.show().ok()?;
+  // Explicitly underneath the tab on screen, so the photograph cannot show itself.
   if let Some(selected) = selected {
-    crate::platform::raise_webview(selected);
+    crate::platform::place_below(target, selected);
   }
   let png = capture(target);
   let _ = target.hide();

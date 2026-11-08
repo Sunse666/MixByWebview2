@@ -7,7 +7,7 @@ use windows::Win32::UI::HiDpi::GetDpiForWindow;
 use windows::Win32::UI::Shell::{DefSubclassProc, SetWindowSubclass};
 use windows::Win32::UI::WindowsAndMessaging::{
     GetWindowRect, IsZoomed, SetWindowPos, HTBOTTOM, HTBOTTOMLEFT, HTBOTTOMRIGHT, HTLEFT, HTRIGHT,
-    HTTOP, HTTOPLEFT, HTTOPRIGHT, HWND_TOP, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, WM_NCHITTEST,
+    HTTOP, HTTOPLEFT, HTTOPRIGHT, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, WM_NCHITTEST,
 };
 
 const BASE_EDGE: f32 = 5.0;
@@ -97,26 +97,43 @@ unsafe fn edge_code(hwnd: HWND, lparam: LPARAM) -> Option<u32> {
 
     Some(code)
 }
-/// Puts a child webview at the top of the stacking order without moving,
-/// resizing or activating it.
-pub fn raise_webview(webview: &tauri::Webview) {
+/// The child window WebView2 creates for one webview.
+fn child_hwnd(webview: &tauri::Webview) -> Option<HWND> {
     use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2Controller;
 
-    let _ = webview.with_webview(|platform| unsafe {
+    // with_webview wants a 'static Send closure, so the handle travels back through
+    // a channel as a plain number.
+    let (sender, receiver) = std::sync::mpsc::channel::<isize>();
+    let _ = webview.with_webview(move |platform| unsafe {
         let controller = platform.controller();
         let controller: &ICoreWebView2Controller = &controller;
         let mut hwnd = HWND::default();
-        if controller.ParentWindow(&mut hwnd).is_err() || hwnd.0.is_null() {
-            return;
+        if controller.ParentWindow(&mut hwnd).is_ok() && !hwnd.0.is_null() {
+            let _ = sender.send(hwnd.0 as isize);
         }
+    });
+    let raw = receiver.recv_timeout(std::time::Duration::from_millis(500)).unwrap_or(0);
+    if raw == 0 {
+        None
+    } else {
+        Some(HWND(raw as *mut std::ffi::c_void))
+    }
+}
+
+/// Places one webview directly under another: SetWindowPos puts a window below the
+/// one passed as hWndInsertAfter, which is exactly the order the preview wants.
+pub fn place_below(webview: &tauri::Webview, above: &tauri::Webview) {
+    let Some(above) = child_hwnd(above) else { return };
+    let Some(hwnd) = child_hwnd(webview) else { return };
+    unsafe {
         let _ = SetWindowPos(
             hwnd,
-            Some(HWND_TOP),
+            Some(above),
             0,
             0,
             0,
             0,
             SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
         );
-    });
+    }
 }

@@ -13,16 +13,19 @@ pub fn install_resize_borders(window: &tauri::Window) {
     let _ = window;
 }
 
-/// Raises one child webview above its siblings without activating it.
+/// Puts one child webview directly underneath another, without activating either.
 ///
 /// The windows WebView2 creates are plain child HWNDs, so the stacking order is
-/// theirs: a webview that is shown again does not come to the front on its own.
-/// The live preview needs the opposite - a background tab shown *underneath* the
-/// current one - which only works if the current one can be put back on top.
-pub fn raise_webview(webview: &tauri::Webview) {
+/// theirs, and a webview that is shown again comes to the front by itself. The live
+/// preview needs it the other way round: a background tab shown underneath the
+/// current one, so that nothing of it becomes visible while it is photographed.
+pub fn place_below(webview: &tauri::Webview, above: &tauri::Webview) {
     #[cfg(windows)]
-    windows::raise_webview(webview);
+    windows::place_below(webview, above);
 
     #[cfg(not(windows))]
-    let _ = webview;
+    {
+        let _ = webview;
+        let _ = above;
+    }
 }
