@@ -60,20 +60,31 @@ pub fn total(_webview: &tauri::Webview) -> Option<u64> {
   None
 }
 
-/// Resident memory of one process.
+/// Private working set of one process: the memory nobody else shares with it.
+///
+/// Summing plain working sets was wrong by a wide margin - every process counts the
+/// code and data it shares with its siblings, so ten processes reported 1252 MB
+/// where the task manager showed 714 MB for the same tree. Private is also what the
+/// task manager's memory column shows, which makes the two numbers comparable.
 #[cfg(windows)]
 fn working_set(pid: u32) -> Option<u64> {
-  use windows::Win32::System::ProcessStatus::{K32GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS};
+  use windows::Win32::System::ProcessStatus::{
+    K32GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS, PROCESS_MEMORY_COUNTERS_EX,
+  };
   use windows::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION};
 
   unsafe {
     let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid).ok()?;
-    let mut counters = PROCESS_MEMORY_COUNTERS::default();
-    let size = std::mem::size_of::<PROCESS_MEMORY_COUNTERS>() as u32;
-    let ok = K32GetProcessMemoryInfo(handle, &mut counters, size);
+    let mut counters = PROCESS_MEMORY_COUNTERS_EX::default();
+    let size = std::mem::size_of::<PROCESS_MEMORY_COUNTERS_EX>() as u32;
+    let ok = K32GetProcessMemoryInfo(
+      handle,
+      &mut counters as *mut PROCESS_MEMORY_COUNTERS_EX as *mut PROCESS_MEMORY_COUNTERS,
+      size,
+    );
     let _ = windows::Win32::Foundation::CloseHandle(handle);
     if ok.as_bool() {
-      Some(counters.WorkingSetSize as u64)
+      Some(counters.PrivateUsage as u64)
     } else {
       None
     }

@@ -785,8 +785,8 @@ async function bootThumb() {
 
   const totalParts = [];
   if (data.memory_total) totalParts.push(t("Total") + " " + megabytes(data.memory_total));
-  if (data.memory_average) {
-    // The divisor is shown so nobody reads this as the tab's own footprint.
+  // With a single tab the "average" is just the total again, so it is left out.
+  if (data.memory_average && data.live_tabs > 1) {
     totalParts.push(
       t("Average") + " " + megabytes(data.memory_average) + " / " + data.live_tabs,
     );
