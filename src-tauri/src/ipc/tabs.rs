@@ -204,6 +204,7 @@ pub async fn tab_close(app: AppHandle, window: tauri::Window, state: State<'_, A
         let _ = webview.close();
     }
     crate::thumbs::forget(&id);
+    crate::freeze::forget(&id);
 
     let (remaining, next_url) = {
         let mut core = state.write_core(window.label());
@@ -329,7 +330,11 @@ pub async fn thumb_show(
     // underneath the current one, photographed, and hidden again: the only way to
     // get a fresh frame. The page does notice the visibility change, which is why
     // this is a setting of its own.
+    // A frozen page cannot be photographed, so a live preview wakes it first.
     if !visible && _state.settings.read().live_thumbs {
+        if let Some(webview) = app.get_webview(&id) {
+            crate::freeze::thaw(&webview);
+        }
         let selected = _state
             .read_core(window.label())
             .selected
@@ -338,6 +343,10 @@ pub async fn thumb_show(
         if let Some(webview) = app.get_webview(&id) {
             if let Some(png) = crate::thumbs::capture_live(selected.as_ref(), &webview) {
                 crate::thumbs::remember(&id, png);
+            }
+            // Back to sleep: the wake-up was for the photograph only.
+            if _state.settings.read().freeze_background {
+                crate::freeze::freeze(&webview);
             }
         }
     }
@@ -376,6 +385,13 @@ pub async fn thumb_card(
         .and_then(|webview| crate::audio::state(&webview));
     // Memory: the whole browser can be summed, one tab's working set cannot be
     // isolated, so the card shows the page's own counters and a labelled average.
+    // The counters below live in the renderer, so a frozen page has to be woken for
+    // them. It is hidden anyway, and hiding it again freezes it again.
+    if let Some(webview) = _app.get_webview(&id) {
+        if crate::freeze::is_frozen(&id) {
+            crate::freeze::thaw(&webview);
+        }
+    }
     crate::mem::report(&_app);
     let memory_total = _app.get_webview(&id).and_then(|webview| crate::mem::total(&webview));
     let metrics = _app.get_webview(&id).and_then(|webview| crate::mem::tab_metrics(&webview));
@@ -662,12 +678,29 @@ pub(crate) fn sync_visibility(app: &AppHandle, label: &str) {
             .map(|tab| (tab.id.clone(), core.selected.clone()))
             .collect()
     };
+    let freeze_background = app
+        .try_state::<AppState>()
+        .map(|state| state.settings.read().freeze_background)
+        .unwrap_or(false);
     for (id, selected) in pairs {
         if let Some(webview) = app.get_webview(&id) {
             if selected.as_deref() == Some(id.as_str()) {
+                // A frozen page has to wake before it is shown, or it comes up as a
+                // blank frame until something else touches it.
+                crate::freeze::thaw(&webview);
                 let _ = webview.show();
             } else {
                 let _ = webview.hide();
+                if freeze_background {
+                    // Sound is the exception: a tab that keeps playing is still in
+                    // use, and freezing it would cut the audio.
+                    let playing = crate::audio::state(&webview)
+                        .map(|state| state.playing)
+                        .unwrap_or(false);
+                    if !playing {
+                        crate::freeze::freeze(&webview);
+                    }
+                }
             }
         }
     }

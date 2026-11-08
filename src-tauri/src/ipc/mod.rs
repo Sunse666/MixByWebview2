@@ -203,6 +203,7 @@ pub struct SettingsPatch {
     pub keep_alive_hosts: Option<String>,
     pub mark_suspended: Option<bool>,
     pub tab_hover_preview: Option<bool>,
+    pub freeze_background: Option<bool>,
     pub live_thumbs: Option<bool>,
     pub drag_hint: Option<bool>,
     pub drag_threshold: Option<u32>,

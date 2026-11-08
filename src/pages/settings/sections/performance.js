@@ -53,6 +53,11 @@ export function buildPerformance({ settings, invoke }) {
     await invoke("settings_set", { patch: { mark_suspended: next } }).catch(() => {});
   });
 
+  // Frozen tabs stop their timers; a tab that is playing sound is never frozen.
+  const freezeSwitch = switchEl(settings.freeze_background !== false, async (next) => {
+    await invoke("settings_set", { patch: { freeze_background: next } }).catch(() => {});
+  });
+
   perfCard.append(
     row(
       t("Memory saver"),
@@ -62,6 +67,11 @@ export function buildPerformance({ settings, invoke }) {
     row(t("Keep this many tabs live"), "", liveHolder),
     row(t("Never suspend these sites"), t("Comma separated hosts"), keepAlive),
     row(t("Mark suspended tabs"), t("Dashed border and grey icon"), markSwitch),
+    row(
+      t("Freeze background tabs"),
+      t("Stops timers and animations in tabs you are not looking at; tabs playing sound are left alone"),
+      freezeSwitch,
+    ),
   );
 
   return [perfHead, perfCard];

@@ -13,6 +13,7 @@ mod favicons;
 mod ipc;
 mod library;
 mod net;
+mod freeze;
 mod logging;
 mod mem;
 mod overlay;

@@ -99,6 +99,8 @@ pub struct Settings {
     pub mark_suspended: bool,
     /// Show a preview card when the pointer rests on a tab.
     pub tab_hover_preview: bool,
+    /// Stop the timers of a background tab that is not playing sound.
+    pub freeze_background: bool,
     /// Wake a background tab for a moment to photograph it instead of showing the
     /// picture from when it was last visited.
     pub live_thumbs: bool,
@@ -161,6 +163,7 @@ impl Default for Settings {
             keep_alive_hosts: String::new(),
             mark_suspended: true,
             tab_hover_preview: false,
+            freeze_background: true,
             live_thumbs: false,
             max_live_tabs: 12,
             download_dir: None,
