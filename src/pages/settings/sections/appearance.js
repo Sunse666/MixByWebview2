@@ -154,9 +154,29 @@ export function buildAppearance({ settings, invoke }) {
     location.reload();
   });
 
+  // The sidebar lives next to the pages, so its switch belongs with the interface
+  // rather than with the tab behaviour.
+  const sideSelect = document.createElement("select");
+  sideSelect.className = "button";
+  for (const [value, label] of [
+    ["off", "Off"],
+    ["left", "Left"],
+    ["right", "Right"],
+  ]) {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = t(label);
+    if ((settings.sidebar || "off") === value) option.selected = true;
+    sideSelect.append(option);
+  }
+  sideSelect.addEventListener("change", async () => {
+    await invoke("settings_set", { patch: { sidebar: sideSelect.value } }).catch(() => {});
+  });
+
   themeCard.append(
     themeText,
     row("Mode", "Dark or light palette for the interface", modeSelect),
+    row(t("Sidebar position"), t("Bookmarks, downloads and history in a column beside the page"), sideSelect),
     themeRow,
     zoomRow,
     row(t("Standard font"), t("Empty keeps the site font, applies to new pages"), fontInput),

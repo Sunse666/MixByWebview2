@@ -1,0 +1,78 @@
+:root {
+  color-scheme: dark;
+}
+html, body {
+  height: 100%;
+  margin: 0;
+}
+body {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg, #1f2020);
+  color: var(--text, #e8eaed);
+  font: 12px/1.5 "Segoe UI", system-ui, sans-serif;
+  border-right: 1px solid var(--border, #2e3131);
+}
+.side-tabs {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 2px;
+  padding: 6px 6px 0;
+}
+.side-tab {
+  flex: 1;
+  padding: 6px 4px;
+  text-align: center;
+  border: 0;
+  border-radius: 6px 6px 0 0;
+  background: transparent;
+  color: var(--text, #e8eaed);
+  opacity: 0.6;
+  cursor: pointer;
+  font: inherit;
+}
+.side-tab.on {
+  background: var(--panel, #26292c);
+  opacity: 1;
+}
+.side-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 6px;
+}
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+  text-decoration: none;
+  color: inherit;
+}
+.row:hover {
+  background: var(--hover, #333737);
+}
+.row img {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  border-radius: 3px;
+}
+.row .label {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.row .host {
+  flex: 0 0 auto;
+  font-size: 10px;
+  opacity: 0.5;
+}
+.empty {
+  padding: 12px 6px;
+  opacity: 0.5;
+}

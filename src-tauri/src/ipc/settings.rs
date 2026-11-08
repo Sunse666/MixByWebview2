@@ -89,7 +89,11 @@ pub async fn settings_set(
     // The chrome strip draws the toolbar and the menu bar from these settings,
     // and it is a different webview: it has to be told to redraw.
     let label = webview.window().label().to_string();
-    let _ = webview.app_handle().emit_to(label, "settings:changed", ());
+    let _ = webview
+        .app_handle()
+        .emit_to(label.clone(), "settings:changed", ());
+    // The sidebar changes the page geometry, and only a relayout applies that.
+    let _ = crate::window::relayout(webview.app_handle(), &label);
     Ok(settings)
 }
 
@@ -106,6 +110,15 @@ pub(crate) fn apply_settings_patch(
         }
         if let Some(value) = patch.show_bookmarks {
             guard.show_bookmarks = value;
+        }
+        if let Some(value) = patch.sidebar {
+            guard.sidebar = match value.as_str() {
+                "left" | "right" => value,
+                _ => "off".to_string(),
+            };
+        }
+        if let Some(value) = patch.sidebar_width {
+            guard.sidebar_width = value.clamp(180.0, 640.0);
         }
         if let Some(value) = patch.keep_alive_hosts {
             guard.keep_alive_hosts = value.trim().to_string();

@@ -7,7 +7,16 @@
 const path = require("path");
 const { pathToFileURL } = require("url");
 
-const PAGES = ["settings", "history", "bookmarks", "downloads", "extensions", "scripts", "newtab"];
+const PAGES = [
+  "settings",
+  "history",
+  "bookmarks",
+  "downloads",
+  "extensions",
+  "scripts",
+  "newtab",
+  "sidebar",
+];
 
 class El {
   constructor(tag) {

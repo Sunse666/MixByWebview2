@@ -690,6 +690,28 @@ pub fn relayout(app: &AppHandle, label: &str) -> Result<(), tauri::Error> {
         set_bounds(&chrome, 0.0, 0.0, width, chrome_h)?;
     }
 
+    // The sidebar takes a column away from the pages, not from the strip: the tab strip
+    // and the address bar stay full width, the way the browsers this imitates do it.
+    let (side, side_w, opts) = match app.try_state::<AppState>() {
+        Some(state) => {
+            let settings = state.settings.read();
+            let side = if fullscreen {
+                "off".to_string()
+            } else {
+                settings.sidebar.clone()
+            };
+            (side, settings.sidebar_width, state.opts.clone())
+        }
+        None => ("off".to_string(), 0.0, Default::default()),
+    };
+    let reserve = if side == "left" || side == "right" {
+        side_w.clamp(180.0, 640.0).min((width - 200.0).max(0.0))
+    } else {
+        0.0
+    };
+    let page_x = if side == "left" { reserve } else { 0.0 };
+    let page_w = (width - reserve).max(1.0);
+
     let ids: Vec<String> = match app.try_state::<AppState>() {
         Some(state) => match state.try_read_core(label) {
             Some(core) => core.tabs.iter().map(|tab| tab.id.clone()).collect(),
@@ -699,8 +721,37 @@ pub fn relayout(app: &AppHandle, label: &str) -> Result<(), tauri::Error> {
     };
     for id in ids {
         if let Some(webview) = app.get_webview(&id) {
-            set_bounds(&webview, 0.0, chrome_h, width, tab_height)?;
+            set_bounds(&webview, page_x, chrome_h, page_w, tab_height)?;
         }
+    }
+
+    // One sidebar webview per window, created the first time it is asked for and
+    // hidden rather than destroyed afterwards, so toggling it is instant.
+    let side_label = format!("{label}-side");
+    let side_x = if side == "left" { 0.0 } else { width - reserve };
+    match app.get_webview(&side_label) {
+        Some(webview) if reserve > 0.0 => {
+            let _ = webview.show();
+            set_bounds(&webview, side_x, chrome_h, reserve, tab_height)?;
+        }
+        Some(webview) => {
+            let _ = webview.hide();
+        }
+        None if reserve > 0.0 => {
+            let builder = WebviewBuilder::new(
+                side_label.clone(),
+                WebviewUrl::App("pages/sidebar.html".into()),
+            )
+            .devtools(true);
+            let builder = tabs::apply_profile(builder, &opts.ui_data_dir);
+            let builder = tabs::apply_extensions(builder, &opts);
+            win.add_child(
+                builder,
+                LogicalPosition::new(side_x, chrome_h),
+                LogicalSize::new(reserve.max(1.0), tab_height),
+            )?;
+        }
+        None => {}
     }
 
     let _ = app.emit_to(label, "layout:changed", (width, height));

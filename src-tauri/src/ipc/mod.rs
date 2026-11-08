@@ -191,6 +191,8 @@ impl AppState {
 pub struct SettingsPatch {
     pub restore_session: Option<bool>,
     pub show_bookmarks: Option<bool>,
+    pub sidebar: Option<String>,
+    pub sidebar_width: Option<f64>,
     pub toolbar: Option<Vec<String>>,
     pub translate_to: Option<String>,
     pub new_tab_page: Option<bool>,

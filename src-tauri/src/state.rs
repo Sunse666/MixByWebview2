@@ -4,6 +4,14 @@ use std::path::Path;
 /// Bumped when the on-disk shape changes. Old files are migrated, not ignored.
 pub const SCHEMA: u32 = 1;
 
+fn default_sidebar() -> String {
+    "off".to_string()
+}
+
+fn default_sidebar_width() -> f64 {
+    300.0
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
@@ -16,6 +24,12 @@ pub struct Settings {
     pub chrome_height: f64,
     /// Adds a bookmarks row under the address bar, which also grows the chrome.
     pub show_bookmarks: bool,
+    /// Where the sidebar sits: "off", "left" or "right".
+    #[serde(default = "default_sidebar")]
+    pub sidebar: String,
+    /// Sidebar width in logical pixels.
+    #[serde(default = "default_sidebar_width")]
+    pub sidebar_width: f64,
     /// Toolbar buttons the user kept, in display order.
     pub toolbar: Vec<String>,
     /// Extensions the user hid from the toolbar, by name.
@@ -128,6 +142,8 @@ impl Default for Settings {
             restore_session: true,
             chrome_height: 86.0,
         show_bookmarks: false,
+        sidebar: default_sidebar(),
+        sidebar_width: default_sidebar_width(),
         toolbar: vec![
             "translate".into(),
             "zoom".into(),
