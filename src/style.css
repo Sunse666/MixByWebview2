@@ -549,3 +549,53 @@ body.tab-dragging .tab.dragging {
 body.tab-dragging, body.tab-dragging * {
   user-select: none;
 }
+
+/* Group menu ------------------------------------------------------------ */
+.group-menu {
+  position: absolute;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  min-width: 190px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  box-shadow: 0 10px 26px rgb(0 0 0 / 45%);
+}
+.group-input {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  padding: 5px 8px;
+}
+.group-palette {
+  display: flex;
+  gap: 6px;
+}
+.group-swatch {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+}
+.group-swatch.on {
+  border-color: var(--text);
+}
+.group-menu-item {
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  padding: 5px 8px;
+  cursor: pointer;
+}
+.group-menu-item:hover {
+  background: var(--hover, rgb(255 255 255 / 8%));
+}

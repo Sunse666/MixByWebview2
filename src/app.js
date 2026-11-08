@@ -131,6 +131,84 @@ function groupById(id) {
   return (groups || []).find((group) => group.id === id);
 }
 
+/** Colours a group can take: plain, readable on both themes. */
+const GROUP_COLORS = ["#4c8dff", "#39b54a", "#e8a33d", "#e2574c", "#a259d9", "#38b6c4"];
+
+let groupMenu = null;
+
+/** Closes the group menu if one is open. */
+function closeGroupMenu() {
+  if (groupMenu) {
+    groupMenu.remove();
+    groupMenu = null;
+  }
+}
+
+/**
+ * The menu a group chip opens on right click: rename, recolour, dissolve.
+ *
+ * A menu rather than a cycle of hidden gestures - the colour and the name are the only
+ * things about a group a person can change, and both should be findable.
+ */
+function openGroupMenu(group, x, y) {
+  closeGroupMenu();
+  const menu = document.createElement("div");
+  menu.className = "group-menu";
+
+  const field = document.createElement("input");
+  field.className = "group-input";
+  field.value = group.name;
+  field.placeholder = "Group";
+  field.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      invoke("group_style", { id: group.id, name: field.value, color: null })
+        .catch(() => {})
+        .finally(closeGroupMenu);
+    } else if (event.key === "Escape") {
+      closeGroupMenu();
+    }
+    event.stopPropagation();
+  });
+  menu.append(field);
+
+  const palette = document.createElement("div");
+  palette.className = "group-palette";
+  for (const color of GROUP_COLORS) {
+    const swatch = document.createElement("button");
+    swatch.className = "group-swatch" + (color === group.color ? " on" : "");
+    swatch.style.background = color;
+    swatch.title = color;
+    swatch.addEventListener("click", () => {
+      invoke("group_style", { id: group.id, name: null, color }).catch(() => {});
+      closeGroupMenu();
+    });
+    palette.append(swatch);
+  }
+  menu.append(palette);
+
+  const dissolve = document.createElement("button");
+  dissolve.className = "group-menu-item";
+  dissolve.textContent = t("Ungroup");
+  dissolve.addEventListener("click", () => {
+    invoke("group_dissolve", { id: group.id }).catch(() => {});
+    closeGroupMenu();
+  });
+  menu.append(dissolve);
+
+  const window_ = document.getElementById("tabs").getBoundingClientRect();
+  menu.style.left = Math.round(x - window_.left) + "px";
+  menu.style.top = Math.round(y - window_.top) + "px";
+  (document.getElementById("tabs").parentElement || document.body).append(menu);
+  groupMenu = menu;
+  field.focus();
+  field.select();
+}
+
+document.addEventListener("mousedown", (event) => {
+  if (groupMenu && !event.target.closest(".group-menu")) closeGroupMenu();
+});
+
 /** A closed group takes one slot in the strip, the way Edge shows them. */
 function groupChip(group) {
   const el = document.createElement("div");
@@ -153,7 +231,8 @@ function groupChip(group) {
   el.addEventListener("click", () => invoke("group_toggle", { id: group.id }).catch(() => {}));
   el.addEventListener("contextmenu", (event) => {
     event.preventDefault();
-    invoke("group_dissolve", { id: group.id }).catch(() => {});
+    event.stopPropagation();
+    openGroupMenu(group, event.clientX, event.clientY);
   });
   el.addEventListener("dragover", (event) => {
     if (!dragging) return;

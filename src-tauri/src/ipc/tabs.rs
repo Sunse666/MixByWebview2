@@ -222,6 +222,12 @@ pub async fn tab_close(app: AppHandle, window: tauri::Window, state: State<'_, A
         let closed_at = core.tabs.iter().position(|tab| tab.id == id);
         core.tabs.retain(|tab| tab.id != id);
         core.mru.retain(|entry| entry != &id);
+        // A group is a set of open tabs: once the last member closes, the group goes
+        // with it rather than staying behind as an empty chip.
+        for group in core.groups.iter_mut() {
+            group.members.retain(|member| member != &id);
+        }
+        core.groups.retain(|group| !group.members.is_empty());
         if core.selected.as_deref() == Some(id.as_str()) {
             let go_left = state.settings.read().tab_close_goes_left;
             core.selected = match closed_at {
