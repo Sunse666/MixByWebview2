@@ -12,6 +12,7 @@
 
 use std::collections::HashMap;
 use std::sync::Mutex;
+use tauri::Manager;
 
 /// A picture older than this is not worth showing any more.
 const MAX_AGE_SECS: u64 = 900;
@@ -119,6 +120,42 @@ pub fn forget(id: &str) {
   }
 }
 
+
+/// Photographs a background tab off the command thread.
+///
+/// The wake-up and the wait for a frame are deliberately slow; doing them inline made
+/// the card feel glued to the pointer.
+pub fn capture_later(app: tauri::AppHandle, id: String, window_label: String) {
+  tauri::async_runtime::spawn_blocking(move || {
+    let Some(state) = app.try_state::<crate::ipc::AppState>() else {
+      return;
+    };
+    if !state.settings.read().live_thumbs {
+      return;
+    }
+    let selected = state
+      .read_core(&window_label)
+      .selected
+      .clone()
+      .and_then(|label| app.get_webview(&label));
+    let Some(webview) = app.get_webview(&id) else {
+      return;
+    };
+    // A frozen page cannot paint, so wake it for the photograph.
+    crate::freeze::thaw(&webview);
+    if let Some(png) = capture_live(selected.as_ref(), &webview) {
+      remember(&id, png);
+    }
+    // Back to sleep: the wake-up was for the picture only.
+    if app
+      .try_state::<crate::ipc::AppState>()
+      .map(|state| state.settings.read().freeze_background)
+      .unwrap_or(false)
+    {
+      crate::freeze::freeze(&webview);
+    }
+  });
+}
 /// True when there is no picture, or only a stale one.
 pub fn needs(id: &str, seconds: u64) -> bool {
   let guard = store();

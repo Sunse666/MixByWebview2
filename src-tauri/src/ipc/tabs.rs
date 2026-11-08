@@ -331,24 +331,12 @@ pub async fn thumb_show(
     // get a fresh frame. The page does notice the visibility change, which is why
     // this is a setting of its own.
     // A frozen page cannot be photographed, so a live preview wakes it first.
+    // Live previews run in the background now: the capture wakes the page, waits for it
+    // to paint and photographs it, which is a couple of hundred milliseconds - far too
+    // long to hold a hover card behind. The card opens with the picture it already has
+    // and the fresh one is there for the next hover.
     if !visible && _state.settings.read().live_thumbs {
-        if let Some(webview) = app.get_webview(&id) {
-            crate::freeze::thaw(&webview);
-        }
-        let selected = _state
-            .read_core(window.label())
-            .selected
-            .clone()
-            .and_then(|label| app.get_webview(&label));
-        if let Some(webview) = app.get_webview(&id) {
-            if let Some(png) = crate::thumbs::capture_live(selected.as_ref(), &webview) {
-                crate::thumbs::remember(&id, png);
-            }
-            // Back to sleep: the wake-up was for the photograph only.
-            if _state.settings.read().freeze_background {
-                crate::freeze::freeze(&webview);
-            }
-        }
+        crate::thumbs::capture_later(app.clone(), id.clone(), window.label().to_string());
     }
     let (win_w, _) = crate::window::logical_size(&window)?;
     let (width, height) = (372.0, 236.0);
@@ -668,6 +656,43 @@ pub async fn tab_reopen(
     Ok(true)
 }
 
+
+/// Freezes a tab once it has been off screen for a while.
+///
+/// The wait is what keeps the freeze out of the way: the memory is reclaimed for tabs
+/// that are actually parked, and a switch back happens long before the timer fires.
+fn schedule_freeze(app: AppHandle, id: String) {
+    const DELAY: std::time::Duration = std::time::Duration::from_secs(8);
+    tauri::async_runtime::spawn_blocking(move || {
+        std::thread::sleep(DELAY);
+        // Anything can have happened in those seconds: check before acting.
+        let Some(state) = app.try_state::<AppState>() else {
+            return;
+        };
+        if !state.settings.read().freeze_background {
+            return;
+        }
+        let owner = window_of_tab(&id);
+        let still_hidden = state
+            .try_read_core(owner)
+            .map(|core| core.selected.as_deref() != Some(id.as_str()))
+            .unwrap_or(false);
+        if !still_hidden {
+            return;
+        }
+        let Some(webview) = app.get_webview(&id) else {
+            return;
+        };
+        // A tab that is playing sound is still in use; freezing it would cut the audio.
+        let playing = crate::audio::state(&webview)
+            .map(|audio| audio.playing)
+            .unwrap_or(false);
+        if !playing {
+            crate::freeze::freeze(&webview);
+        }
+    });
+}
+
 /// Only the selected tab is visible; the rest keep running underneath.
 pub(crate) fn sync_visibility(app: &AppHandle, label: &str) {
     let pairs: Vec<(String, Option<String>)> = {
@@ -692,14 +717,13 @@ pub(crate) fn sync_visibility(app: &AppHandle, label: &str) {
             } else {
                 let _ = webview.hide();
                 if freeze_background {
-                    // Sound is the exception: a tab that keeps playing is still in
-                    // use, and freezing it would cut the audio.
-                    let playing = crate::audio::state(&webview)
-                        .map(|state| state.playing)
-                        .unwrap_or(false);
-                    if !playing {
-                        crate::freeze::freeze(&webview);
-                    }
+                    // Freezing waits a few seconds before it happens. Freezing in the
+                    // same breath as hiding meant switching back within a second or two
+                    // showed a page whose surface had already been dropped - a black
+                    // frame - which is exactly the moment someone is switching tabs.
+                    // A tab that stays hidden long enough is worth the memory; a tab you
+                    // are flicking between is not.
+                    schedule_freeze(app.clone(), id.clone());
                 }
             }
         }

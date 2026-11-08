@@ -179,7 +179,9 @@ function renderTabs() {
             x: box.left + box.width / 2,
           }).catch(() => false);
           if (shown) thumbOpen = true;
-        }, 400);
+          // Long enough that flicking across the strip to reach a tab never pops a
+          // card; the card is for resting on one.
+        }, 650);
       });
       el.addEventListener("mouseleave", () => {
         clearTimeout(hoverThumb);
