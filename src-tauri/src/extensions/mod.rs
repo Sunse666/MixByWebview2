@@ -74,8 +74,33 @@ pub fn scan(dirs: &AppDirs, disabled: &[String]) -> Vec<ExtInfo> {
             .to_string();
         let target = dirs.extensions.join(slug(&label));
         if disabled.iter().any(|name| name == &label || name == &slug(&label)) {
+            // Report it anyway: the card is the only place the switch lives, so an
+            // extension left out of this list would have no way back on.
             crate::logging::info(&format!("extension {label}: off, not copied"));
             let _ = std::fs::remove_dir_all(&target);
+            let manifest = if is_unpacked {
+                read_manifest(&source).unwrap_or_default()
+            } else {
+                Manifest::default()
+            };
+            found.push(ExtInfo {
+                name: if manifest.name.is_empty() {
+                    label.clone()
+                } else {
+                    manifest.name.clone()
+                },
+                version: manifest.version.clone(),
+                manifest_version: manifest.manifest_version,
+                // Nothing was unpacked, so there is no folder to load from.
+                dir: String::new(),
+                source: label.clone(),
+                status: "off".into(),
+                reason: "switched off".into(),
+                description: manifest.description.clone(),
+                icon: String::new(),
+                popup: String::new(),
+                permissions: manifest.permissions.clone(),
+            });
             continue;
         }
         // A name that slugifies to nothing must never resolve to the shared root.

@@ -101,7 +101,9 @@ async function boot() {
   main.append(grid);
 
   const list = (await invoke("ext_list").catch(() => [])) || [];
-  const loaded = list.filter((ext) => ext.status === "loaded");
+  // "off" cards are shown too: the switch that turns them back on lives on the card, so
+  // leaving them out of the list leaves no way to switch them on again.
+  const loaded = list.filter((ext) => ext.status === "loaded" || ext.status === "off");
 
   if (!loaded.length) {
     const empty = document.createElement("div");
