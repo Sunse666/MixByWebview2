@@ -112,6 +112,7 @@ async function boot() {
   }
 
   const hidden = new Set(settings.hidden_extensions || []);
+  const enabledDirs = new Set();
 
   for (const ext of loaded) {
     const card = document.createElement("div");
@@ -182,24 +183,41 @@ async function boot() {
     // extension, turning it on hands the browser the folder again, which is the only
     // handle left once an extension has been switched off.
     const liveEntry = live.find((item) => item.name === ext.name);
+    // The live list is the truth, but a freshly added extension may not appear in it
+    // yet, so remember what this session managed to switch on as well.
+    const enabledNow = Boolean(liveEntry && liveEntry.enabled) || enabledDirs.has(ext.dir);
     const toggle = document.createElement("button");
     toggle.className = "switch";
     toggle.setAttribute("role", "switch");
-    toggle.setAttribute("aria-checked", String(Boolean(liveEntry && liveEntry.enabled)));
+    toggle.setAttribute("aria-checked", String(enabledNow));
     toggle.title = t("Enabled");
     toggle.addEventListener("click", async () => {
       const on = toggle.getAttribute("aria-checked") === "true";
       toggle.disabled = true;
-      const done = on
-        ? await invoke("extension_live_set", { id: liveEntry.id, enabled: false }).catch(() => false)
-        : await invoke("extension_add", { dir: ext.dir }).catch(() => false);
+      if (on) {
+        enabledDirs.delete(ext.dir);
+        const done = await invoke("extension_live_set", { id: liveEntry.id, enabled: false })
+          .then(() => true)
+          .catch(() => false);
+        toggle.disabled = false;
+        if (!done) {
+          enabledDirs.add(ext.dir);
+          note2.textContent = t("The browser refused that; restart and try again");
+          return;
+        }
+        toggle.setAttribute("aria-checked", "false");
+        note2.textContent = t("Disabled");
+        return;
+      }
+      const added = await invoke("extension_add", { dir: ext.dir }).catch(() => null);
       toggle.disabled = false;
-      if (!done) {
+      if (!added) {
         note2.textContent = t("The browser refused that; restart and try again");
         return;
       }
-      toggle.setAttribute("aria-checked", String(!on));
-      note2.textContent = on ? t("Disabled") : t("Enabled");
+      enabledDirs.add(ext.dir);
+      toggle.setAttribute("aria-checked", "true");
+      note2.textContent = t("Enabled");
     });
     actions.append(toggle);
 

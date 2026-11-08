@@ -217,16 +217,29 @@ pub async fn extension_add(
     webview: tauri::Webview,
     state: State<'_, AppState>,
     dir: String,
-) -> Result<bool, AppError> {
+) -> Result<String, AppError> {
     require_trusted(&webview)?;
     let window = webview.window();
     let label = selected_label(&state, &window);
     let Some(page) = app.get_webview(&label) else {
-        return Ok(false);
+        return Err(AppError::new("extension", "no page to load it into"));
     };
-    let ok = crate::ext_live::add(&page, &dir);
-    crate::logging::info(&format!("extension add {dir}: {ok}"));
-    Ok(ok)
+    match crate::ext_live::add(&page, &dir) {
+        Ok(true) => {
+            crate::logging::info(&format!("extension add {dir}: enabled"));
+            Ok("enabled".to_string())
+        }
+        Ok(false) => {
+            // The browser took the folder and left it switched off: say so instead of
+            // reporting a success the live list does not back up.
+            crate::logging::warn(&format!("extension add {dir}: added but still off"));
+            Err(AppError::new("extension", "the browser added it but left it off"))
+        }
+        Err(err) => {
+            crate::logging::warn(&format!("extension add {dir} failed: {err}"));
+            Err(AppError::new("extension", err))
+        }
+    }
 }
 
 /// Enables or disables a loaded extension without restarting the app.

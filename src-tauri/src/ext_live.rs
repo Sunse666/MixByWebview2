@@ -197,21 +197,23 @@ pub fn forget_disabled_state(profile: &std::path::Path) -> Result<bool, String> 
   Ok(true)
 }
 
-/// Loads one extension from a directory and enables it.
+/// Loads one extension from a directory and turns it on.
 ///
-/// This is the way back from the one-way switch: an extension that was turned off
-/// stays off in the profile and vanishes from the list the toggle read, so the only
-/// handle on it is the folder it was loaded from. Adding that folder again gives a
-/// fresh extension object, which comes back enabled.
+/// Returns what the browser reports afterwards, not what the call returned: adding a
+/// folder that is already installed can succeed and leave the extension exactly as
+/// disabled as it was, which is how a switch ended up claiming "enabled" for an
+/// extension that the live list did not contain at all.
 #[cfg(windows)]
-pub fn add(webview: &tauri::Webview, dir: &str) -> bool {
+pub fn add(webview: &tauri::Webview, dir: &str) -> Result<bool, String> {
   use webview2_com::{
-    Microsoft::Web::WebView2::Win32::ICoreWebView2Profile7, ProfileAddBrowserExtensionCompletedHandler,
+    BrowserExtensionEnableCompletedHandler,
+    Microsoft::Web::WebView2::Win32::{ICoreWebView2Profile7, ICoreWebView2_13},
+    ProfileAddBrowserExtensionCompletedHandler,
   };
   use windows_core::Interface;
 
   let path = windows_core::HSTRING::from(dir);
-  let (sender, receiver) = std::sync::mpsc::channel::<bool>();
+  let (sender, receiver) = std::sync::mpsc::channel::<Result<String, String>>();
   let fallback = sender.clone();
   let request = webview.with_webview(move |platform| unsafe {
     let done = std::sync::mpsc::Sender::clone(&sender);
@@ -223,25 +225,52 @@ pub fn add(webview: &tauri::Webview, dir: &str) -> bool {
       let sender_for_handler = std::sync::mpsc::Sender::clone(&done);
       let handler = ProfileAddBrowserExtensionCompletedHandler::create(Box::new(
         move |error, extension| {
-          let _ = sender_for_handler.send(error.is_ok() && extension.is_some());
+          let Some(extension) = extension else {
+            let _ = sender_for_handler
+              .send(Err(format!("the browser did not return an extension ({error:?})")));
+            return Ok(());
+          };
+          if error.is_err() {
+            let _ = sender_for_handler.send(Err(format!("{error:?}")));
+            return Ok(());
+          }
+          let mut enabled = windows_core::BOOL(0);
+          let _ = extension.IsEnabled(&mut enabled);
+          if enabled.as_bool() {
+            let _ = sender_for_handler.send(Ok("already enabled".into()));
+            return Ok(());
+          }
+          // Added but still switched off: turn it on and wait for the answer.
+          let sender_for_enable = std::sync::mpsc::Sender::clone(&sender_for_handler);
+          let handler = BrowserExtensionEnableCompletedHandler::create(Box::new(move |status| {
+            let _ = sender_for_enable.send(match status {
+              Ok(()) => Ok("enabled".to_string()),
+              Err(err) => Err(format!("enable refused: {err:?}")),
+            });
+            Ok(())
+          }));
+          if let Err(err) = extension.Enable(true, &handler) {
+            let _ = sender_for_handler.send(Err(format!("enable failed: {err:?}")));
+          }
           Ok(())
         },
       ));
       profile7.AddBrowserExtension(&path, &handler)
     })();
     if result.is_err() {
-      let _ = std::sync::mpsc::Sender::send(&fallback, false);
+      let _ = std::sync::mpsc::Sender::send(&fallback, Err("the call did not start".into()));
     }
   });
   if request.is_err() {
-    return false;
+    return Err("the webview did not answer".into());
   }
-  receiver
-    .recv_timeout(std::time::Duration::from_secs(5))
-    .unwrap_or(false)
+  match receiver.recv_timeout(std::time::Duration::from_secs(5)) {
+    Ok(answer) => answer.map(|_| true),
+    Err(_) => Err("the browser did not answer in time".into()),
+  }
 }
 
 #[cfg(not(windows))]
-pub fn add(_webview: &tauri::Webview, _dir: &str) -> bool {
-  false
+pub fn add(_webview: &tauri::Webview, _dir: &str) -> Result<bool, String> {
+  Err("not supported on this platform".into())
 }
