@@ -310,7 +310,12 @@ function fillTab(el, tab) {
 
 /** Wires the handlers a tab element keeps for its whole life. */
 function wireTab(el, id) {
-  el.draggable = true;
+  // Not draggable: with the attribute on, the browser starts its own drag session on
+  // the first movement and swallows every mousemove and the mouseup with it, which is
+  // why the hand-rolled drag below never saw the release. The attribute stays off and
+  // a stray dragstart is refused outright.
+  el.draggable = false;
+  el.addEventListener("dragstart", (event) => event.preventDefault());
   el.addEventListener("mousedown", (event) => {
     if (event.target.closest("button")) return;
     clearTimeout(hoverThumb);
