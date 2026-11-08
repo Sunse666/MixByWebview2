@@ -225,7 +225,11 @@ const SHORTCUT_FORWARDER: &str = include_str!("injected/forwarder.js");
 #[derive(Clone, Debug, Default)]
 pub struct WebviewOpts {
     pub tab_data_dir: Option<std::path::PathBuf>,
+    /// Where the strip and the overlays keep their profile. The same directory as
+    /// the pages, so WebView2 makes one environment for the whole app.
     pub ui_data_dir: Option<std::path::PathBuf>,
+    /// Used when sharing that profile is refused: the old separate ui profile.
+    pub ui_fallback_dir: Option<std::path::PathBuf>,
     pub extensions_dir: Option<std::path::PathBuf>,
     /// Compiled userscript loader; empty when the drop folder has no scripts.
     pub userscripts: String,
@@ -236,18 +240,16 @@ impl WebviewOpts {
         let any_loaded = extensions.iter().any(|ext| ext.status == "loaded");
         Self {
             tab_data_dir: Some(dirs.profile.clone()),
-            // The strip keeps its own profile, and that is not an accident.
+            // One profile for the strip, the overlays and the pages means one
+            // WebView2 environment: one browser process instead of two, one set of
+            // gpu processes, one cache. That measured as 250-400 MB of the total.
             //
-            // Sharing one user data directory would mean one WebView2 environment
-            // instead of two - one browser process instead of two, one set of gpu
-            // processes, one cache - which measured as 250-400 MB of the total. But
-            // WebView2 requires the extension setting to be the same for every
-            // controller in an environment: the strip is created without extensions
-            // and the pages with them, and sharing a profile made the second
-            // create return HRESULT 0x8007139F and took the whole app down on start.
-            // Enabling extensions on the strip too would make them consistent, and
-            // is worth trying once the crash is behind us.
-            ui_data_dir: Some(dirs.profile_ui.clone()),
+            // WebView2 insists that every controller in an environment agrees on
+            // the extension setting, so the strip enables extensions exactly like a
+            // page does. Its own pages never match an extension's content scripts,
+            // so nothing is injected into the interface.
+            ui_data_dir: Some(dirs.profile.clone()),
+            ui_fallback_dir: Some(dirs.profile_ui.clone()),
             #[cfg(windows)]
             extensions_dir: if any_loaded {
                 Some(dirs.extensions.clone())
@@ -261,7 +263,10 @@ impl WebviewOpts {
     }
 }
 
-pub fn apply_profile(builder: WebviewBuilder<tauri::Wry>, dir: &Option<std::path::PathBuf>) -> WebviewBuilder<tauri::Wry> {
+pub(crate) fn apply_profile(
+    builder: WebviewBuilder<tauri::Wry>,
+    dir: &Option<std::path::PathBuf>,
+) -> WebviewBuilder<tauri::Wry> {
     #[cfg(any(windows, target_os = "linux"))]
     if let Some(dir) = dir {
         return builder.data_directory(dir.clone());
@@ -270,7 +275,10 @@ pub fn apply_profile(builder: WebviewBuilder<tauri::Wry>, dir: &Option<std::path
     builder
 }
 
-fn apply_extensions(builder: WebviewBuilder<tauri::Wry>, opts: &WebviewOpts) -> WebviewBuilder<tauri::Wry> {
+pub(crate) fn apply_extensions(
+    builder: WebviewBuilder<tauri::Wry>,
+    opts: &WebviewOpts,
+) -> WebviewBuilder<tauri::Wry> {
     #[cfg(windows)]
     if let Some(dir) = &opts.extensions_dir {
         return builder

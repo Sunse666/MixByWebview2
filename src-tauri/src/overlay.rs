@@ -15,6 +15,10 @@ const DEFAULT: (f64, f64) = (420.0, 320.0);
 /// ghosting and black boxes, so the panel paints an opaque background instead.
 fn overlay_builder(app: &AppHandle, label: &str, page: &str) -> WebviewBuilder<tauri::Wry> {
     let _ = page;
+    let opts = {
+        let state = app.state::<crate::ipc::AppState>();
+        state.opts.clone()
+    };
     let color = {
         let state = app.state::<crate::ipc::AppState>();
         let theme = state.theme.read().clone();
@@ -24,10 +28,13 @@ fn overlay_builder(app: &AppHandle, label: &str, page: &str) -> WebviewBuilder<t
     // The dropdown must never take focus away from the address bar, and the tab
     // hover card is opened by a mouse move, not by a click.
     let focused = !page.starts_with("overlay.html#suggest") && !page.starts_with("overlay.html#thumb");
+    // Same extension setting as the pages: every controller in an environment has
+    // to agree on it, or WebView2 refuses to create this one.
     let builder = WebviewBuilder::new(label, WebviewUrl::App(page.into()))
         .background_color(color)
         .devtools(true)
         .focused(focused);
+    let builder = crate::tabs::apply_extensions(builder, &opts);
 
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     let builder = builder.transparent(true);

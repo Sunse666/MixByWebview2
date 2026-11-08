@@ -452,14 +452,22 @@ pub fn open_window(
         }
     }
 
-    let chrome_builder = tabs::apply_profile(
-        WebviewBuilder::new(
+    // Extensions on the strip as well, because WebView2 refuses to add a controller
+    // to an environment whose extension setting differs - and sharing one environment
+    // is what saves the second browser and gpu process.
+    let chrome_builder = |dir: &Option<std::path::PathBuf>, with_extensions: bool| {
+        let builder = WebviewBuilder::new(
             format!("{label}-chrome"),
             WebviewUrl::App("index.html".into()),
         )
-        .devtools(true),
-        &opts.ui_data_dir,
-    );
+        .devtools(true);
+        let builder = tabs::apply_profile(builder, dir);
+        if with_extensions {
+            tabs::apply_extensions(builder, &opts)
+        } else {
+            builder
+        }
+    };
 
     let fullscreen = app
         .try_state::<AppState>()
@@ -470,11 +478,23 @@ pub fn open_window(
     } else {
         crate::ipc::chrome_height(app)
     };
-    win.add_child(
-        chrome_builder,
+    let built = win.add_child(
+        chrome_builder(&opts.ui_data_dir, true),
         LogicalPosition::new(0.0, 0.0),
         LogicalSize::new(width, chrome_h),
-    )?;
+    );
+    if let Err(err) = built {
+        // Fall back to the separate ui profile: two environments cost more memory,
+        // but a strip that refuses to be created costs the whole window.
+        crate::logging::warn(&format!(
+            "chrome webview refused the shared profile ({err}); using the ui profile"
+        ));
+        win.add_child(
+            chrome_builder(&opts.ui_fallback_dir, false),
+            LogicalPosition::new(0.0, 0.0),
+            LogicalSize::new(width, chrome_h),
+        )?;
+    }
 
     // The strip renders at 1:1 inside a DPI scaled box; zoom is what makes the
     // two agree, otherwise a band of empty panel colour is left at the bottom.
