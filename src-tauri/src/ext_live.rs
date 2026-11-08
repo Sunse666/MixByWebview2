@@ -186,8 +186,23 @@ pub fn forget_disabled_state(profile: &std::path::Path) -> Result<bool, String> 
     touched = true;
   }
 
-  // The extensions section of both preference files, if they carry one.
-  for name in ["Preferences", "Secure Preferences"] {
+  // Secure Preferences holds the per-extension "disable_reasons", and an extension
+  // marked DISABLE_CORRUPTED (8192) can never be enabled through the API again: the
+  // browser decided its files changed underneath it, which is exactly what happens when
+  // the folder is removed and unpacked again. The file is signed and cannot be edited,
+  // but deleting it makes Chromium rebuild the entries from the folders - no disable
+  // reasons, no tamper flag, extension storage untouched.
+  let secure = profile
+    .join("EBWebView")
+    .join("Default")
+    .join("Secure Preferences");
+  if secure.exists() && std::fs::remove_file(&secure).is_ok() {
+    crate::logging::info("removed Secure Preferences: extensions rebuild cleanly");
+    touched = true;
+  }
+
+  // The extensions section of the plain preferences file, if it carries one.
+  for name in ["Preferences"] {
     let file = profile.join("EBWebView").join("Default").join(name);
     if !file.exists() {
       continue;

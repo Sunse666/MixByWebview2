@@ -228,18 +228,14 @@ pub async fn extension_live_list(
 /// finding it off again afterwards means the profile is stuck - the one case where
 /// clearing the state is the right answer rather than overriding a choice.
 fn reconcile(state: &AppState, listed: &[crate::ext_live::LiveExtension]) {
-    let enabled: std::collections::BTreeMap<String, bool> = state
-        .settings
-        .read()
-        .extension_state
-        .iter()
-        .map(|(dir, value)| (dir.clone(), *value))
-        .collect();
+    // An extension is meant to be on unless the user switched it off, and that lives in
+    // the settings list, not in the browser's own record.
+    let switched_off: Vec<String> = state.settings.read().disabled_extensions.clone();
     let stuck: Vec<String> = state
         .extensions
         .iter()
         .filter(|ext| ext.status == "loaded")
-        .filter(|ext| enabled.get(&ext.dir) == Some(&true))
+        .filter(|ext| !switched_off.contains(&ext.name))
         .filter(|ext| {
             listed
                 .iter()
@@ -316,6 +312,11 @@ pub async fn extension_set(
             .map_err(|err| AppError::new("settings", err.to_string()))?;
     }
     crate::logging::info(&format!("extension {name} enabled={enabled}"));
+    if enabled {
+        // The browser may have marked it corrupted when the folder went away and came
+        // back; only a rebuilt profile clears that. One restart, then it stays on.
+        request_extension_reset(&state);
+    }
 
     let window = webview.window();
     let label = selected_label(&state, &window);
