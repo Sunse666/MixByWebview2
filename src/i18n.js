@@ -329,6 +329,8 @@ const DICT = {
     "Page": "本页",
     "Total": "总计",
     "Browser": "浏览器",
+    "Saved": "已保存",
+    "Could not save:": "保存失败：",
     "Enabled": "已启用",
     "Disabled": "已禁用",
     "The browser refused that; restart and try again": "浏览器拒绝了这次操作，请重启后再试",

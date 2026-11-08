@@ -1,4 +1,5 @@
 import { setLanguage, t } from "../i18n.js";
+import { withFeedback, setFeedbackText } from "./feedback.js";
 import { addNavItem, groupSections } from "./settings/shell.js";
 import { buildClearData } from "./settings/sections/clear-data.js";
 import { buildStartup } from "./settings/sections/startup.js";
@@ -16,7 +17,8 @@ import { buildBackup } from "./settings/sections/backup.js";
 import { buildBrowser } from "./settings/sections/browser.js";
 import { buildToolbar } from "./settings/sections/toolbar.js";
 
-const { invoke } = window.__TAURI__.core;
+// Every section saves as you change it; this wrapper says whether it worked.
+const invoke = withFeedback(window.__TAURI__.core.invoke);
 
 const nav = document.getElementById("nav");
 const main = document.getElementById("main");
@@ -46,6 +48,7 @@ const SECTIONS = [
 async function boot() {
   const settings = await invoke("settings_get").catch(() => null);
   setLanguage((settings && settings.language) || "en");
+  setFeedbackText(t("Saved"), t("Could not save:"));
   document.title = t("Settings");
 
   const pages = {

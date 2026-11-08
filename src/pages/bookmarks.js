@@ -1,6 +1,7 @@
 import { setLanguage, t } from "../i18n.js";
+import { withFeedback, setFeedbackText } from "./feedback.js";
 
-const { invoke } = window.__TAURI__.core;
+const invoke = withFeedback(window.__TAURI__.core.invoke);
 
 const nav = document.getElementById("nav");
 const main = document.getElementById("main");

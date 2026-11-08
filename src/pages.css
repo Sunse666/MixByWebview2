@@ -308,3 +308,33 @@ main h2 {
   padding-left: 26px;
   font-size: 13px;
 }
+
+/* Save confirmation: these pages apply as you change, so this is the only signal. */
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 22px;
+  transform: translate(-50%, 12px);
+  padding: 8px 16px;
+  border-radius: 8px;
+  background: var(--card, #24262a);
+  border: 1px solid var(--border, #3c4043);
+  color: var(--text, #e8eaed);
+  font-size: 12px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  z-index: 50;
+  max-width: 70vw;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.toast.on {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+.toast.bad {
+  border-color: #b3261e;
+  color: #ffb4ab;
+}
