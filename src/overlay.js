@@ -785,6 +785,8 @@ async function bootThumb() {
 
   const totalParts = [];
   if (data.memory_total) totalParts.push(t("Total") + " " + megabytes(data.memory_total));
+  // Kept apart, the way other browsers report page memory.
+  if (data.memory_gpu) totalParts.push("GPU " + megabytes(data.memory_gpu));
   // With a single tab the "average" is just the total again, so it is left out.
   if (data.memory_average && data.live_tabs > 1) {
     totalParts.push(

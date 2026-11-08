@@ -6,17 +6,21 @@
 //! made-up one: the whole browser's working set, read from the process list, and the
 //! page's own javascript heap, which the page can report for itself.
 
-/// Working set of the whole browser: every process the WebView2 environment owns.
+/// Memory of the browser's own processes, leaving the gpu out.
+///
+/// Other browsers report page memory without their gpu process, so summing all of
+/// them made this number look a quarter larger than theirs for the same work. The
+/// gpu side is returned separately, where a decoder belongs.
 #[cfg(windows)]
-pub fn total(webview: &tauri::Webview) -> Option<u64> {
+pub fn totals(webview: &tauri::Webview) -> Option<(u64, u64)> {
   use webview2_com::Microsoft::Web::WebView2::Win32::{
     ICoreWebView2Environment8, ICoreWebView2_2,
   };
   use windows_core::Interface;
 
-  let (sender, receiver) = std::sync::mpsc::channel::<Vec<u32>>();
+  let (sender, receiver) = std::sync::mpsc::channel::<Vec<(i32, u32)>>();
   let _ = webview.with_webview(move |platform| unsafe {
-    let ids = (|| -> windows_core::Result<Vec<u32>> {
+    let found = (|| -> windows_core::Result<Vec<(i32, u32)>> {
       let controller = platform.controller();
       let core = controller.CoreWebView2()?;
       let env = core.cast::<ICoreWebView2_2>()?.Environment()?;
@@ -28,31 +32,47 @@ pub fn total(webview: &tauri::Webview) -> Option<u64> {
       for index in 0..count {
         let info = infos.GetValueAtIndex(index)?;
         let mut pid = 0i32;
+        let mut kind = Default::default();
         info.ProcessId(&mut pid)?;
+        info.Kind(&mut kind)?;
         if pid > 0 {
-          out.push(pid as u32);
+          out.push((kind.0, pid as u32));
         }
       }
       Ok(out)
     })()
     .unwrap_or_default();
-    let _ = sender.send(ids);
+    let _ = sender.send(found);
   });
-  let pids = receiver
+  let processes = receiver
     .recv_timeout(std::time::Duration::from_millis(600))
     .unwrap_or_default();
-  if pids.is_empty() {
+  if processes.is_empty() {
     return None;
   }
-  let mut sum = 0u64;
-  for pid in pids {
-    sum += working_set(pid).unwrap_or(0);
+  let mut pages = 0u64;
+  let mut gpu = 0u64;
+  for (kind, pid) in processes {
+    let bytes = working_set(pid).unwrap_or(0);
+    // COREWEBVIEW2_PROCESS_KIND_GPU is 4.
+    if kind == 4 {
+      gpu += bytes;
+    } else {
+      pages += bytes;
+    }
   }
-  if sum == 0 {
-    None
-  } else {
-    Some(sum)
-  }
+  Some((pages, gpu))
+}
+
+#[cfg(not(windows))]
+pub fn totals(_webview: &tauri::Webview) -> Option<(u64, u64)> {
+  None
+}
+
+/// Total without the gpu, for callers that only need one number.
+#[cfg(windows)]
+pub fn total(webview: &tauri::Webview) -> Option<u64> {
+  totals(webview).map(|(pages, _)| pages)
 }
 
 #[cfg(not(windows))]

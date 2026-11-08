@@ -294,6 +294,8 @@ pub struct ThumbCard {
     memory_total: Option<u64>,
     /// Total divided by the live tabs of this window: an average, labelled as one.
     memory_average: Option<u64>,
+    /// The gpu process, kept apart: other browsers leave it out of page memory.
+    memory_gpu: Option<u64>,
     /// The page's own javascript heap, in bytes.
     memory_tab: Option<u64>,
     /// DOM counters, which do belong to this tab alone.
@@ -377,7 +379,9 @@ pub async fn thumb_card(
     // Memory: the whole browser can be summed, one tab's working set cannot be
     // isolated, so the card shows the page's own counters and a labelled average.
     crate::mem::report(&_app);
-    let memory_total = _app.get_webview(&id).and_then(|webview| crate::mem::total(&webview));
+    let memory_pair = _app.get_webview(&id).and_then(|webview| crate::mem::totals(&webview));
+    let memory_total = memory_pair.map(|(pages, _)| pages);
+    let memory_gpu = memory_pair.map(|(_, gpu)| gpu);
     let metrics = _app.get_webview(&id).and_then(|webview| crate::mem::tab_metrics(&webview));
     let live = core.tabs.iter().filter(|tab| tab.alive).count().max(1) as u64;
     Ok(ThumbCard {
@@ -395,6 +399,7 @@ pub async fn thumb_card(
         incognito: tab.incognito,
         memory_total,
         memory_average: memory_total.map(|total| total / live.max(1)),
+        memory_gpu: memory_gpu.filter(|gpu| *gpu > 0),
         memory_tab: _app.get_webview(&id).and_then(|webview| crate::mem::tab_heap(&webview)),
         nodes: metrics.map(|m| m.nodes).unwrap_or(0),
         listeners: metrics.map(|m| m.listeners).unwrap_or(0),
