@@ -256,8 +256,14 @@ pub async fn overlay_open_at(
     // The palettes are wide search panels, not menus: the chrome strip is only
     // as tall as the tabs and address row, so they cannot live in it.
     let palette = kind == "palette" || kind == "tab_search";
+    // The group menu has a text field and a row of colours, and it has to be able to
+    // hang below the strip - which a panel drawn inside the chrome webview cannot do,
+    // because that webview is only as tall as the strip.
+    let group_menu = kind.starts_with("group_menu");
     let (width, height) = if palette {
         (560.0, 420.0)
+    } else if group_menu {
+        (214.0, 138.0)
     } else {
         (232.0, menu_h)
     };

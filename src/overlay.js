@@ -694,6 +694,59 @@ function megabytes(bytes) {
   return mb >= 100 ? Math.round(mb) + " MB" : mb.toFixed(1) + " MB";
 }
 
+
+/** The menu a group chip opens: name, colour, dissolve - as its own overlay. */
+async function bootGroupMenu() {
+  const id = params.get("id") || "";
+  const menu = document.getElementById("menu");
+  menu.hidden = false;
+  const card = document.createElement("div");
+  card.className = "group-menu";
+  const field = document.createElement("input");
+  field.className = "group-input";
+  field.placeholder = t("Group");
+  field.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      invoke("group_style", { id, name: field.value, color: null })
+        .catch(() => {})
+        .finally(() => invoke("overlay_close").catch(() => {}));
+    } else if (event.key === "Escape") {
+      invoke("overlay_close").catch(() => {});
+    }
+  });
+  card.append(field);
+
+  const palette = document.createElement("div");
+  palette.className = "group-palette";
+  for (const color of ["#4c8dff", "#39b54a", "#e8a33d", "#e2574c", "#a259d9", "#38b6c4"]) {
+    const swatch = document.createElement("button");
+    swatch.className = "group-swatch";
+    swatch.style.background = color;
+    swatch.title = color;
+    swatch.addEventListener("click", () => {
+      invoke("group_style", { id, name: null, color })
+        .catch(() => {})
+        .finally(() => invoke("overlay_close").catch(() => {}));
+    });
+    palette.append(swatch);
+  }
+  card.append(palette);
+
+  const dissolve = document.createElement("button");
+  dissolve.className = "group-menu-item";
+  dissolve.textContent = t("Ungroup");
+  dissolve.addEventListener("click", () => {
+    invoke("group_dissolve", { id })
+      .catch(() => {})
+      .finally(() => invoke("overlay_close").catch(() => {}));
+  });
+  card.append(dissolve);
+  menu.append(card);
+  setLanguage((await invoke("settings_get").catch(() => null))?.language || "en");
+  field.focus();
+}
+
 /** Puts a picture into the frame and marks the card as having one. */
 let thumbFilled = false;
 function fillThumb(frame, image, card, src) {
@@ -1277,6 +1330,10 @@ async function boot() {
   }
   if (kind === "thumb") {
     await bootThumb();
+    return;
+  }
+  if (kind === "group_menu") {
+    await bootGroupMenu();
     return;
   }
   if (kind === "palette") {

@@ -131,91 +131,30 @@ function groupById(id) {
   return (groups || []).find((group) => group.id === id);
 }
 
-/** Colours a group can take: plain, readable on both themes. */
-const GROUP_COLORS = ["#4c8dff", "#39b54a", "#e8a33d", "#e2574c", "#a259d9", "#38b6c4"];
+let groupMenuOpen = false;
+let groupMenuUntil = 0;
 
-let groupMenu = null;
-
-/** Closes the group menu if one is open. */
-function closeGroupMenu() {
-  if (groupMenu) {
-    groupMenu.remove();
-    groupMenu = null;
-  }
-}
-
-/**
- * The menu a group chip opens on right click: rename, recolour, dissolve.
- *
- * A menu rather than a cycle of hidden gestures - the colour and the name are the only
- * things about a group a person can change, and both should be findable.
- */
+/** Where a group chip is, in window coordinates for the overlay. */
 function openGroupMenu(group, x, y) {
-  closeGroupMenu();
-  // The card is a separate webview on top of the page: while it is open the click that
-  // opens this menu can land on it instead, and it would take the focus with it.
+  // The panel is a separate webview with no "I am done" signal, so the strip keeps quiet
+  // for a few seconds after it opens instead of guessing when it closed.
+  groupMenuOpen = true;
+  groupMenuUntil = Date.now() + 8000;
   clearTimeout(hoverThumb);
   hoverThumb = null;
   if (thumbOpen) {
     thumbOpen = false;
     invoke("overlay_close").catch(() => {});
   }
-  const menu = document.createElement("div");
-  menu.className = "group-menu";
-
-  const field = document.createElement("input");
-  field.className = "group-input";
-  field.value = group.name;
-  field.placeholder = "Group";
-  field.addEventListener("keydown", (event) => {
-    if (event.key === "Enter") {
-      event.preventDefault();
-      invoke("group_style", { id: group.id, name: field.value, color: null })
-        .catch(() => {})
-        .finally(closeGroupMenu);
-    } else if (event.key === "Escape") {
-      closeGroupMenu();
-    }
-    event.stopPropagation();
-  });
-  menu.append(field);
-
-  const palette = document.createElement("div");
-  palette.className = "group-palette";
-  for (const color of GROUP_COLORS) {
-    const swatch = document.createElement("button");
-    swatch.className = "group-swatch" + (color === group.color ? " on" : "");
-    swatch.style.background = color;
-    swatch.title = color;
-    swatch.addEventListener("click", () => {
-      invoke("group_style", { id: group.id, name: null, color }).catch(() => {});
-      closeGroupMenu();
-    });
-    palette.append(swatch);
-  }
-  menu.append(palette);
-
-  const dissolve = document.createElement("button");
-  dissolve.className = "group-menu-item";
-  dissolve.textContent = t("Ungroup");
-  dissolve.addEventListener("click", () => {
-    invoke("group_dissolve", { id: group.id }).catch(() => {});
-    closeGroupMenu();
-  });
-  menu.append(dissolve);
-
-  const window_ = document.getElementById("tabs").getBoundingClientRect();
-  menu.style.left = Math.round(x - window_.left) + "px";
-  menu.style.top = Math.round(y - window_.top) + "px";
-  (document.getElementById("tabs").parentElement || document.body).append(menu);
-  groupMenu = menu;
-  field.focus();
-  field.select();
+  // Its own panel rather than a div: the chrome webview is only as tall as the strip, so
+  // a menu drawn inside it cannot reach below the strip, and two panels layered over the
+  // same spot is the one arrangement the window handles cleanly.
+  invoke("overlay_open_at", {
+    kind: "group_menu&id=" + group.id,
+    x: Math.round(x - 12),
+    y: Math.round(y),
+  }).catch(() => {});
 }
-
-document.addEventListener("mousedown", (event) => {
-  if (groupMenu && !event.target.closest(".group-menu")) closeGroupMenu();
-});
 
 /** A closed group takes one slot in the strip, the way Edge shows them. */
 function groupChip(group) {
@@ -407,9 +346,12 @@ const HOVER_DELAY = 650;
  * produces just by arriving on a tab, so the card never came up at all.
  */
 function armHover(id, el) {
-  // A card opening while the group menu is up would take the keyboard away from the
-  // name field, so the strip stays quiet until the menu closes.
-  if (groupMenu) return;
+  // A card opening under the group menu would take the keyboard away from the name
+  // field, and the menu is an overlay of its own, so the strip stays quiet meanwhile.
+  if (groupMenuOpen) {
+    if (Date.now() < groupMenuUntil) return;
+    groupMenuOpen = false;
+  }
   clearTimeout(hoverThumb);
   hoverThumb = setTimeout(async () => {
     hoverThumb = null;
@@ -1428,8 +1370,3 @@ async function boot() {
   // The address bar is not focused on purpose: it would open the suggestion
   // dropdown over the page on every launch. Ctrl+L focuses it.
 }
-
-boot().catch((error) => {
-  console.error("boot failed:", error);
-  report(`boot failed: ${error && error.message ? error.message : error}`);
-});

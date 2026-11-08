@@ -331,6 +331,7 @@ const DICT = {
     "Browser": "浏览器",
     "Saved": "已保存",
     "Ungroup": "解散分组",
+    "Group": "分组",
     "No bookmarks yet": "还没有书签",
     "No downloads": "没有下载记录",
     "No history yet": "还没有历史记录",

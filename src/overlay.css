@@ -661,3 +661,42 @@ footer { margin-top: auto; display: flex; justify-content: flex-end; gap: 8px; }
   );
   min-height: 200px;
 }
+
+.group-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+}
+.group-input {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  padding: 5px 8px;
+}
+.group-palette {
+  display: flex;
+  gap: 6px;
+}
+.group-swatch {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+}
+.group-menu-item {
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  padding: 5px 8px;
+  cursor: pointer;
+}
+.group-menu-item:hover {
+  background: rgb(255 255 255 / 8%);
+}
