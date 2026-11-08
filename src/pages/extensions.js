@@ -188,14 +188,10 @@ async function boot() {
     const liveEntry = live.find((item) => norm(item.name) === norm(ext.name))
       || live.find((item) => norm(item.name).includes(norm(ext.name)))
       || live.find((item) => norm(ext.name).includes(norm(item.name)) && norm(item.name).length > 3);
-    // The live list is asked first; when it says nothing about an extension, the state
-    // the browser confirmed when it was switched is used instead, so the switch does
-    // not fall back to "off" on every visit.
-    const remembered = (settings.extension_state || {})[ext.dir];
-    const enabledNow =
-      liveEntry && liveEntry.enabled !== undefined
-        ? Boolean(liveEntry.enabled)
-        : Boolean(remembered) || enabledDirs.has(ext.dir);
+    // The browser's own list is the only state that counts. A local record makes the
+    // switch claim an extension is on when the browser has it off, which is the wrong
+    // half of the two ways to be wrong.
+    const enabledNow = Boolean(liveEntry && liveEntry.enabled);
     const toggle = document.createElement("button");
     toggle.className = "switch";
     toggle.setAttribute("role", "switch");

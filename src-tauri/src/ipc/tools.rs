@@ -217,9 +217,51 @@ pub async fn extension_live_list(
         listed.len(),
         described.join(", ")
     ));
+    reconcile(&state, &listed);
     Ok(listed)
 }
 
+
+/// Marks the profile for a clean extension reload when the browser contradicts us.
+///
+/// The record only claims an extension should be on after the browser confirmed it, so
+/// finding it off again afterwards means the profile is stuck - the one case where
+/// clearing the state is the right answer rather than overriding a choice.
+fn reconcile(state: &AppState, listed: &[crate::ext_live::LiveExtension]) {
+    let enabled: std::collections::BTreeMap<String, bool> = state
+        .settings
+        .read()
+        .extension_state
+        .iter()
+        .map(|(dir, value)| (dir.clone(), *value))
+        .collect();
+    let stuck: Vec<String> = state
+        .extensions
+        .iter()
+        .filter(|ext| ext.status == "loaded")
+        .filter(|ext| enabled.get(&ext.dir) == Some(&true))
+        .filter(|ext| {
+            listed
+                .iter()
+                .any(|live| live.name == ext.name && !live.enabled)
+        })
+        .map(|ext| ext.name.clone())
+        .collect();
+    if stuck.is_empty() {
+        return;
+    }
+    crate::logging::warn(&format!(
+        "extensions the browser keeps off: {}; they load again on the next start",
+        stuck.join(", ")
+    ));
+    let mut settings = state.settings.write();
+    if !settings.reset_extensions {
+        settings.reset_extensions = true;
+        if let Err(err) = settings.save(&state.dirs.settings_file) {
+            crate::logging::warn(&format!("cannot save settings: {err}"));
+        }
+    }
+}
 /// Records that the profile's extension state has to be cleared on the next start.
 fn request_extension_reset(state: &AppState) {
     let mut settings = state.settings.write();
