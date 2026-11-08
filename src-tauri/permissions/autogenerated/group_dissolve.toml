@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-group-dissolve"
+description = "Enables the group_dissolve command without any pre-configured scope."
+commands.allow = ["group_dissolve"]
+
+[[permission]]
+identifier = "deny-group-dissolve"
+description = "Denies the group_dissolve command without any pre-configured scope."
+commands.deny = ["group_dissolve"]

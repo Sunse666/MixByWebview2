@@ -31,6 +31,19 @@ use std::sync::RwLock;
 use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_runtime::ResizeDirection;
 
+/// A set of tabs shown as one, the way Edge does it: collapsed, only the group
+/// occupies a slot in the strip and the members are hidden until it is opened.
+#[derive(Clone, Debug, Serialize)]
+pub struct TabGroup {
+    pub id: String,
+    pub name: String,
+    /// Six digit hex, used for the chip and the stripe on its tabs.
+    pub color: String,
+    pub collapsed: bool,
+    /// Member tab ids, in strip order within the group.
+    pub members: Vec<String>,
+}
+
 #[derive(Default)]
 pub struct Core {
     pub tabs: Vec<Tab>,
@@ -38,6 +51,8 @@ pub struct Core {
     pub next_tab_id: usize,
     /// Tab ids by recency, most recent first; Ctrl+Tab walks this.
     pub mru: Vec<String>,
+    pub groups: Vec<TabGroup>,
+    pub next_group_id: usize,
     pub tick: u64,
 }
 
@@ -454,6 +469,7 @@ pub struct UrlPayload {
 pub struct TabList {
     tabs: Vec<TabMeta>,
     selected: Option<String>,
+    groups: Vec<TabGroup>,
 }
 
 fn snapshot(core: &Core) -> TabList {
@@ -473,6 +489,7 @@ fn snapshot(core: &Core) -> TabList {
             })
             .collect(),
         selected: core.selected.clone(),
+        groups: core.groups.clone(),
     }
 }
 
@@ -523,10 +540,33 @@ pub(crate) fn save_sessions(app: &AppHandle) {
             .as_ref()
             .and_then(|id| core.tabs.iter().position(|tab| &tab.id == id))
             .unwrap_or(0);
+        // Members are stored as indexes into the saved tabs, which skip incognito ones.
+        let kept: Vec<&Tab> = core.tabs.iter().filter(|tab| !tab.incognito).collect();
+        let groups: Vec<crate::session::SessionGroup> = core
+            .groups
+            .iter()
+            .filter_map(|group| {
+                let members: Vec<usize> = group
+                    .members
+                    .iter()
+                    .filter_map(|member| kept.iter().position(|tab| &tab.id == member))
+                    .collect();
+                if members.is_empty() {
+                    return None;
+                }
+                Some(crate::session::SessionGroup {
+                    name: group.name.clone(),
+                    color: group.color.clone(),
+                    collapsed: group.collapsed,
+                    members,
+                })
+            })
+            .collect();
         windows.push(crate::session::WindowSession {
             tabs,
             selected,
             window: window_geometry(app, label),
+            groups,
         });
     }
 

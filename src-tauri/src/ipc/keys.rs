@@ -169,6 +169,20 @@ pub async fn shortcut(app: AppHandle, window: tauri::Window, state: State<'_, Ap
                 let _ = webview.eval("window.__mixStartTranslate && window.__mixStartTranslate()");
             }
         }
+        "group_tab" => {
+            // One key for the whole gesture: a tab in a group leaves it, a tab outside
+            // gets a group of its own.
+            let selected = selected_label(&state, &window);
+            let grouped = {
+                let core = state.read_core(window.label());
+                crate::ipc::is_grouped(&core, &selected)
+            };
+            if grouped {
+                group_remove(app.clone(), window.clone(), state, selected).await?;
+            } else {
+                group_add(app.clone(), window.clone(), state, selected, None).await?;
+            }
+        }
         "close_overlay" => {
             crate::overlay::close(&app, window.label());
         }

@@ -693,6 +693,202 @@ fn schedule_freeze(app: AppHandle, id: String) {
     });
 }
 
+/// Puts a tab in a group of its own, or in an existing group.
+#[tauri::command]
+pub async fn group_add(
+    app: AppHandle,
+    window: tauri::Window,
+    state: State<'_, AppState>,
+    id: String,
+    group_id: Option<String>,
+) -> Result<String, AppError> {
+    let target = {
+        let mut core = state.write_core(window.label());
+        if !core.tabs.iter().any(|tab| tab.id == id) {
+            return Err(AppError::new("no_tab", id));
+        }
+        let target = match group_id {
+            Some(wanted) => core
+                .groups
+                .iter()
+                .find(|group| group.id == wanted)
+                .map(|group| group.id.clone())
+                .ok_or_else(|| AppError::new("no_group", wanted))?,
+            None => {
+                let fresh = format!("g{}", core.next_group_id + 1);
+                core.next_group_id += 1;
+                core.groups.push(TabGroup {
+                    id: fresh.clone(),
+                    name: "Group".to_string(),
+                    color: "#4c8dff".to_string(),
+                    collapsed: false,
+                    members: Vec::new(),
+                });
+                fresh
+            }
+        };
+        // A tab belongs to one group at most.
+        for group in core.groups.iter_mut() {
+            group.members.retain(|member| member != &id);
+        }
+        if let Some(group) = core.groups.iter_mut().find(|group| group.id == target) {
+            group.members.push(id.clone());
+        }
+        // Members sit next to each other, so the group reads as one block in the strip.
+        let members: Vec<String> = core
+            .groups
+            .iter()
+            .find(|group| group.id == target)
+            .map(|group| group.members.clone())
+            .unwrap_or_default();
+        let mut block: Vec<Tab> = Vec::new();
+        let mut rest: Vec<Tab> = Vec::new();
+        let mut insert_at: Option<usize> = None;
+        for tab in core.tabs.drain(..) {
+            if members.contains(&tab.id) {
+                insert_at.get_or_insert(rest.len());
+                block.push(tab);
+            } else {
+                rest.push(tab);
+            }
+        }
+        let at = insert_at.unwrap_or(rest.len()).min(rest.len());
+        for (offset, tab) in block.into_iter().enumerate() {
+            rest.insert(at + offset, tab);
+        }
+        core.tabs = rest;
+        target
+    };
+    emit_tabs(&app, window.label());
+    save_sessions(&app);
+    Ok(target)
+}
+
+/// Opens or closes a group: closed, its tabs give up their slots in the strip.
+#[tauri::command]
+pub async fn group_toggle(
+    app: AppHandle,
+    window: tauri::Window,
+    state: State<'_, AppState>,
+    id: String,
+) -> Result<bool, AppError> {
+    let collapsed = {
+        let mut core = state.write_core(window.label());
+        let group = core
+            .groups
+            .iter_mut()
+            .find(|group| group.id == id)
+            .ok_or_else(|| AppError::new("no_group", id.clone()))?;
+        group.collapsed = !group.collapsed;
+        group.collapsed
+    };
+    // The tab on screen cannot stay behind a group that just closed: move to a tab that
+    // is still in the strip.
+    if collapsed {
+        let hide_selected = {
+            let core = state.read_core(window.label());
+            match core.selected.as_deref() {
+                Some(selected) => core
+                    .groups
+                    .iter()
+                    .find(|group| group.id == id)
+                    .map(|group| group.members.iter().any(|member| member == selected))
+                    .unwrap_or(false),
+                None => false,
+            }
+        };
+        if hide_selected {
+            let next = {
+                let core = state.read_core(window.label());
+                core.tabs
+                    .iter()
+                    .find(|tab| !is_grouped(&core, &tab.id))
+                    .map(|tab| tab.id.clone())
+            };
+            if let Some(next) = next {
+                state.write_core(window.label()).selected = Some(next);
+                sync_visibility(&app, window.label());
+            }
+        }
+    }
+    emit_tabs(&app, window.label());
+    save_sessions(&app);
+    Ok(collapsed)
+}
+
+/// Renames and recolours in one call; either field may be left out.
+#[tauri::command]
+pub async fn group_style(
+    app: AppHandle,
+    window: tauri::Window,
+    state: State<'_, AppState>,
+    id: String,
+    name: Option<String>,
+    color: Option<String>,
+) -> Result<(), AppError> {
+    {
+        let mut core = state.write_core(window.label());
+        let group = core
+            .groups
+            .iter_mut()
+            .find(|group| group.id == id)
+            .ok_or_else(|| AppError::new("no_group", id.clone()))?;
+        if let Some(name) = name.filter(|value| !value.trim().is_empty()) {
+            group.name = name.trim().to_string();
+        }
+        if let Some(color) = color.filter(|value| value.starts_with('#')) {
+            group.color = color;
+        }
+    }
+    emit_tabs(&app, window.label());
+    save_sessions(&app);
+    Ok(())
+}
+
+/// Takes one tab out of whatever group it is in; an empty group disappears.
+#[tauri::command]
+pub async fn group_remove(
+    app: AppHandle,
+    window: tauri::Window,
+    state: State<'_, AppState>,
+    id: String,
+) -> Result<(), AppError> {
+    {
+        let mut core = state.write_core(window.label());
+        for group in core.groups.iter_mut() {
+            group.members.retain(|member| member != &id);
+        }
+        core.groups.retain(|group| !group.members.is_empty());
+    }
+    emit_tabs(&app, window.label());
+    save_sessions(&app);
+    Ok(())
+}
+
+/// Takes a group apart; its tabs stay open, just ungrouped.
+#[tauri::command]
+pub async fn group_dissolve(
+    app: AppHandle,
+    window: tauri::Window,
+    state: State<'_, AppState>,
+    id: String,
+) -> Result<(), AppError> {
+    {
+        let mut core = state.write_core(window.label());
+        core.groups.retain(|group| group.id != id);
+    }
+    emit_tabs(&app, window.label());
+    save_sessions(&app);
+    Ok(())
+}
+
+/// True when a tab belongs to a group, closed or not.
+pub(crate) fn is_grouped(core: &Core, id: &str) -> bool {
+    core.groups
+        .iter()
+        .any(|group| group.members.iter().any(|member| member == id))
+}
+
 /// Only the selected tab is visible; the rest keep running underneath.
 pub(crate) fn sync_visibility(app: &AppHandle, label: &str) {
     let pairs: Vec<(String, Option<String>)> = {

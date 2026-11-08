@@ -33,6 +33,35 @@ fn debug_hooks() -> bool {
     std::env::var("MIX_DEBUG").is_ok_and(|value| value != "0")
 }
 
+
+/// Rebuilds the tab groups a session recorded. Members are indexes into the tabs the
+/// window was opened with, which are still in that order at this point.
+fn apply_groups(app: &AppHandle, label: &str, groups: &[crate::session::SessionGroup]) {
+    if groups.is_empty() {
+        return;
+    }
+    let state = app.state::<AppState>();
+    let mut core = state.write_core(label);
+    for group in groups {
+        let members: Vec<String> = group
+            .members
+            .iter()
+            .filter_map(|index| core.tabs.get(*index).map(|tab| tab.id.clone()))
+            .collect();
+        if members.is_empty() {
+            continue;
+        }
+        let id = format!("g{}", core.next_group_id + 1);
+        core.next_group_id += 1;
+        core.groups.push(crate::ipc::TabGroup {
+            id,
+            name: group.name.clone(),
+            color: group.color.clone(),
+            collapsed: group.collapsed,
+            members,
+        });
+    }
+}
 pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
     let (start_url, restore, session_file) = {
         let state = app.state::<AppState>();
@@ -90,6 +119,7 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
                     .map(|tab| (tab.url().to_string(), tab.scroll(), tab.pinned()))
                     .collect();
                 open_window(app.handle(), &label, tabs, selected, window.window.clone())?;
+                apply_groups(app.handle(), &label, &window.groups);
             }
         }
         None => {

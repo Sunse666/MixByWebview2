@@ -7,6 +7,7 @@ const urlInput = document.getElementById("url");
 const tabStrip = document.getElementById("tabs");
 
 let tabs = [];
+let groups = [];
 let dragging = null;
 let settings = { show_bookmarks: false };
 let draggingBookmark = null;
@@ -109,6 +110,50 @@ function applyTheme(theme) {
 
 // Rust calls this after every theme change, including live preview.
 window.__mixApplyTheme = applyTheme;
+
+/** The one group a tab belongs to, if any. */
+function groupOf(id) {
+  return (groups || []).find((group) => group.members.includes(id));
+}
+
+/** A closed group takes one slot in the strip, the way Edge shows them. */
+function groupChip(group) {
+  const el = document.createElement("div");
+  el.className = "tab group-chip" + (group.collapsed ? " closed" : "");
+  el.style.setProperty("--group", group.color || "#4c8dff");
+  el.title = group.name;
+  const dot = document.createElement("span");
+  dot.className = "group-dot";
+  const label = document.createElement("span");
+  label.className = "tab-title";
+  label.textContent = group.name;
+  el.append(dot, label);
+  if (group.collapsed) {
+    const count = document.createElement("span");
+    count.className = "group-count";
+    count.textContent = String(group.members.length);
+    el.append(count);
+  }
+  el.addEventListener("click", () => invoke("group_toggle", { id: group.id }).catch(() => {}));
+  el.addEventListener("contextmenu", (event) => {
+    event.preventDefault();
+    invoke("group_dissolve", { id: group.id }).catch(() => {});
+  });
+  // Dropping a tab on the chip puts it in that group.
+  el.addEventListener("dragover", (event) => {
+    if (!dragging) return;
+    event.preventDefault();
+    el.classList.add("drop-target");
+  });
+  el.addEventListener("dragleave", () => el.classList.remove("drop-target"));
+  el.addEventListener("drop", (event) => {
+    event.preventDefault();
+    el.classList.remove("drop-target");
+    if (!dragging) return;
+    invoke("group_add", { id: dragging, groupId: group.id }).catch(() => {});
+  });
+  return el;
+}
 
 function renderTabs() {
   const nodes = tabs.map((tab) => {
@@ -245,9 +290,40 @@ function renderTabs() {
       invoke("tab_move", { id: source, to }).catch(() => {});
     });
 
+    const group = groupOf(tab.id);
+    if (group) el.style.setProperty("--group", group.color || "#4c8dff");
     return el;
   });
-  tabStrip.replaceChildren(...nodes);
+
+  // One chip for a closed group, its members left out of the strip entirely; an open
+  // group keeps its tabs, each with the group's colour down its edge.
+  const strip = [];
+  const placed = new Set();
+  for (const tab of tabs) {
+    if (placed.has(tab.id)) continue;
+    const group = groupOf(tab.id);
+    if (!group) {
+      strip.push(nodes[tabs.indexOf(tab)]);
+      placed.add(tab.id);
+      continue;
+    }
+    if (!placed.has(group.id)) {
+      placed.add(group.id);
+      const index = tabs.indexOf(tab);
+      strip.push(groupChip(group));
+      if (!group.collapsed) {
+        for (const member of group.members) {
+          const at = tabs.findIndex((item) => item.id === member);
+          if (at >= 0) {
+            strip.push(nodes[at]);
+            placed.add(member);
+          }
+        }
+      }
+      if (index >= 0) placed.add(tab.id);
+    }
+  }
+  tabStrip.replaceChildren(...strip);
 }
 
 // Whether the current tab shows translated text; the backend is the source of
@@ -562,6 +638,7 @@ function syncUrl() {
 
 function setTabs(payload) {
   tabs = payload.tabs || [];
+  groups = payload.groups || [];
   selected = payload.selected || null;
   renderTabs();
   const active = tabs.find((tab) => tab.id === selected);

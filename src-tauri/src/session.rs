@@ -68,6 +68,19 @@ pub struct WindowSession {
     pub selected: usize,
     /// Kept here instead of a plugin so it stays inside the portable folder.
     pub window: Option<WindowGeometry>,
+    /// Tab groups, with members as indexes into "tabs" so they survive the ids being
+    /// handed out again on the next start.
+    #[serde(default)]
+    pub groups: Vec<SessionGroup>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SessionGroup {
+    pub name: String,
+    pub color: String,
+    pub collapsed: bool,
+    pub members: Vec<usize>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -113,6 +126,7 @@ mod tests {
                     tabs: vec![SessionTab::new("https://a.test".into(), 0.0)],
                     selected: 0,
                     window: None,
+                    groups: Vec::new(),
                 },
                 WindowSession {
                     tabs: vec![
@@ -120,6 +134,7 @@ mod tests {
                         SessionTab::new("https://c.test".into(), 0.0),
                     ],
                     selected: 1,
+                    groups: Vec::new(),
                     window: Some(WindowGeometry {
                         x: 10,
                         y: 20,

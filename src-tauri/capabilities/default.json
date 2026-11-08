@@ -13,6 +13,11 @@
 
     "allow-extension-add",
     "allow-extension-set",
+    "allow-group-add",
+    "allow-group-toggle",
+    "allow-group-style",
+    "allow-group-dissolve",
+    "allow-group-remove",
     "allow-window-control",
     "allow-window-drag",
     "allow-window-resize",

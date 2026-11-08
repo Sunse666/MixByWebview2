@@ -511,3 +511,29 @@ body.incognito #tab-strip::after {
   color: #8ab4f8;
   margin-left: 4px;
 }
+
+/* Tab groups ------------------------------------------------------------ */
+.tab {
+  /* Set per tab when it belongs to a group. */
+  border-left: 3px solid var(--group, transparent);
+}
+.group-chip {
+  border-left: 3px solid var(--group, #4c8dff);
+  background: color-mix(in srgb, var(--group, #4c8dff) 22%, transparent);
+  gap: 6px;
+}
+.group-chip.closed {
+  background: color-mix(in srgb, var(--group, #4c8dff) 32%, transparent);
+}
+.group-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--group, #4c8dff);
+  flex: 0 0 auto;
+}
+.group-count {
+  font-size: 10px;
+  opacity: 0.75;
+  flex: 0 0 auto;
+}

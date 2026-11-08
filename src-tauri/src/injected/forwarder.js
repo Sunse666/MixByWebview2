@@ -398,6 +398,7 @@
       case "p": return event.shiftKey ? "palette" : "print";
       // Plain Ctrl+A must stay select-all, so only the shifted form is ours.
       case "a": return event.shiftKey ? "tab_search" : null;
+      case "g": return event.shiftKey ? "group_tab" : null;
       case "f": return "find";
       case "j": return "downloads";
       case "d": return "bookmark";
