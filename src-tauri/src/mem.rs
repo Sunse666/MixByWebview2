@@ -252,14 +252,15 @@ fn breakdown(webview: &tauri::Webview) -> Option<String> {
     entry.0 += 1;
     entry.1 += bytes;
   }
-  // The kinds WebView2 reports, in the order the enum defines them.
+  // COREWEBVIEW2_PROCESS_KIND: the order is not the one the names suggest, gpu is 4.
   let name = |kind: i32| match kind {
     0 => "browser",
     1 => "renderer",
-    2 => "gpu",
-    3 => "utility",
-    4 => "sandbox",
-    5 => "worker",
+    2 => "utility",
+    3 => "sandbox",
+    4 => "gpu",
+    5 => "plugin",
+    6 => "broker",
     _ => "other",
   };
   let mut total = 0u64;
