@@ -22,6 +22,14 @@ pub struct Settings {
     pub hidden_extensions: Vec<String>,
     /// Extensions that must not load at all; takes effect on the next start.
     pub disabled_extensions: Vec<String>,
+    /// Last state the browser confirmed for an extension, by folder.
+    ///
+    /// The live list is the first choice, but it does not always contain an
+    /// extension that was just loaded - adding a folder can report success while the
+    /// collection stays as it was - so the switch reads this when the list is silent,
+    /// and the page no longer flips back to off on every visit.
+    #[serde(default)]
+    pub extension_state: std::collections::BTreeMap<String, bool>,
 
     pub translate_to: String,
     /// A search template with %s; wins over search_engine when set.
@@ -129,6 +137,7 @@ impl Default for Settings {
         ],
         hidden_extensions: Vec::new(),
         disabled_extensions: Vec::new(),
+        extension_state: std::collections::BTreeMap::new(),
             translate_to: "zh".into(),
             gestures: true,
             super_drag: true,

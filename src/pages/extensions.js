@@ -183,9 +183,14 @@ async function boot() {
     // extension, turning it on hands the browser the folder again, which is the only
     // handle left once an extension has been switched off.
     const liveEntry = live.find((item) => item.name === ext.name);
-    // The live list is the truth, but a freshly added extension may not appear in it
-    // yet, so remember what this session managed to switch on as well.
-    const enabledNow = Boolean(liveEntry && liveEntry.enabled) || enabledDirs.has(ext.dir);
+    // The live list is asked first; when it says nothing about an extension, the state
+    // the browser confirmed when it was switched is used instead, so the switch does
+    // not fall back to "off" on every visit.
+    const remembered = (settings.extension_state || {})[ext.dir];
+    const enabledNow =
+      liveEntry && liveEntry.enabled !== undefined
+        ? Boolean(liveEntry.enabled)
+        : Boolean(remembered) || enabledDirs.has(ext.dir);
     const toggle = document.createElement("button");
     toggle.className = "switch";
     toggle.setAttribute("role", "switch");
@@ -196,7 +201,11 @@ async function boot() {
       toggle.disabled = true;
       if (on) {
         enabledDirs.delete(ext.dir);
-        const done = await invoke("extension_live_set", { id: liveEntry.id, enabled: false })
+        const done = await invoke("extension_live_set", {
+          id: liveEntry.id,
+          enabled: false,
+          dir: ext.dir,
+        })
           .then(() => true)
           .catch(() => false);
         toggle.disabled = false;

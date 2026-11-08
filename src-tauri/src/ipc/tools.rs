@@ -210,6 +210,18 @@ pub async fn extension_live_list(
     Ok(listed)
 }
 
+/// Remembers the state the browser confirmed, so the extensions page does not have to
+/// guess from a list that sometimes omits it.
+fn remember_extension_state(state: &AppState, dir: &str, enabled: bool) {
+    let mut settings = state.settings.write();
+    settings
+        .extension_state
+        .insert(dir.to_string(), enabled);
+    if let Err(err) = settings.save(&state.dirs.settings_file) {
+        crate::logging::warn(&format!("cannot save extension state: {err}"));
+    }
+}
+
 /// Loads one extension from its folder again: the way back from a disabled switch.
 #[tauri::command]
 pub async fn extension_add(
@@ -227,12 +239,14 @@ pub async fn extension_add(
     match crate::ext_live::add(&page, &dir) {
         Ok(true) => {
             crate::logging::info(&format!("extension add {dir}: enabled"));
+            remember_extension_state(&state, &dir, true);
             Ok("enabled".to_string())
         }
         Ok(false) => {
             // The browser took the folder and left it switched off: say so instead of
             // reporting a success the live list does not back up.
             crate::logging::warn(&format!("extension add {dir}: added but still off"));
+            remember_extension_state(&state, &dir, false);
             Err(AppError::new("extension", "the browser added it but left it off"))
         }
         Err(err) => {
@@ -250,6 +264,7 @@ pub async fn extension_live_set(
     state: State<'_, AppState>,
     id: String,
     enabled: bool,
+    dir: Option<String>,
 ) -> Result<bool, AppError> {
     require_trusted(&webview)?;
     let window = webview.window();
@@ -259,6 +274,11 @@ pub async fn extension_live_set(
     };
     let ok = crate::ext_live::set_enabled(&webview, &id, enabled);
     crate::logging::info(&format!("extension {id} enabled={enabled}: {ok}"));
+    if ok {
+        if let Some(dir) = dir {
+            remember_extension_state(&state, &dir, enabled);
+        }
+    }
     Ok(ok)
 }
 #[tauri::command]
