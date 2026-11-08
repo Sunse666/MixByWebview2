@@ -69,17 +69,6 @@ pub fn totals(_webview: &tauri::Webview) -> Option<(u64, u64)> {
   None
 }
 
-/// Total without the gpu, for callers that only need one number.
-#[cfg(windows)]
-pub fn total(webview: &tauri::Webview) -> Option<u64> {
-  totals(webview).map(|(pages, _)| pages)
-}
-
-#[cfg(not(windows))]
-pub fn total(_webview: &tauri::Webview) -> Option<u64> {
-  None
-}
-
 /// Private working set of one process: the memory nobody else shares with it.
 ///
 /// Summing plain working sets was wrong by a wide margin - every process counts the
