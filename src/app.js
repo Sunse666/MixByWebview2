@@ -116,9 +116,25 @@ function groupOf(id) {
   return (groups || []).find((group) => group.members.includes(id));
 }
 
+// Tab elements are reused, not rebuilt. Replacing them on every update is what broke
+// dragging and double clicks: the first mousedown selects the tab, the strip redraws
+// with new elements, and the drag or the second click lands on a node that is already
+// gone.
+const tabNodes = new Map();
+
+/** The tab as it is now: handlers outlive several updates. */
+function tabById(id) {
+  return tabs.find((item) => item.id === id) || { id, title: "", url: "", alive: false };
+}
+
+function groupById(id) {
+  return (groups || []).find((group) => group.id === id);
+}
+
 /** A closed group takes one slot in the strip, the way Edge shows them. */
 function groupChip(group) {
   const el = document.createElement("div");
+  el.dataset.group = group.id;
   el.className = "tab group-chip" + (group.collapsed ? " closed" : "");
   el.style.setProperty("--group", group.color || "#4c8dff");
   el.title = group.name;
@@ -139,7 +155,6 @@ function groupChip(group) {
     event.preventDefault();
     invoke("group_dissolve", { id: group.id }).catch(() => {});
   });
-  // Dropping a tab on the chip puts it in that group.
   el.addEventListener("dragover", (event) => {
     if (!dragging) return;
     event.preventDefault();
@@ -155,175 +170,241 @@ function groupChip(group) {
   return el;
 }
 
-function renderTabs() {
-  const nodes = tabs.map((tab) => {
-    const el = document.createElement("div");
-    const classes = ["tab"];
-    if (tab.id === selected) classes.push("active");
-    if (!tab.alive && settings.mark_suspended !== false) classes.push("suspended");
-    if (tab.incognito) classes.push("incognito");
-    if (tab.pinned) classes.push("pinned");
-    el.className = classes.join(" ");
-    // With the preview card on, the url and the title are already in the card, so
-    // the native tooltip would only duplicate it under the pointer.
-    if (settings.tab_hover_preview) {
-      el.setAttribute("aria-label", tab.title || tab.url);
-    } else {
-      el.title = tab.alive ? tab.url : tab.url + "\n" + t("Suspended to save memory");
-    }
+/** Redraws the inside of a tab, keeping the element itself so drag and clicks live on. */
+function fillTab(el, tab) {
+  const classes = ["tab"];
+  if (tab.id === selected) classes.push("active");
+  if (!tab.alive && settings.mark_suspended !== false) classes.push("suspended");
+  if (tab.incognito) classes.push("incognito");
+  if (tab.pinned) classes.push("pinned");
+  el.className = classes.join(" ");
+  const group = groupOf(tab.id);
+  el.style.setProperty("--group", group ? group.color || "#4c8dff" : "transparent");
+  if (settings.tab_hover_preview) {
+    el.setAttribute("aria-label", tab.title || tab.url);
+    el.removeAttribute("title");
+  } else {
+    el.title = tab.alive ? tab.url : tab.url + "\n" + t("Suspended to save memory");
+  }
 
-    const label = document.createElement("span");
-    const icon = document.createElement(tab.loading ? "span" : tab.icon ? "img" : "span");
-    icon.className = tab.loading ? "tab-icon spinner" : "tab-icon";
-    if (!tab.loading && tab.icon) {
-      icon.src = tab.icon;
-      icon.alt = "";
-      icon.addEventListener("error", () => icon.remove());
-    } else if (!tab.loading) {
-      icon.textContent = "";
-    }
+  const label = document.createElement("span");
+  label.className = "tab-title";
+  label.textContent = tab.title || "New tab";
 
-    label.className = "tab-title";
-    label.textContent = tab.title || "New tab";
-
-    const close = document.createElement("button");
-    close.className = "tab-close";
-    close.textContent = "x";
-    close.title = "Close tab";
-    close.addEventListener("mousedown", (event) => event.stopPropagation());
-    close.addEventListener("click", (event) => {
-      event.stopPropagation();
-      invoke("tab_close", { id: tab.id });
-    });
-
-    if (settings.tab_show_close === false) {
-      icon.title = tab.url;
-    }
-
-    if (tab.pinned) {
-      // A pinned tab shows a glyph instead of the close button.
-      const pin = document.createElement("span");
-      pin.className = "tab-pin";
-      pin.textContent = "\u25C6";
-      pin.title = "Pinned";
-      el.append(icon, label, pin);
-    } else if (settings.tab_show_close === false) {
-      el.append(icon, label);
-    } else {
-      el.append(icon, label, close);
-    }
-    // Resting the pointer on a tab shows a preview of what that tab looked
-    // like; the delay keeps it out of the way while moving across the strip.
-    if (settings.tab_hover_preview) {
-      el.addEventListener("mouseenter", () => {
-        clearTimeout(hoverThumb);
-        hoverThumb = setTimeout(async () => {
-          const box = el.getBoundingClientRect();
-          const shown = await invoke("thumb_show", {
-            id: tab.id,
-            x: box.left + box.width / 2,
-          }).catch(() => false);
-          if (shown) thumbOpen = true;
-          // Long enough that flicking across the strip to reach a tab never pops a
-          // card; the card is for resting on one.
-        }, 650);
-      });
-      el.addEventListener("mouseleave", () => {
-        clearTimeout(hoverThumb);
-        hoverThumb = null;
-        if (thumbOpen) {
-          thumbOpen = false;
-          invoke("overlay_close").catch(() => {});
-        }
-      });
-    }
-
-    el.addEventListener("mousedown", (event) => {
-      if (event.target.closest("button")) return;
-      invoke("tab_select", { id: tab.id });
-    });
-
-    // Double click closes a tab when the preference is on.
-    el.addEventListener("dblclick", (event) => {
-      if (settings.tab_double_click_close === false) return;
-      event.preventDefault();
-      invoke("tab_close", { id: tab.id }).catch(() => {});
-    });
-
-    // Middle click pins or releases a tab.
-    el.addEventListener("auxclick", (event) => {
-      if (event.button !== 1) return;
-      event.preventDefault();
-      invoke("tab_pin", { id: tab.id, pinned: !tab.pinned }).catch(() => {});
-    });
-
-    el.addEventListener("contextmenu", (event) => {
-      event.preventDefault();
-      invoke("tab_pin", { id: tab.id, pinned: !tab.pinned }).catch(() => {});
-    });
-
-    // Drag to reorder. The strip only sends the index, Rust does the move.
-    el.draggable = true;
-    el.addEventListener("dragstart", (event) => {
-      dragging = tab.id;
-      event.dataTransfer.effectAllowed = "move";
-      event.dataTransfer.setData("text/plain", tab.url);
-      el.classList.add("dragging");
-    });
-    el.addEventListener("dragend", () => {
-      dragging = null;
-      el.classList.remove("dragging");
-      for (const pill of tabStrip.querySelectorAll(".tab")) pill.classList.remove("drop-target");
-    });
-    el.addEventListener("dragover", (event) => {
-      if (!dragging || dragging === tab.id) return;
-      event.preventDefault();
-      el.classList.add("drop-target");
-    });
-    el.addEventListener("dragleave", () => el.classList.remove("drop-target"));
-    el.addEventListener("drop", (event) => {
-      event.preventDefault();
-      el.classList.remove("drop-target");
-      const source = dragging;
-      if (!source || source === tab.id) return;
-      const to = tabs.findIndex((item) => item.id === tab.id);
-      invoke("tab_move", { id: source, to }).catch(() => {});
-    });
-
-    const group = groupOf(tab.id);
-    if (group) el.style.setProperty("--group", group.color || "#4c8dff");
-    return el;
+  const close = document.createElement("button");
+  close.className = "tab-close";
+  close.textContent = "x";
+  close.title = "Close tab";
+  close.addEventListener("mousedown", (event) => event.stopPropagation());
+  close.addEventListener("click", (event) => {
+    event.stopPropagation();
+    invoke("tab_close", { id: tab.id });
   });
 
-  // One chip for a closed group, its members left out of the strip entirely; an open
-  // group keeps its tabs, each with the group's colour down its edge.
-  const strip = [];
+  // Only a real image source, and only while it loads: an empty or half-encoded
+  // favicon used to leave the browser's broken-image glyph in the strip, which is
+  // uglier than no icon at all.
+  const iconUrl = String(tab.icon || "");
+  const looksReal =
+    (iconUrl.startsWith("data:image/") && iconUrl.length > 64) ||
+    iconUrl.startsWith("http://") ||
+    iconUrl.startsWith("https://");
+  const hasIcon = looksReal && !tab.loading;
+  const icon = document.createElement(tab.loading ? "span" : hasIcon ? "img" : "span");
+  icon.className = tab.loading ? "tab-icon spinner" : "tab-icon";
+  if (hasIcon) {
+    icon.src = tab.icon;
+    icon.alt = "";
+    icon.addEventListener("error", () => {
+      icon.removeAttribute("src");
+      icon.replaceWith(document.createElement("span"));
+    });
+  }
+
+  if (tab.pinned) {
+    const pin = document.createElement("span");
+    pin.className = "tab-pin";
+    pin.textContent = "\u25C6";
+    pin.title = "Pinned";
+    el.replaceChildren(icon, label, pin);
+  } else if (settings.tab_show_close === false) {
+    el.replaceChildren(icon, label);
+  } else {
+    el.replaceChildren(icon, label, close);
+  }
+}
+
+/** Wires the handlers a tab element keeps for its whole life. */
+function wireTab(el, id) {
+  el.draggable = true;
+  el.addEventListener("mousedown", (event) => {
+    if (event.target.closest("button")) return;
+    clearTimeout(hoverThumb);
+    invoke("tab_select", { id });
+  });
+  el.addEventListener("dblclick", (event) => {
+    if (settings.tab_double_click_close === false) return;
+    event.preventDefault();
+    invoke("tab_close", { id }).catch(() => {});
+  });
+  el.addEventListener("auxclick", (event) => {
+    if (event.button !== 1) return;
+    event.preventDefault();
+    invoke("tab_pin", { id, pinned: !tabById(id).pinned }).catch(() => {});
+  });
+  el.addEventListener("contextmenu", (event) => {
+    event.preventDefault();
+    invoke("tab_pin", { id, pinned: !tabById(id).pinned }).catch(() => {});
+  });
+  el.addEventListener("dragstart", (event) => {
+    dragging = id;
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", tabById(id).url || "");
+    el.classList.add("dragging");
+  });
+  el.addEventListener("dragend", () => {
+    dragging = null;
+    el.classList.remove("dragging");
+    for (const pill of tabStrip.querySelectorAll(".drop-target")) {
+      pill.classList.remove("drop-target");
+    }
+  });
+  el.addEventListener("dragover", (event) => {
+    if (!dragging || dragging === id) return;
+    event.preventDefault();
+    el.classList.add("drop-target");
+  });
+  el.addEventListener("dragleave", () => el.classList.remove("drop-target"));
+  el.addEventListener("drop", (event) => {
+    event.preventDefault();
+    el.classList.remove("drop-target");
+    const source = dragging;
+    if (!source || source === id) return;
+    const to = tabs.findIndex((item) => item.id === id);
+    if (to >= 0) invoke("tab_move", { id: source, to }).catch(() => {});
+  });
+  if (settings.tab_hover_preview) {
+    el.addEventListener("mouseenter", (enter) => {
+      clearTimeout(hoverThumb);
+      // The card is for resting on a tab; any real movement cancels it, so crossing the
+      // strip on the way somewhere else never pops one.
+      const originX = enter.clientX;
+      const originY = enter.clientY;
+      const cancel = (move) => {
+        if (Math.abs(move.clientX - originX) + Math.abs(move.clientY - originY) > 12) {
+          clearTimeout(hoverThumb);
+          hoverThumb = null;
+          el.removeEventListener("mousemove", cancel);
+        }
+      };
+      el.addEventListener("mousemove", cancel);
+      hoverThumb = setTimeout(async () => {
+        el.removeEventListener("mousemove", cancel);
+        const box = el.getBoundingClientRect();
+        const shown = await invoke("thumb_show", {
+          id,
+          x: box.left + box.width / 2,
+        }).catch(() => false);
+        if (shown) thumbOpen = true;
+      }, 900);
+    });
+    el.addEventListener("mouseleave", () => {
+      clearTimeout(hoverThumb);
+      hoverThumb = null;
+      if (thumbOpen) {
+        thumbOpen = false;
+        invoke("overlay_close").catch(() => {});
+      }
+    });
+  }
+}
+
+function renderTabs() {
+  // Strip order: a closed group is one chip and its members are left out; an open group
+  // keeps its tabs together; everything else stays in tab order.
+  const order = [];
   const placed = new Set();
   for (const tab of tabs) {
     if (placed.has(tab.id)) continue;
     const group = groupOf(tab.id);
     if (!group) {
-      strip.push(nodes[tabs.indexOf(tab)]);
+      order.push({ kind: "tab", id: tab.id });
       placed.add(tab.id);
       continue;
     }
-    if (!placed.has(group.id)) {
-      placed.add(group.id);
-      const index = tabs.indexOf(tab);
-      strip.push(groupChip(group));
-      if (!group.collapsed) {
-        for (const member of group.members) {
-          const at = tabs.findIndex((item) => item.id === member);
-          if (at >= 0) {
-            strip.push(nodes[at]);
-            placed.add(member);
-          }
-        }
+    if (placed.has(group.id)) continue;
+    placed.add(group.id);
+    order.push({ kind: "group", id: group.id });
+    if (!group.collapsed) {
+      for (const member of group.members) {
+        if (placed.has(member)) continue;
+        placed.add(member);
+        order.push({ kind: "tab", id: member });
       }
-      if (index >= 0) placed.add(tab.id);
     }
   }
-  tabStrip.replaceChildren(...strip);
+
+  const keep = new Set();
+  for (const item of order) {
+    if (item.kind === "group") {
+      const group = groupById(item.id);
+      if (!group) continue;
+      const key = "group:" + group.id;
+      keep.add(key);
+      let el = tabNodes.get(key);
+      if (!el) {
+        el = groupChip(group);
+        tabNodes.set(key, el);
+      } else {
+        el.className = "tab group-chip" + (group.collapsed ? " closed" : "");
+        el.style.setProperty("--group", group.color || "#4c8dff");
+        const title = el.querySelector(".tab-title");
+        if (title) title.textContent = group.name;
+        let count = el.querySelector(".group-count");
+        if (group.collapsed) {
+          if (!count) {
+            count = document.createElement("span");
+            count.className = "group-count";
+            el.append(count);
+          }
+          count.textContent = String(group.members.length);
+        } else if (count) {
+          count.remove();
+        }
+      }
+      tabStrip.append(el);
+      continue;
+    }
+
+    const tab = tabs.find((entry) => entry.id === item.id);
+    if (!tab) continue;
+    keep.add(tab.id);
+    let el = tabNodes.get(tab.id);
+    if (!el) {
+      el = document.createElement("div");
+      wireTab(el, tab.id);
+      tabNodes.set(tab.id, el);
+    }
+    fillTab(el, tab);
+    tabStrip.append(el);
+  }
+
+  // Anything no longer in the strip: a closed member, or a tab that was closed.
+  for (const [key, el] of tabNodes) {
+    if (keep.has(key)) continue;
+    if (key.startsWith("group:")) {
+      const group = groupById(key.slice(6));
+      if (!group) {
+        el.remove();
+        tabNodes.delete(key);
+      }
+      continue;
+    }
+    if (!tabs.some((tab) => tab.id === key)) {
+      el.remove();
+      tabNodes.delete(key);
+    }
+  }
 }
 
 // Whether the current tab shows translated text; the backend is the source of
