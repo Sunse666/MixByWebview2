@@ -236,7 +236,16 @@ impl WebviewOpts {
         let any_loaded = extensions.iter().any(|ext| ext.status == "loaded");
         Self {
             tab_data_dir: Some(dirs.profile.clone()),
-            ui_data_dir: Some(dirs.profile_ui.clone()),
+            // One environment for the chrome strip, the overlays and the pages.
+            //
+            // They used to live in two user data directories, which means two
+            // WebView2 environments: two browser processes, two gpu processes, two
+            // utility processes, and a second copy of everything they cache. That
+            // measured as a fixed 250-400 MB on top of the pages themselves, which
+            // is the largest single reason this browser looked heavier than the one
+            // it imitates. Extensions are still only enabled on page webviews, so
+            // sharing the profile does not load them into the strip.
+            ui_data_dir: Some(dirs.profile.clone()),
             #[cfg(windows)]
             extensions_dir: if any_loaded {
                 Some(dirs.extensions.clone())

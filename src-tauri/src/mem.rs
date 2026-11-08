@@ -233,8 +233,10 @@ fn breakdown(webview: &tauri::Webview) -> Option<String> {
   }
 
   let mut groups: std::collections::BTreeMap<i32, (u32, u64)> = std::collections::BTreeMap::new();
+  let mut detail = Vec::new();
   for (kind, pid) in processes {
     let bytes = working_set(pid).unwrap_or(0);
+    detail.push(format!("{}:{}/{}MB", pid, kind, bytes / (1024 * 1024)));
     let entry = groups.entry(kind).or_insert((0, 0));
     entry.0 += 1;
     entry.1 += bytes;
@@ -261,6 +263,8 @@ fn breakdown(webview: &tauri::Webview) -> Option<String> {
     ));
   }
   parts.push(format!("total={}MB", total / (1024 * 1024)));
+  // pid:kind/mb, so a line can be matched against Task Manager.
+  parts.push(format!("[{}]", detail.join(" ")));
   Some(parts.join(" "))
 }
 

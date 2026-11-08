@@ -7,7 +7,6 @@ pub struct AppDirs {
     pub root: PathBuf,
     pub user_data: PathBuf,
     pub profile: PathBuf,
-    pub profile_ui: PathBuf,
     pub logs: PathBuf,
     pub downloads: PathBuf,
     pub extensions: PathBuf,
@@ -43,7 +42,6 @@ impl AppDirs {
         Self {
             root: root.to_path_buf(),
             profile: user_data.join("profile"),
-            profile_ui: user_data.join("profile-ui"),
             logs: user_data.join("logs"),
             downloads: user_data.join("downloads"),
             extensions: user_data.join("extensions"),
@@ -69,7 +67,6 @@ impl AppDirs {
         for dir in [
             &self.user_data,
             &self.profile,
-            &self.profile_ui,
             &self.logs,
             &self.downloads,
             &self.extensions,
@@ -84,6 +81,12 @@ impl AppDirs {
         }
         write_readme(&self.crx, CRX_README);
         write_readme(&self.scripts, SCRIPT_README);
+        // The strip and the overlays used to run in their own WebView2 profile.
+        // That profile is a cache, not user data, so reclaim the space once.
+        let old = self.user_data.join("profile-ui");
+        if old.exists() && std::fs::remove_dir_all(&old).is_ok() {
+            eprintln!("[paths] removed the old ui profile");
+        }
         self
     }
 }
