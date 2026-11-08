@@ -326,6 +326,7 @@ const DICT = {
     "Live previews": "实时缩略图",
     "Page": "本页",
     "Total": "总计",
+    "Browser": "浏览器",
     "Average": "平均",
     "nodes": "节点",
     "listeners": "监听",

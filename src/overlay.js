@@ -784,7 +784,9 @@ async function bootThumb() {
   }
 
   const totalParts = [];
-  if (data.memory_total) totalParts.push(t("Total") + " " + megabytes(data.memory_total));
+  // "Browser", not "Total": this is every process the browser owns, and a card about
+  // one tab that says "total" invites the reader to think it means this tab.
+  if (data.memory_total) totalParts.push(t("Browser") + " " + megabytes(data.memory_total));
   // With a single tab the "average" is just the total again, so it is left out.
   if (data.memory_average && data.live_tabs > 1) {
     totalParts.push(
