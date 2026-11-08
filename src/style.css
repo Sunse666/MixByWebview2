@@ -537,3 +537,11 @@ body.incognito #tab-strip::after {
   opacity: 0.75;
   flex: 0 0 auto;
 }
+
+/* Manual tab dragging --------------------------------------------------- */
+.tab.pressing { opacity: 0.75; }
+body.tab-dragging { cursor: grabbing; }
+body.tab-dragging .tab { transition: none; }
+body.tab-dragging .tab.dragging {
+  opacity: 0.35;
+}

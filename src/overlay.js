@@ -709,15 +709,29 @@ async function bootThumb() {
     invoke("overlay_close").catch(() => {});
   });
 
+  // The frame is there either way: when the picture is still being taken for a
+  // background tab, the card opens at once with an empty frame and the photograph
+  // arrives as "thumbs:ready" instead of the hover showing nothing at all.
+  const frame = document.createElement("div");
+  frame.className = "thumb-frame";
+  const image = document.createElement("img");
+  image.className = "thumb-image";
   if (data.image) {
-    const frame = document.createElement("div");
-    frame.className = "thumb-frame";
-    const image = document.createElement("img");
-    image.className = "thumb-image";
     image.src = data.image;
-    frame.append(image);
-    card.append(frame);
+  } else {
+    frame.classList.add("pending");
+    image.alt = "";
   }
+  frame.append(image);
+  card.append(frame);
+
+  listen("thumbs:ready", (event) => {
+    const payload = event.payload || {};
+    if (payload.id !== id || !payload.png) return;
+    image.src = payload.png;
+    frame.classList.remove("pending");
+    card.classList.add("with-image");
+  }).catch(() => {});
 
   const line = document.createElement("div");
   line.className = "thumb-line";

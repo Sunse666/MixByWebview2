@@ -652,3 +652,12 @@ footer { margin-top: auto; display: flex; justify-content: flex-end; gap: 8px; }
   font-variant-numeric: tabular-nums;
   opacity: 0.65;
 }
+
+.thumb-frame.pending {
+  background: repeating-linear-gradient(
+    45deg,
+    color-mix(in srgb, var(--text) 6%, transparent) 0 8px,
+    transparent 8px 16px
+  );
+  min-height: 200px;
+}

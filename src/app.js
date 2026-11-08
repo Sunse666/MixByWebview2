@@ -170,8 +170,74 @@ function groupChip(group) {
   return el;
 }
 
+// Manual drag state: one press at a time, ended by the document.
+let press = null;
+
+function clearDropTargets() {
+  for (const pill of tabStrip.querySelectorAll(".drop-target")) {
+    pill.classList.remove("drop-target");
+  }
+}
+
+function beginTabDrag(id, x, y) {
+  press = { id, x, y, moved: false };
+  const tab = tabNodes.get(id);
+  if (!tab) return;
+  tab.classList.add("pressing");
+}
+
+function onDragMove(event) {
+  if (!press) return;
+  if (!press.moved) {
+    if (Math.abs(event.clientX - press.x) + Math.abs(event.clientY - press.y) < 6) return;
+    press.moved = true;
+    clearTimeout(hoverThumb);
+    const source = tabNodes.get(press.id);
+    if (source) {
+      source.classList.remove("pressing");
+      source.classList.add("dragging");
+    }
+    document.body.classList.add("tab-dragging");
+  }
+  clearDropTargets();
+  const under = document
+    .elementFromPoint(event.clientX, event.clientY)
+    ?.closest(".tab, .group-chip");
+  if (!under || under.dataset.tab === undefined && !under.dataset.group) return;
+  if (under.dataset.tab === press.id) return;
+  under.classList.add("drop-target");
+}
+
+function onDragEnd(event) {
+  const held = press;
+  press = null;
+  document.body.classList.remove("tab-dragging");
+  if (!held) return;
+  const source = tabNodes.get(held.id);
+  if (source) source.classList.remove("dragging", "pressing");
+  clearDropTargets();
+  if (!held.moved) return;
+  const under = document
+    .elementFromPoint(event.clientX, event.clientY)
+    ?.closest(".tab, .group-chip");
+  if (!under) return;
+  // Dropping on a group chip joins that group; dropping on a tab moves the tab there.
+  if (under.dataset.group) {
+    invoke("group_add", { id: held.id, groupId: under.dataset.group }).catch(() => {});
+    return;
+  }
+  const target = under.dataset.tab;
+  if (!target || target === held.id) return;
+  const to = tabs.findIndex((item) => item.id === target);
+  if (to >= 0) invoke("tab_move", { id: held.id, to }).catch(() => {});
+}
+
+document.addEventListener("mousemove", onDragMove);
+document.addEventListener("mouseup", onDragEnd);
+
 /** Redraws the inside of a tab, keeping the element itself so drag and clicks live on. */
 function fillTab(el, tab) {
+  el.dataset.tab = tab.id;
   const classes = ["tab"];
   if (tab.id === selected) classes.push("active");
   if (!tab.alive && settings.mark_suspended !== false) classes.push("suspended");
@@ -256,32 +322,13 @@ function wireTab(el, id) {
     event.preventDefault();
     invoke("tab_pin", { id, pinned: !tabById(id).pinned }).catch(() => {});
   });
-  el.addEventListener("dragstart", (event) => {
-    dragging = id;
-    event.dataTransfer.effectAllowed = "move";
-    event.dataTransfer.setData("text/plain", tabById(id).url || "");
-    el.classList.add("dragging");
-  });
-  el.addEventListener("dragend", () => {
-    dragging = null;
-    el.classList.remove("dragging");
-    for (const pill of tabStrip.querySelectorAll(".drop-target")) {
-      pill.classList.remove("drop-target");
-    }
-  });
-  el.addEventListener("dragover", (event) => {
-    if (!dragging || dragging === id) return;
-    event.preventDefault();
-    el.classList.add("drop-target");
-  });
-  el.addEventListener("dragleave", () => el.classList.remove("drop-target"));
-  el.addEventListener("drop", (event) => {
-    event.preventDefault();
-    el.classList.remove("drop-target");
-    const source = dragging;
-    if (!source || source === id) return;
-    const to = tabs.findIndex((item) => item.id === id);
-    if (to >= 0) invoke("tab_move", { id: source, to }).catch(() => {});
+  // Dragging is done by hand rather than with the html drag and drop api. That api
+  // needs the element that started the gesture to still be the element under the
+  // pointer, which a strip that redraws itself cannot promise, and it gave nothing back
+  // when it silently declined to start. A press, a move and a release are enough.
+  el.addEventListener("mousedown", (event) => {
+    if (event.button !== 0 || event.target.closest("button")) return;
+    beginTabDrag(id, event.clientX, event.clientY);
   });
   if (settings.tab_hover_preview) {
     el.addEventListener("mouseenter", (enter) => {
@@ -685,13 +732,27 @@ function renderBookmarks(list) {
   }
 }
 
+/** True only for an image source that will actually draw something. */
+function realIcon(url) {
+  const value = String(url || "");
+  return (
+    (value.startsWith("data:image/") && value.length > 64) ||
+    value.startsWith("http://") ||
+    value.startsWith("https://")
+  );
+}
+
 function syncAddressIcon(active) {
   const holder = document.getElementById("url-icon");
   if (!holder) return;
-  if (active && active.icon) {
+  // Same rule as the strip: a half-encoded favicon used to leave the browser's
+  // broken-image glyph in the address bar, which looked like a bug rather than a site
+  // without an icon.
+  if (active && realIcon(active.icon)) {
     holder.src = active.icon;
     holder.hidden = false;
   } else {
+    holder.removeAttribute("src");
     holder.hidden = true;
   }
 }

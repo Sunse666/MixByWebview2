@@ -144,7 +144,28 @@ pub fn capture_later(app: tauri::AppHandle, id: String, window_label: String) {
     // A frozen page cannot paint, so wake it for the photograph.
     crate::freeze::thaw(&webview);
     if let Some(png) = capture_live(selected.as_ref(), &webview) {
-      remember(&id, png);
+      remember(&id, png.clone());
+      // The card may already be open with nothing in it; hand it the picture rather
+      // than making the pointer wait for the next hover.
+      if let Some(state) = app.try_state::<crate::ipc::AppState>() {
+        // The card is an overlay webview, one per window, tracked by the state.
+        let overlay = {
+          let guard = state.overlay.read().unwrap_or_else(|e| e.into_inner());
+          guard.get(&window_label).cloned()
+        };
+        if let Some(overlay) = overlay {
+          if state
+            .overlay_thumb
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .contains(&window_label)
+          {
+            use tauri::Emitter;
+            let payload = serde_json::json!({ "id": id, "png": png });
+            let _ = app.emit_to(overlay, "thumbs:ready", payload);
+          }
+        }
+      }
     }
     // Back to sleep: the wake-up was for the picture only.
     if app
