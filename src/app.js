@@ -864,6 +864,9 @@ window.__mixTranslateFailed = (message) => {
   renderToolbar(currentExtensions);
 };
 report("chrome boot v2");
+// A heartbeat, so a freeze can be told apart from a page that stopped reacting: if these
+// lines stop while the log's other lines continue, the page is stuck rather than the app.
+setInterval(() => report("chrome alive"), 15000);
 
 // Chrome draws its own menus; the WebView2 default menu does not belong on our UI.
 // Edits requested by the overlay menu; the field lives in this page.

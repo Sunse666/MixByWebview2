@@ -208,18 +208,14 @@ pub fn open_at(
     // keyboard - WebView2 focuses a new controller - which took focus away from the
     // strip and from the group menu's name field. The strip gets it back, now and once
     // more after the controller has settled.
+    // Only once, and on this thread: set_focus goes through the runtime's main-thread
+    // dispatcher and blocks until it is served, so asking for it again from a worker
+    // thread risks waiting on a main thread that is itself waiting.
     if kind.starts_with("thumb") {
         let chrome_label = format!("{}-chrome", win.label());
         if let Some(chrome) = app.get_webview(&chrome_label) {
             let _ = chrome.set_focus();
         }
-        let app = app.clone();
-        tauri::async_runtime::spawn_blocking(move || {
-            std::thread::sleep(std::time::Duration::from_millis(80));
-            if let Some(chrome) = app.get_webview(&chrome_label) {
-                let _ = chrome.set_focus();
-            }
-        });
     }
     {
         let state = app.state::<crate::ipc::AppState>();
