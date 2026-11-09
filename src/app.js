@@ -670,9 +670,6 @@ const TOOLBAR_ITEMS = {
 let currentExtensions = [];
 
 async function renderToolbar(extensions) {
-  invoke("ui_log", {
-    message: "ui toolbar: " + (settings.toolbar || []).length + " items",
-  }).catch(() => {});
   if (extensions) currentExtensions = extensions;
   const saved = new Set((await invoke("bookmark_list")).map((item) => item.url));
   const active = tabs.find((tab) => tab.id === selected);
@@ -849,17 +846,6 @@ function setTabs(payload) {
   tabs = payload.tabs || [];
   groups = payload.groups || [];
   selected = payload.selected || null;
-  invoke("ui_log", {
-    message:
-      "ui tabs: " +
-      tabs.length +
-      " dpr=" +
-      window.devicePixelRatio +
-      " viewport=" +
-      window.innerWidth +
-      "x" +
-      window.innerHeight,
-  }).catch(() => {});
   try {
     renderTabs();
   } catch (error) {
@@ -898,7 +884,7 @@ window.__mixTranslateFailed = (message) => {
 report("chrome boot v2");
 // A heartbeat, so a freeze can be told apart from a page that stopped reacting: if these
 // lines stop while the log's other lines continue, the page is stuck rather than the app.
-setInterval(() => report("chrome alive"), 15000);
+setInterval(() => report("chrome alive"), 60000);
 
 // Chrome draws its own menus; the WebView2 default menu does not belong on our UI.
 // Edits requested by the overlay menu; the field lives in this page.
@@ -1032,9 +1018,7 @@ window.__mixSettingsChanged = async () => {
 };
 
 async function boot() {
-  report("boot 1");
   applyTheme(await invoke("theme_get"));
-  report("boot 2 theme");
   settings = await invoke("settings_get");
   setLanguage(settings.language || "en");
   renderMenuBar();
