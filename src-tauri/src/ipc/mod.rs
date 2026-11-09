@@ -73,6 +73,10 @@ pub struct AppState {
     /// Windows whose overlay is the tab hover card: closing that one must not
     /// push a settings refresh at the chrome strip.
     pub overlay_thumb: RwLock<std::collections::HashSet<String>>,
+    /// When each tab was last the page on screen, in seconds. A preview only wakes a tab
+    /// that has been out of sight for a while: its stored picture is recent enough, and
+    /// every wake-up is a chance to hide the wrong page.
+    pub shown_at: RwLock<std::collections::HashMap<String, u64>>,
     pub permissions: crate::permissions::PermissionStore,
     pub snap: std::sync::Mutex<crate::snap::SnapState>,
     pub opts: crate::tabs::WebviewOpts,
@@ -161,6 +165,7 @@ impl AppState {
             overlay: RwLock::new(std::collections::HashMap::new()),
             overlay_from_page: RwLock::new(std::collections::HashMap::new()),
             overlay_thumb: RwLock::new(std::collections::HashSet::new()),
+            shown_at: RwLock::new(std::collections::HashMap::new()),
             permissions: crate::permissions::PermissionStore::default(),
             snap: std::sync::Mutex::new(crate::snap::SnapState::default()),
         }

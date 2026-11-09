@@ -137,6 +137,20 @@ pub fn capture_later(app: tauri::AppHandle, id: String, window_label: String) {
     if !state.settings.read().live_thumbs {
       return;
     }
+    // A tab that was on screen moments ago already has a fresh picture, and waking one is
+    // the operation that can hide the page someone is looking at. Only tabs that have been
+    // parked for a while are worth the wake-up.
+    const WAKE_AFTER_SECS: u64 = 30;
+    let shown = state
+      .shown_at
+      .read()
+      .unwrap_or_else(|e| e.into_inner())
+      .get(&id)
+      .copied()
+      .unwrap_or(0);
+    if crate::library::now().saturating_sub(shown) < WAKE_AFTER_SECS {
+      return;
+    }
     let selected = state
       .read_core(&window_label)
       .selected

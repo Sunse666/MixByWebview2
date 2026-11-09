@@ -1024,6 +1024,15 @@ pub(crate) fn sync_visibility(app: &AppHandle, label: &str) {
                 // blank frame until something else touches it.
                 crate::freeze::thaw(&webview);
                 let _ = webview.show();
+                // Remembered so a preview knows not to wake a tab that was just on
+                // screen: waking one is the operation that can hide the wrong page.
+                if let Some(state) = app.try_state::<AppState>() {
+                    state
+                        .shown_at
+                        .write()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .insert(id.clone(), crate::library::now());
+                }
             } else {
                 let _ = webview.hide();
                 if freeze_background {
