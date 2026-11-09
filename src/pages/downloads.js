@@ -97,6 +97,26 @@ async function boot() {
       if (task.state === "started" && task.speed) parts.push(size(task.speed) + "/s");
       state.textContent = parts.join(" · ");
 
+      if (task.state === "started") {
+        const pause = document.createElement("button");
+        pause.className = "button";
+        pause.textContent = t(task.paused ? "Resume" : "Pause");
+        pause.addEventListener("click", async () => {
+          await invoke("download_pause", { path: task.path, paused: !task.paused }).catch(
+            () => {},
+          );
+        });
+        const cancel = document.createElement("button");
+        cancel.className = "button";
+        cancel.textContent = t("Cancel");
+        cancel.addEventListener("click", async () => {
+          await invoke("download_cancel", { path: task.path }).catch(() => {});
+        });
+        row.append(name, state, pause, cancel);
+        list.append(row);
+        return;
+      }
+
       const open = document.createElement("button");
       open.className = "button";
       open.textContent = t("Open");

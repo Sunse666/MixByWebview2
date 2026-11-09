@@ -31,6 +31,7 @@ let hidePill = null;
 let hoverThumb = null;
 let thumbOpen = false;
 const downloadPill = document.getElementById("download");
+let announcedDownload = 0;
 
 function renderDownloads(tasks) {
   const latest = tasks && tasks.length ? tasks[tasks.length - 1] : null;
@@ -40,6 +41,17 @@ function renderDownloads(tasks) {
   }
   downloadPill.hidden = false;
   downloadPill.dataset.id = String(latest.id);
+  // A download that just started opens the panel by itself, the way other browsers announce
+  // one: the pill alone says how big it is but not what it is or what can be done with it.
+  if (latest.state === "started" && latest.id !== announcedDownload) {
+    announcedDownload = latest.id;
+    const box = downloadPill.getBoundingClientRect();
+    invoke("overlay_open_at", {
+      kind: "downloads",
+      x: Math.round(Math.min(box.left, window.innerWidth - 370)),
+      y: Math.round(box.bottom + 4),
+    }).catch(() => {});
+  }
   downloadPill.title = latest.path || latest.url;
   if (latest.state === "started") {
     const mb = (latest.bytes || 0) / (1024 * 1024);

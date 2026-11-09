@@ -529,9 +529,13 @@ pub fn create(
         .map(|size| size.to_logical::<f64>(win.scale_factor().unwrap_or(1.0)).height)
         .map(|full| (full - height).max(0.0))
         .unwrap_or(0.0);
-    win.add_child(
+    let webview = win.add_child(
         builder,
         LogicalPosition::new(0.0, top),
         LogicalSize::new(width.max(1.0), height.max(1.0)),
-    )
+    )?;
+    // The download operations live behind this hook: without it a download can be watched
+    // but not paused, resumed or cancelled.
+    crate::downloads::ops::watch(&webview);
+    Ok(webview)
 }

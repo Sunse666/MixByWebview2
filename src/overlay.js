@@ -753,14 +753,30 @@ async function bootDownloads() {
       text.append(name, meta);
       row.append(text);
 
-      const open = document.createElement("button");
-      open.className = "download-action";
-      open.textContent = t("Open");
-      open.addEventListener("click", () => {
-        invoke("download_open", { path: task.path }).catch(() => {});
-        invoke("overlay_close").catch(() => {});
-      });
-      row.append(open);
+      if (task.state === "started") {
+        const pause = document.createElement("button");
+        pause.className = "download-action";
+        pause.textContent = task.paused ? t("Resume") : t("Pause");
+        pause.addEventListener("click", () => {
+          invoke("download_pause", { path: task.path, paused: !task.paused }).catch(() => {});
+        });
+        const cancel = document.createElement("button");
+        cancel.className = "download-action";
+        cancel.textContent = t("Cancel");
+        cancel.addEventListener("click", () => {
+          invoke("download_cancel", { path: task.path }).catch(() => {});
+        });
+        row.append(pause, cancel);
+      } else {
+        const open = document.createElement("button");
+        open.className = "download-action";
+        open.textContent = t("Open");
+        open.addEventListener("click", () => {
+          invoke("download_open", { path: task.path }).catch(() => {});
+          invoke("overlay_close").catch(() => {});
+        });
+        row.append(open);
+      }
       list.append(row);
     }
   };

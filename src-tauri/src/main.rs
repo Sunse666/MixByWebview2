@@ -156,6 +156,8 @@ fn main() {
             ipc::tab_menu,
             ipc::tab_search_all,
             ipc::tab_focus_any,
+            ipc::download_pause,
+            ipc::download_cancel,
             ipc::script_set_enabled,
             ipc::script_remove,
             ipc::script_list,

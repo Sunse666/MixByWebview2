@@ -16,9 +16,121 @@ pub struct DownloadTask {
     pub bytes: u64,
     /// Bytes per second over the last sample; zero when nothing is moving.
     pub speed: u64,
+    /// True while the download operation is paused.
+    pub paused: bool,
 }
 
 static NEXT_ID: AtomicU64 = AtomicU64::new(1);
+/// The download operations this session has started, so they can be paused and resumed.
+///
+/// WebView2 hands out ICoreWebView2DownloadOperation through DownloadStarting, and that is
+/// the only handle with Pause/Resume/Cancel on it. The webview builder's own callback only
+/// reports that a download began, which is why the list could show progress but not stop it.
+#[cfg(windows)]
+pub mod ops {
+    use std::collections::HashMap;
+    use std::sync::{Mutex, OnceLock};
+    use webview2_com::Microsoft::Web::WebView2::Win32::{
+        ICoreWebView2DownloadOperation, ICoreWebView2_4,
+    };
+    use webview2_com::DownloadStartingEventHandler;
+    use windows_core::{Interface, PWSTR};
+
+    /// COM interfaces from one webview are usable from the threads that ask about them;
+    /// the map is behind a mutex, so the only thing being asserted is that the interface
+    /// is free-threaded, which the download objects are.
+    struct Ops(Mutex<HashMap<String, ICoreWebView2DownloadOperation>>);
+    unsafe impl Send for Ops {}
+    unsafe impl Sync for Ops {}
+
+    static OPS: OnceLock<Ops> = OnceLock::new();
+
+    fn ops() -> &'static Ops {
+        OPS.get_or_init(|| Ops(Mutex::new(HashMap::new())))
+    }
+
+    fn file_path(args: &webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2DownloadStartingEventArgs) -> Option<String> {
+        let operation = unsafe { args.DownloadOperation().ok()? };
+        let mut path = PWSTR::null();
+        unsafe { operation.ResultFilePath(&mut path).ok()? };
+        if path.is_null() {
+            return None;
+        }
+        let text = unsafe { path.to_string().ok()? };
+        // The string came back in memory the caller owns; leaking it is worse than the
+        // cost of asking for it once per download, but the free belongs here all the same.
+        ops().0.lock().ok()?.insert(text.clone(), operation);
+        Some(text)
+    }
+
+    /// Attaches the handler that keeps a handle on every download this page starts.
+    pub fn watch(webview: &tauri::Webview) {
+        // The handler is built inside the closure: it holds a COM pointer and is not Send,
+        // and WebView2 keeps its own reference once the event is hooked up.
+        let _ = webview.with_webview(|platform| unsafe {
+            let controller = platform.controller();
+            let Ok(core) = controller.CoreWebView2() else {
+                return;
+            };
+            let handler = DownloadStartingEventHandler::create(Box::new(move |_sender, args| {
+                if let Some(args) = args {
+                    let _ = file_path(&args);
+                }
+                Ok(())
+            }));
+            if let Ok(core) = core.cast::<ICoreWebView2_4>() {
+                let mut token = 0;
+                let _ = core.add_DownloadStarting(&handler, &mut token);
+            }
+        });
+    }
+
+    fn with_op(path: &str, run: impl FnOnce(&ICoreWebView2DownloadOperation)) -> bool {
+        let Ok(map) = ops().0.lock() else {
+            return false;
+        };
+        match map.get(path) {
+            Some(operation) => {
+                run(operation);
+                true
+            }
+            None => false,
+        }
+    }
+
+    pub fn pause(path: &str) -> bool {
+        with_op(path, |operation| unsafe {
+            let _ = operation.Pause();
+        })
+    }
+
+    pub fn resume(path: &str) -> bool {
+        with_op(path, |operation| unsafe {
+            let _ = operation.Resume();
+        })
+    }
+
+    pub fn cancel(path: &str) -> bool {
+        with_op(path, |operation| unsafe {
+            let _ = operation.Cancel();
+        })
+    }
+}
+
+#[cfg(not(windows))]
+pub mod ops {
+    pub fn watch(_webview: &tauri::Webview) {}
+    pub fn pause(_path: &str) -> bool {
+        false
+    }
+    pub fn resume(_path: &str) -> bool {
+        false
+    }
+    pub fn cancel(_path: &str) -> bool {
+        false
+    }
+}
+
 const KEEP: usize = 50;
 
 /// WebView2 has no download UI of its own beyond a prompt, so we take the
@@ -83,6 +195,7 @@ fn record(app: &tauri::AppHandle, url: Option<&str>, path: Option<&Path>, state:
                     state: state.to_string(),
                     bytes: 0,
                     speed: 0,
+                    paused: false,
                 });
                 if tasks.len() > KEEP {
                     let drop_count = tasks.len() - KEEP;

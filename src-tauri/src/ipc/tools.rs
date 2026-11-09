@@ -467,6 +467,45 @@ pub async fn ui_log(message: String) -> Result<(), AppError> {
     Ok(())
 }
 
+/// Pauses or resumes the download writing to this path.
+#[tauri::command]
+pub async fn download_pause(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    path: String,
+    paused: bool,
+) -> Result<bool, AppError> {
+    let ok = if paused {
+        crate::downloads::ops::pause(&path)
+    } else {
+        crate::downloads::ops::resume(&path)
+    };
+    if ok {
+        let tasks = {
+            let mut tasks = state.downloads.write().unwrap_or_else(|e| e.into_inner());
+            if let Some(task) = tasks.iter_mut().find(|task| task.path == path) {
+                task.paused = paused;
+                if paused {
+                    task.speed = 0;
+                }
+            }
+            tasks.clone()
+        };
+        let _ = app.emit("download:changed", tasks);
+    }
+    crate::logging::info(&format!(
+        "download {path} {}: {ok}",
+        if paused { "pause" } else { "resume" }
+    ));
+    Ok(ok)
+}
+
+/// Cancels the download writing to this path.
+#[tauri::command]
+pub async fn download_cancel(path: String) -> Result<bool, AppError> {
+    Ok(crate::downloads::ops::cancel(&path))
+}
+
 /// A userscript path arrives from the page, so it is resolved and checked
 /// against the scripts folder before anything is renamed or deleted.
 fn script_path_inside(state: &AppState, path: &str) -> Result<std::path::PathBuf, AppError> {

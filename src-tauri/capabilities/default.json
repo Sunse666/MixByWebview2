@@ -22,6 +22,8 @@
     "allow-tab-menu",
     "allow-tab-search-all",
     "allow-tab-focus-any",
+    "allow-download-pause",
+    "allow-download-cancel",
     "allow-window-control",
     "allow-window-drag",
     "allow-window-resize",
