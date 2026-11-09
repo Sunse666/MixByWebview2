@@ -4,7 +4,12 @@ fn main() {
     // old javascript inside the binary - and every rebuild looked like it had done
     // nothing at all.
     println!("cargo:rerun-if-changed=../src");
+    println!("cargo:rerun-if-changed=src");
     println!("cargo:rerun-if-changed=build.rs");
+    // The commit is baked into the binary and printed in the log on startup; without
+    // this the reported hash is whatever it was when the script last ran, which makes the
+    // one line that says "this is the build you are running" untrustworthy.
+    println!("cargo:rerun-if-changed=../.git/HEAD");
 
     let git = std::process::Command::new("git")
         .args(["rev-parse", "--short", "HEAD"])
