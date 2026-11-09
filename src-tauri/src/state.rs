@@ -4,6 +4,10 @@ use std::path::Path;
 /// Bumped when the on-disk shape changes. Old files are migrated, not ignored.
 pub const SCHEMA: u32 = 1;
 
+fn default_proxy_mode() -> String {
+    "system".to_string()
+}
+
 fn default_sidebar() -> String {
     "off".to_string()
 }
@@ -24,6 +28,12 @@ pub struct Settings {
     pub chrome_height: f64,
     /// Adds a bookmarks row under the address bar, which also grows the chrome.
     pub show_bookmarks: bool,
+    /// Proxy: "system" follows Windows, "off" connects directly, "manual" uses
+    /// proxy_server. Takes effect on the next start.
+    #[serde(default = "default_proxy_mode")]
+    pub proxy_mode: String,
+    #[serde(default)]
+    pub proxy_server: String,
     /// Where the sidebar sits: "off", "left" or "right".
     #[serde(default = "default_sidebar")]
     pub sidebar: String,
@@ -142,6 +152,8 @@ impl Default for Settings {
             restore_session: true,
             chrome_height: 86.0,
         show_bookmarks: false,
+        proxy_mode: default_proxy_mode(),
+        proxy_server: String::new(),
         sidebar: default_sidebar(),
         sidebar_width: default_sidebar_width(),
         toolbar: vec![

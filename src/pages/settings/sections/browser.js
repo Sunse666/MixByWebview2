@@ -28,5 +28,56 @@ export function buildBrowser({ settings, invoke }) {
     row2,
   );
 
-  return [browserHead, browserCard];
+  // Proxy. It sits with the browser settings because that is what it changes - how this
+  // one app reaches the network - and it says plainly that a restart is needed.
+  const proxyHead = document.createElement("h2");
+  proxyHead.textContent = t("Network");
+  proxyHead.style.margin = "18px 0 10px";
+
+  const proxyCard = document.createElement("div");
+  proxyCard.className = "card";
+  proxyCard.style.maxWidth = "720px";
+
+  const mode = document.createElement("select");
+  mode.className = "button";
+  for (const [value, label] of [
+    ["system", "Follow the system proxy"],
+    ["off", "Connect directly"],
+    ["manual", "Manual"],
+  ]) {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = t(label);
+    if ((settings.proxy_mode || "system") === value) option.selected = true;
+    mode.append(option);
+  }
+
+  const server = document.createElement("input");
+  server.className = "button";
+  server.type = "text";
+  server.placeholder = "http://127.0.0.1:7890";
+  server.value = settings.proxy_server || "";
+  server.style.minWidth = "220px";
+  const syncServer = () => {
+    server.disabled = mode.value !== "manual";
+  };
+  syncServer();
+
+  mode.addEventListener("change", async () => {
+    syncServer();
+    await invoke("settings_set", { patch: { proxy_mode: mode.value } }).catch(() => {});
+  });
+  server.addEventListener("change", async () => {
+    await invoke("settings_set", { patch: { proxy_server: server.value.trim() } }).catch(
+      () => {},
+    );
+  });
+
+  proxyCard.append(
+    row(t("Proxy"), t("How Mix reaches the network"), mode),
+    row(t("Proxy server"), t("Host and port, optionally with a scheme"), server),
+    row(t("Restart to apply"), t("The proxy is set when the browser starts")),
+  );
+
+  return [browserHead, browserCard, proxyHead, proxyCard];
 }

@@ -114,6 +114,15 @@ pub(crate) fn apply_settings_patch(
         if let Some(value) = patch.show_bookmarks {
             guard.show_bookmarks = value;
         }
+        if let Some(value) = patch.proxy_mode {
+            guard.proxy_mode = match value.as_str() {
+                "off" | "manual" => value,
+                _ => "system".to_string(),
+            };
+        }
+        if let Some(value) = patch.proxy_server {
+            guard.proxy_server = value.trim().to_string();
+        }
         if let Some(value) = patch.sidebar {
             guard.sidebar = match value.as_str() {
                 "left" | "right" => value,

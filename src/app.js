@@ -522,6 +522,23 @@ function leaveStrip(el) {
   done.finished.then(() => el.remove()).catch(() => el.remove());
 }
 
+let progressWasOn = false;
+
+/** The bar under the address row, and the reload button that becomes a stop. */
+function syncLoading() {
+  const active = tabs.find((tab) => tab.id === selected);
+  const loading = Boolean(active && active.loading);
+  const bar = document.getElementById("progress");
+  if (bar) bar.classList.toggle("on", loading);
+  if (loading) progressWasOn = true;
+  const reload = document.querySelector('[data-nav="reload"], [data-nav="stop"]');
+  if (reload) {
+    reload.dataset.nav = loading ? "stop" : "reload";
+    reload.textContent = loading ? "\u00d7" : "R";
+    reload.title = loading ? t("Stop loading") : t("Reload");
+  }
+}
+
 function renderTabs() {
   // Strip order: a closed group is one chip and its members are left out; an open group
   // keeps its tabs together; everything else stays in tab order.
@@ -594,6 +611,7 @@ function renderTabs() {
   }
 
   syncStripScroll();
+  syncLoading();
 
   // Anything no longer in the strip: a closed member, or a tab that was closed.
   for (const [key, el] of tabNodes) {
@@ -1154,6 +1172,8 @@ async function boot() {
     if (!tab) return;
     tab.loading = event.payload.loading;
     renderTabs();
+    // A spinner in a 14px icon is easy to miss; the bar and the stop button are not.
+    if (tab.id === selected) syncLoading();
   });
   await listen("tab:icon", (event) => {
     const tab = tabs.find((item) => item.id === event.payload.id);

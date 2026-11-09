@@ -92,6 +92,20 @@ fn main() {
                     logging::warn(&format!("cannot save settings after extension reset: {err}"));
                 }
             }
+            // The proxy is decided once: WebView2 compares environment options between
+            // controllers, so a value that could change mid-run would make the next
+            // webview refuse to attach rather than change the route.
+            let proxy_args = match settings.proxy_mode.as_str() {
+                "off" => Some("--no-proxy-server".to_string()),
+                "manual" if !settings.proxy_server.is_empty() => {
+                    Some(format!("--proxy-server={}", settings.proxy_server))
+                }
+                _ => None,
+            };
+            if let Some(args) = &proxy_args {
+                logging::info(&format!("proxy: {args}"));
+            }
+            crate::tabs::set_proxy_args(proxy_args);
             let ext_infos = extensions::scan(&dirs, &settings.disabled_extensions);
             let scripts = userscripts::scan(&dirs.scripts);
             // One call fills every init script and the stylesheet; settings_set

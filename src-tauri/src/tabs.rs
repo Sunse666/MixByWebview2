@@ -5,6 +5,7 @@ use tauri::{
 };
 
 use crate::paths::AppDirs;
+use std::sync::OnceLock;
 
 /// Action -> combo overrides for the forwarder that runs in every page (frames
 /// cannot see chrome keydown, so shortcuts are forwarded to Rust instead).
@@ -267,12 +268,32 @@ pub(crate) fn apply_profile(
     builder: WebviewBuilder<tauri::Wry>,
     dir: &Option<std::path::PathBuf>,
 ) -> WebviewBuilder<tauri::Wry> {
+    let builder = proxy_args(builder);
     #[cfg(any(windows, target_os = "linux"))]
     if let Some(dir) = dir {
         return builder.data_directory(dir.clone());
     }
     let _ = dir;
     builder
+}
+
+/// The browser arguments for this session's proxy choice.
+///
+/// Decided once, at startup, and kept in a static: WebView2 refuses a controller whose
+/// environment options differ from the ones the environment was built with, so a proxy
+/// that changed mid-session would break the next webview rather than take effect.
+static PROXY_ARGS: OnceLock<Option<String>> = OnceLock::new();
+
+/// Sets the arguments for the rest of the run; the first call wins.
+pub fn set_proxy_args(args: Option<String>) {
+    let _ = PROXY_ARGS.set(args);
+}
+
+fn proxy_args(builder: WebviewBuilder<tauri::Wry>) -> WebviewBuilder<tauri::Wry> {
+    match PROXY_ARGS.get().and_then(|args| args.clone()) {
+        Some(args) => builder.additional_browser_args(&args),
+        None => builder,
+    }
 }
 
 pub(crate) fn apply_extensions(

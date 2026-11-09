@@ -619,3 +619,24 @@ body.tab-dragging, body.tab-dragging * {
   opacity: 1;
   background: color-mix(in srgb, var(--text) 10%, transparent);
 }
+
+/* Loading bar ------------------------------------------------------------ */
+#progress {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 2px;
+  width: 0;
+  opacity: 0;
+  background: var(--accent);
+  border-radius: 0 2px 2px 0;
+  transition: opacity 150ms ease, width 200ms ease;
+  pointer-events: none;
+}
+#progress.on {
+  opacity: 1;
+  width: 80%;
+  /* Runs to 80% and stays: the page gives no progress, and a bar that fills and stalls
+     says "still working" better than a fixed line. */
+  transition: opacity 120ms ease, width 6s cubic-bezier(0.1, 0.8, 0.2, 1);
+}
