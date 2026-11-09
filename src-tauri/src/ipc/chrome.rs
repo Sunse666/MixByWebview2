@@ -60,12 +60,14 @@ pub async fn chrome_menu(
 ) -> Result<(), AppError> {
     let label = match kind.as_str() {
         "url" => "url_menu",
+        "tab" => "tab_menu",
         _ => "chrome_menu",
     };
-    let (menu_w, menu_h) = if label == "url_menu" {
-        (190.0, 150.0)
-    } else {
-        (190.0, 110.0)
+    let (menu_w, menu_h) = match label {
+        "url_menu" => (190.0, 150.0),
+        // Six entries and a divider.
+        "tab_menu" => (200.0, 224.0),
+        _ => (190.0, 110.0),
     };
     let _ = app.emit_to(window.label(), "chrome-menu", ());
     let _ = crate::overlay::open_at(&app, &window, label, x, y, menu_w, menu_h);
@@ -91,6 +93,7 @@ pub async fn context_menu(
             .filter(|value| !value.trim().is_empty())
             .map(|value| value.chars().take(200).collect()),
         editable: request.editable.unwrap_or(false),
+        tab: None,
     };
     {
         let mut slot = state.menu_context.write().unwrap_or_else(|e| e.into_inner());
@@ -124,6 +127,25 @@ pub async fn context_menu(
         crate::logging::warn(&format!("context menu overlay failed: {err}"));
         return Err(AppError::new("overlay", err));
     }
+    Ok(())
+}
+
+/// Opens the menu for one tab, remembering which tab it was opened for.
+#[tauri::command]
+pub async fn tab_menu(
+    app: AppHandle,
+    window: tauri::Window,
+    state: State<'_, AppState>,
+    id: String,
+    x: f64,
+    y: f64,
+) -> Result<(), AppError> {
+    {
+        let mut context = state.menu_context.write().unwrap_or_else(|e| e.into_inner());
+        context.tab = Some(id);
+    }
+    let _ = app.emit_to(window.label(), "chrome-menu", ());
+    let _ = crate::overlay::open_at(&app, &window, "tab_menu", x, y, 200.0, 224.0);
     Ok(())
 }
 

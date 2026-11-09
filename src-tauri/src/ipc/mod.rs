@@ -261,6 +261,8 @@ pub struct MenuContext {
     pub image: Option<String>,
     pub selection: Option<String>,
     pub editable: bool,
+    /// The tab a menu was opened for, when it is the tab's own menu.
+    pub tab: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]

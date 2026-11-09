@@ -19,6 +19,7 @@
     "allow-group-dissolve",
     "allow-group-remove",
     "allow-thumb-stats",
+    "allow-tab-menu",
     "allow-window-control",
     "allow-window-drag",
     "allow-window-resize",

@@ -5,6 +5,8 @@
 import { setLanguage, t } from "../i18n.js";
 import { withFeedback, setFeedbackText } from "./feedback.js";
 
+const { listen } = window.__TAURI__.event;
+
 const invoke = withFeedback(window.__TAURI__.core.invoke);
 
 const tabs = document.getElementById("tabs");
@@ -114,6 +116,10 @@ async function boot() {
     });
     tabs.append(button);
   }
+  // Keep the lists current: a bookmark saved in a tab, a finished download or a new
+  // visit should appear here without reopening the sidebar.
+  await listen("bookmarks:changed", () => paint()).catch(() => {});
+  await listen("download:changed", () => paint()).catch(() => {});
   await paint();
 }
 

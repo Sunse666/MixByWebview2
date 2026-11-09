@@ -403,7 +403,10 @@ function wireTab(el, id) {
   });
   el.addEventListener("contextmenu", (event) => {
     event.preventDefault();
-    invoke("tab_pin", { id, pinned: !tabById(id).pinned }).catch(() => {});
+    event.stopPropagation();
+    // The tab's own menu: pin, reload, group, copy, close. Right click used to toggle
+    // the pin, which hid every other thing you might want from a tab.
+    invoke("tab_menu", { id, x: event.clientX, y: event.clientY }).catch(() => {});
   });
   // Dragging is done by hand rather than with the html drag and drop api. That api
   // needs the element that started the gesture to still be the element under the

@@ -1179,6 +1179,29 @@ async function bootChromeMenu(kind) {
     return;
   }
 
+  if (kind === "tab") {
+    const context = await invoke("menu_context_get").catch(() => null);
+    const id = context && context.tab;
+    const list = (await invoke("tab_list").catch(() => null)) || { tabs: [] };
+    const tab = (list.tabs || []).find((entry) => entry.id === id);
+    if (!id || !tab) return;
+    item(tab.pinned ? "Unpin tab" : "Pin tab", () =>
+      invoke("tab_pin", { id, pinned: !tab.pinned }),
+    );
+    item("Reload", () => invoke("tab_reload"));
+    item("Group or ungroup", async () => {
+      const group = (list.groups || []).find((entry) => entry.members.includes(id));
+      if (group) await invoke("group_remove", { id }).catch(() => {});
+      else await invoke("group_add", { id, groupId: null }).catch(() => {});
+    });
+    item("Copy address", () => invoke("clipboard_write", { text: tab.url }).catch(() => {}));
+    const divider = document.createElement("div");
+    divider.className = "divider";
+    menu.append(divider);
+    item("Close tab", () => invoke("tab_close", { id }).catch(() => {}));
+    return;
+  }
+
   item("New tab", () => invoke("tab_new", { url: null }));
   item("Reload", () => invoke("tab_reload"));
   const divider = document.createElement("div");
@@ -1362,6 +1385,10 @@ async function boot() {
   }
   if (kind === "chrome_menu") {
     await bootChromeMenu("chrome");
+    return;
+  }
+  if (kind === "tab_menu") {
+    await bootChromeMenu("tab");
     return;
   }
   if (kind === "ext_info") {

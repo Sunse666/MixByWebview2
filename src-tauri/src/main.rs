@@ -138,6 +138,7 @@ fn main() {
             ipc::group_dissolve,
             ipc::group_remove,
             ipc::thumb_stats,
+            ipc::tab_menu,
             ipc::script_set_enabled,
             ipc::script_remove,
             ipc::script_list,
