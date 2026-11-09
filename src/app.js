@@ -455,6 +455,28 @@ function wireTab(el, id) {
   }
 }
 
+/** 110ms of fade for a tab that has just appeared. */
+function enterStrip(el) {
+  if (!el.animate) return;
+  el.animate([{ opacity: 0, transform: "translateY(-3px)" }, { opacity: 1, transform: "none" }], {
+    duration: 110,
+    easing: "ease-out",
+  });
+}
+
+/** The same in reverse, then the element leaves the document. */
+function leaveStrip(el) {
+  if (!el.animate) {
+    el.remove();
+    return;
+  }
+  const done = el.animate([{ opacity: 1 }, { opacity: 0 }], {
+    duration: 100,
+    easing: "ease-in",
+  });
+  done.finished.then(() => el.remove()).catch(() => el.remove());
+}
+
 function renderTabs() {
   // Strip order: a closed group is one chip and its members are left out; an open group
   // keeps its tabs together; everything else stays in tab order.
@@ -520,6 +542,7 @@ function renderTabs() {
       el = document.createElement("div");
       wireTab(el, tab.id);
       tabNodes.set(tab.id, el);
+      enterStrip(el);
     }
     fillTab(el, tab);
     tabStrip.append(el);
@@ -537,7 +560,9 @@ function renderTabs() {
       continue;
     }
     if (!tabs.some((tab) => tab.id === key)) {
-      el.remove();
+      // Fades out rather than vanishing: a closed tab, or the members of a group that
+      // was just collapsed, should read as going away.
+      leaveStrip(el);
       tabNodes.delete(key);
     }
   }

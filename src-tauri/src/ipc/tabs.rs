@@ -944,6 +944,58 @@ pub(crate) fn is_grouped(core: &Core, id: &str) -> bool {
         .any(|group| group.members.iter().any(|member| member == id))
 }
 
+/// Every tab in every window, for the tab search.
+///
+/// The search answered from the calling window alone, so a tab that was clearly open
+/// could not be found because it lived one window over.
+#[tauri::command]
+pub async fn tab_search_all(
+    state: State<'_, AppState>,
+) -> Result<Vec<serde_json::Value>, AppError> {
+    let mut out = Vec::new();
+    let cores = state.cores.read();
+    for (label, core) in cores.iter() {
+        for tab in core.tabs.iter() {
+            out.push(serde_json::json!({
+                "window": label,
+                "id": tab.id,
+                "title": tab.title,
+                "url": tab.url,
+                "pinned": tab.pinned,
+                "selected": core.selected.as_deref() == Some(tab.id.as_str()),
+            }));
+        }
+    }
+    Ok(out)
+}
+
+/// Selects a tab that may belong to another window, and brings that window forward.
+#[tauri::command]
+pub async fn tab_focus_any(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    window: String,
+    id: String,
+) -> Result<(), AppError> {
+    {
+        let mut core = state.write_core(&window);
+        if !core.tabs.iter().any(|tab| tab.id == id) {
+            return Err(AppError::new("no_tab", id));
+        }
+        core.selected = Some(id.clone());
+        core.mru.retain(|entry| entry != &id);
+        core.mru.insert(0, id.clone());
+    }
+    sync_visibility(&app, &window);
+    if let Some(win) = app.get_window(&window) {
+        let _ = win.unminimize();
+        let _ = win.set_focus();
+    }
+    emit_tabs(&app, &window);
+    save_sessions(&app);
+    Ok(())
+}
+
 /// Only the selected tab is visible; the rest keep running underneath.
 pub(crate) fn sync_visibility(app: &AppHandle, label: &str) {
     let pairs: Vec<(String, Option<String>)> = {

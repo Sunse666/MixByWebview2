@@ -580,9 +580,9 @@ async function bootSearch(mode) {
   const search = async (query) => {
     const text = (query || "").trim().toLowerCase();
     if (mode === "tabs") {
-      // tab_list answers with { tabs, selected }, not a bare array.
-      const listing = (await invoke("tab_list").catch(() => null)) || {};
-      const tabs = Array.isArray(listing) ? listing : listing.tabs || [];
+      // Every window, not just this one: a tab being open somewhere else is still open.
+      const tabs = (await invoke("tab_search_all").catch(() => [])) || [];
+      const windows = new Set(tabs.map((tab) => tab.window));
       paint(
         tabs
           .map((tab) => ({
@@ -594,8 +594,10 @@ async function bootSearch(mode) {
           .slice(0, 40)
           .map(({ tab }) => ({
             label: (tab.pinned ? "\ud83d\udccc " : "") + (tab.title || t("New tab")),
-            hint: tab.url,
-            run: () => invoke("tab_select", { id: tab.id }).catch(() => {}),
+            // Only name the window when there is more than one, so a single window looks
+            // exactly as it did before.
+            hint: windows.size > 1 ? tab.url + "  ·  " + tab.window : tab.url,
+            run: () => invoke("tab_focus_any", { window: tab.window, id: tab.id }).catch(() => {}),
           })),
       );
       return;

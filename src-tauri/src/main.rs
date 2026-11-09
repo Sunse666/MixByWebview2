@@ -139,6 +139,8 @@ fn main() {
             ipc::group_remove,
             ipc::thumb_stats,
             ipc::tab_menu,
+            ipc::tab_search_all,
+            ipc::tab_focus_any,
             ipc::script_set_enabled,
             ipc::script_remove,
             ipc::script_list,
