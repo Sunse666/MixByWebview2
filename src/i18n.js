@@ -332,6 +332,7 @@ const DICT = {
     "Saved": "已保存",
     "Ungroup": "解散分组",
     "Capture full page": "截取整页",
+    "Show all downloads": "查看全部下载",
     "Network": "网络",
     "Proxy": "代理",
     "How Mix reaches the network": "Mix 通过什么方式访问网络",

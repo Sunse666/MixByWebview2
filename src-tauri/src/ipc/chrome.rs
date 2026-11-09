@@ -67,6 +67,8 @@ pub async fn chrome_menu(
         "url_menu" => (190.0, 150.0),
         // Six entries and a divider.
         "tab_menu" => (200.0, 224.0),
+        // A short list of downloads, the way a browser shows them from its toolbar.
+        "downloads" => (360.0, 320.0),
         _ => (190.0, 110.0),
     };
     let _ = app.emit_to(window.label(), "chrome-menu", ());
@@ -278,6 +280,7 @@ pub async fn overlay_open_at(
     // The palettes are wide search panels, not menus: the chrome strip is only
     // as tall as the tabs and address row, so they cannot live in it.
     let palette = kind == "palette" || kind == "tab_search";
+    let downloads = kind.starts_with("downloads");
     // The group menu has a text field and a row of colours, and it has to be able to
     // hang below the strip - which a panel drawn inside the chrome webview cannot do,
     // because that webview is only as tall as the strip.
@@ -286,6 +289,8 @@ pub async fn overlay_open_at(
         (560.0, 420.0)
     } else if group_menu {
         (214.0, 138.0)
+    } else if downloads {
+        (360.0, 320.0)
     } else {
         (232.0, menu_h)
     };

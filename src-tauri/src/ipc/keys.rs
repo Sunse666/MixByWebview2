@@ -50,18 +50,6 @@ pub async fn shortcut(app: AppHandle, window: tauri::Window, state: State<'_, Ap
                 let _ = webview.reload();
             }
         }
-        "stop" => {
-            // Wry exposes no stop; the protocol does, and it is the same call the webview
-            // makes when the user hits escape on a loading page.
-            if let Some(webview) = app.get_webview(&selected_label(&state, &window)) {
-                let _ = crate::screenshot::call_timeout(
-                    &webview,
-                    "Page.stopLoading",
-                    "{}",
-                    std::time::Duration::from_secs(2),
-                );
-            }
-        }
         "zoom_in" => zoom_by(&app, window.label(), 0.1)?,
         "zoom_out" => zoom_by(&app, window.label(), -0.1)?,
         "zoom_reset" => set_zoom(&app, window.label(), 1.0)?,

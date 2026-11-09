@@ -697,6 +697,78 @@ function megabytes(bytes) {
 }
 
 
+
+/** The download list, the way a browser shows it from its toolbar. */
+async function bootDownloads() {
+  const menu = document.getElementById("menu");
+  menu.hidden = false;
+  const card = document.createElement("div");
+  card.className = "download-panel";
+  const list = document.createElement("div");
+  list.className = "download-list";
+  card.append(list);
+
+  const foot = document.createElement("button");
+  foot.className = "download-all";
+  foot.textContent = t("Show all downloads");
+  foot.addEventListener("click", () => {
+    invoke("tab_new", { url: "http://tauri.localhost/pages/downloads.html" }).catch(() => {});
+    invoke("overlay_close").catch(() => {});
+  });
+  card.append(foot);
+  menu.append(card);
+
+  const size = (bytes) => {
+    if (bytes > 1024 * 1024) return (bytes / 1024 / 1024).toFixed(1) + " MB";
+    if (bytes > 1024) return Math.round(bytes / 1024) + " KB";
+    return (bytes || 0) + " B";
+  };
+
+  const paint = (tasks) => {
+    list.replaceChildren();
+    const recent = (tasks || []).slice(-8).reverse();
+    if (!recent.length) {
+      const empty = document.createElement("div");
+      empty.className = "download-empty";
+      empty.textContent = t("No downloads");
+      list.append(empty);
+      return;
+    }
+    for (const task of recent) {
+      const row = document.createElement("div");
+      row.className = "download-row";
+      const text = document.createElement("div");
+      text.className = "download-text";
+      const name = document.createElement("div");
+      name.className = "download-name";
+      name.textContent = task.file_name || task.url;
+      name.title = task.path || task.url;
+      const meta = document.createElement("div");
+      meta.className = "download-meta";
+      const parts = [t(task.state) || task.state];
+      if (task.bytes) parts.push(size(task.bytes));
+      // Only a running download has a rate worth showing.
+      if (task.state === "started" && task.speed) parts.push(size(task.speed) + "/s");
+      meta.textContent = parts.join(" \u00b7 ");
+      text.append(name, meta);
+      row.append(text);
+
+      const open = document.createElement("button");
+      open.className = "download-action";
+      open.textContent = t("Open");
+      open.addEventListener("click", () => {
+        invoke("download_open", { path: task.path }).catch(() => {});
+        invoke("overlay_close").catch(() => {});
+      });
+      row.append(open);
+      list.append(row);
+    }
+  };
+
+  paint(await invoke("download_list").catch(() => []));
+  listen("download:changed", (event) => paint(event.payload)).catch(() => {});
+}
+
 /** The menu a group chip opens: name, colour, dissolve - as its own overlay. */
 async function bootGroupMenu() {
   const id = params.get("id") || "";
@@ -1360,6 +1432,10 @@ async function boot() {
   }
   if (kind === "group_menu") {
     await bootGroupMenu();
+    return;
+  }
+  if (kind === "downloads") {
+    await bootDownloads();
     return;
   }
   if (kind === "palette") {

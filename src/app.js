@@ -1489,9 +1489,15 @@ async function boot() {
   });
 
 
+  // The pill is where a download is announced, so clicking it shows what is downloading
+  // rather than jumping straight to the folder.
   downloadPill.addEventListener("click", () => {
-    const id = Number(downloadPill.dataset.id);
-    if (!Number.isNaN(id)) invoke("download_open_dir", { id });
+    const box = downloadPill.getBoundingClientRect();
+    invoke("overlay_open_at", {
+      kind: "downloads",
+      x: Math.round(Math.min(box.left, window.innerWidth - 370)),
+      y: Math.round(box.bottom + 4),
+    }).catch(() => {});
   });
 
   document.getElementById("theme-btn").addEventListener("click", () => invoke("overlay_toggle", { kind: "app_menu" }));

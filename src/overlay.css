@@ -700,3 +700,63 @@ footer { margin-top: auto; display: flex; justify-content: flex-end; gap: 8px; }
 .group-menu-item:hover {
   background: rgb(255 255 255 / 8%);
 }
+
+/* Download bubble -------------------------------------------------------- */
+.download-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 8px;
+  gap: 6px;
+}
+.download-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+.download-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px;
+  border-radius: 6px;
+}
+.download-row:hover {
+  background: rgb(255 255 255 / 6%);
+}
+.download-text {
+  flex: 1;
+  min-width: 0;
+}
+.download-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 12px;
+}
+.download-meta {
+  font-size: 11px;
+  opacity: 0.6;
+  font-variant-numeric: tabular-nums;
+}
+.download-action,
+.download-all {
+  flex: 0 0 auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 11px;
+  padding: 3px 8px;
+  cursor: pointer;
+}
+.download-action:hover,
+.download-all:hover {
+  background: rgb(255 255 255 / 8%);
+}
+.download-empty {
+  padding: 12px 6px;
+  opacity: 0.6;
+  font-size: 12px;
+}
