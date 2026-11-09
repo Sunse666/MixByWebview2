@@ -6,6 +6,20 @@ const root = document.documentElement;
 const urlInput = document.getElementById("url");
 const tabStrip = document.getElementById("tabs");
 
+// Anything that throws in this page takes a piece of the strip with it and leaves no
+// trace, so every failure is reported to the log where it can be read.
+function reportError(what, error) {
+  invoke("ui_log", {
+    message: "ui error " + what + ": " + (error && error.message ? error.message : error),
+  }).catch(() => {});
+}
+window.addEventListener("error", (event) =>
+  reportError("uncaught", event.message + " @ " + (event.lineno || 0)),
+);
+window.addEventListener("unhandledrejection", (event) =>
+  reportError("rejected", String(event.reason)),
+);
+
 let tabs = [];
 let groups = [];
 let dragging = null;
@@ -656,6 +670,9 @@ const TOOLBAR_ITEMS = {
 let currentExtensions = [];
 
 async function renderToolbar(extensions) {
+  invoke("ui_log", {
+    message: "ui toolbar: " + (settings.toolbar || []).length + " items",
+  }).catch(() => {});
   if (extensions) currentExtensions = extensions;
   const saved = new Set((await invoke("bookmark_list")).map((item) => item.url));
   const active = tabs.find((tab) => tab.id === selected);
@@ -832,7 +849,22 @@ function setTabs(payload) {
   tabs = payload.tabs || [];
   groups = payload.groups || [];
   selected = payload.selected || null;
-  renderTabs();
+  invoke("ui_log", {
+    message:
+      "ui tabs: " +
+      tabs.length +
+      " dpr=" +
+      window.devicePixelRatio +
+      " viewport=" +
+      window.innerWidth +
+      "x" +
+      window.innerHeight,
+  }).catch(() => {});
+  try {
+    renderTabs();
+  } catch (error) {
+    reportError("renderTabs", error);
+  }
   const active = tabs.find((tab) => tab.id === selected);
   if (active) document.title = active.title || "Mix";
   // Keep the incognito state visible in the chrome itself.
