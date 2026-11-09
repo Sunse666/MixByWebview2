@@ -93,6 +93,8 @@ async function boot() {
       state.className = "host";
       const parts = [t(task.state) || task.state];
       if (task.bytes) parts.push(size(task.bytes));
+      // A rate only means something while the file is still growing.
+      if (task.state === "started" && task.speed) parts.push(size(task.speed) + "/s");
       state.textContent = parts.join(" · ");
 
       const open = document.createElement("button");

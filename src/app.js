@@ -43,8 +43,12 @@ function renderDownloads(tasks) {
   downloadPill.title = latest.path || latest.url;
   if (latest.state === "started") {
     const mb = (latest.bytes || 0) / (1024 * 1024);
+    // The rate is what tells you whether it is moving at all.
+    const rate = latest.speed
+      ? " " + (latest.speed / (1024 * 1024)).toFixed(1) + " MB/s"
+      : "";
     downloadPill.textContent = mb > 0.05
-      ? `\u2193 ${mb.toFixed(1)} MB ${latest.file_name}`
+      ? `\u2193 ${mb.toFixed(1)} MB${rate} ${latest.file_name}`
       : "\u2193 " + latest.file_name;
   } else if (latest.state === "finished") {
     downloadPill.textContent = "OK " + latest.file_name;

@@ -14,6 +14,8 @@ pub struct DownloadTask {
     pub state: String,
     /// Bytes written so far; WebView2 gives no total, so there is no percentage.
     pub bytes: u64,
+    /// Bytes per second over the last sample; zero when nothing is moving.
+    pub speed: u64,
 }
 
 static NEXT_ID: AtomicU64 = AtomicU64::new(1);
@@ -80,6 +82,7 @@ fn record(app: &tauri::AppHandle, url: Option<&str>, path: Option<&Path>, state:
                     path: target.display().to_string(),
                     state: state.to_string(),
                     bytes: 0,
+                    speed: 0,
                 });
                 if tasks.len() > KEEP {
                     let drop_count = tasks.len() - KEEP;
@@ -123,7 +126,15 @@ pub fn start_progress_watch(app: tauri::AppHandle) {
             for task in tasks.iter_mut().filter(|task| task.state == "started") {
                 let size = std::fs::metadata(&task.path).map(|meta| meta.len()).unwrap_or(0);
                 if size != task.bytes {
+                    // The poll runs every 500 ms, so the difference is a rate over half a
+                    // second; a partly written chunk still produces a sensible number, and
+                    // a stall shows as zero rather than as the last happy value.
+                    let delta = size.saturating_sub(task.bytes);
+                    task.speed = delta.saturating_mul(2);
                     task.bytes = size;
+                    changed = true;
+                } else if task.speed != 0 {
+                    task.speed = 0;
                     changed = true;
                 }
             }
