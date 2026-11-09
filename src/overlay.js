@@ -758,13 +758,13 @@ async function bootDownloads() {
         pause.className = "download-action";
         pause.textContent = task.paused ? t("Resume") : t("Pause");
         pause.addEventListener("click", () => {
-          invoke("download_pause", { path: task.path, paused: !task.paused }).catch(() => {});
+          invoke("download_pause", { url: task.url, paused: !task.paused }).catch(() => {});
         });
         const cancel = document.createElement("button");
         cancel.className = "download-action";
         cancel.textContent = t("Cancel");
         cancel.addEventListener("click", () => {
-          invoke("download_cancel", { path: task.path }).catch(() => {});
+          invoke("download_cancel", { url: task.url }).catch(() => {});
         });
         row.append(pause, cancel);
       } else {
@@ -772,7 +772,7 @@ async function bootDownloads() {
         open.className = "download-action";
         open.textContent = t("Open");
         open.addEventListener("click", () => {
-          invoke("download_open", { path: task.path }).catch(() => {});
+          invoke("download_open", { id: task.id }).catch(() => {});
           invoke("overlay_close").catch(() => {});
         });
         row.append(open);

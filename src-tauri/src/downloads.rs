@@ -49,18 +49,21 @@ pub mod ops {
         OPS.get_or_init(|| Ops(Mutex::new(HashMap::new())))
     }
 
-    fn file_path(args: &webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2DownloadStartingEventArgs) -> Option<String> {
+    /// Remembers the operation under the url it fetches.
+    ///
+    /// Not under the result path: that is chosen by the webview's own handler, and the
+    /// app rewrites it to the portable downloads folder, so the two disagree. The url is
+    /// the one thing both sides see the same.
+    fn remember(args: &webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2DownloadStartingEventArgs) -> Option<String> {
         let operation = unsafe { args.DownloadOperation().ok()? };
-        let mut path = PWSTR::null();
-        unsafe { operation.ResultFilePath(&mut path).ok()? };
-        if path.is_null() {
+        let mut uri = PWSTR::null();
+        unsafe { operation.Uri(&mut uri).ok()? };
+        if uri.is_null() {
             return None;
         }
-        let text = unsafe { path.to_string().ok()? };
-        // The string came back in memory the caller owns; leaking it is worse than the
-        // cost of asking for it once per download, but the free belongs here all the same.
-        ops().0.lock().ok()?.insert(text.clone(), operation);
-        Some(text)
+        let key = unsafe { uri.to_string().ok()? };
+        ops().0.lock().ok()?.insert(key.clone(), operation);
+        Some(key)
     }
 
     /// Attaches the handler that keeps a handle on every download this page starts.
@@ -74,7 +77,10 @@ pub mod ops {
             };
             let handler = DownloadStartingEventHandler::create(Box::new(move |_sender, args| {
                 if let Some(args) = args {
-                    let _ = file_path(&args);
+                    let key = remember(&args);
+                if let Some(key) = key {
+                    crate::logging::info(&format!("download operation: {key}"));
+                }
                 }
                 Ok(())
             }));
@@ -85,11 +91,11 @@ pub mod ops {
         });
     }
 
-    fn with_op(path: &str, run: impl FnOnce(&ICoreWebView2DownloadOperation)) -> bool {
+    fn with_op(url: &str, run: impl FnOnce(&ICoreWebView2DownloadOperation)) -> bool {
         let Ok(map) = ops().0.lock() else {
             return false;
         };
-        match map.get(path) {
+        match map.get(url) {
             Some(operation) => {
                 run(operation);
                 true
@@ -98,20 +104,20 @@ pub mod ops {
         }
     }
 
-    pub fn pause(path: &str) -> bool {
-        with_op(path, |operation| unsafe {
+    pub fn pause(url: &str) -> bool {
+        with_op(url, |operation| unsafe {
             let _ = operation.Pause();
         })
     }
 
-    pub fn resume(path: &str) -> bool {
-        with_op(path, |operation| unsafe {
+    pub fn resume(url: &str) -> bool {
+        with_op(url, |operation| unsafe {
             let _ = operation.Resume();
         })
     }
 
-    pub fn cancel(path: &str) -> bool {
-        with_op(path, |operation| unsafe {
+    pub fn cancel(url: &str) -> bool {
+        with_op(url, |operation| unsafe {
             let _ = operation.Cancel();
         })
     }
@@ -120,13 +126,13 @@ pub mod ops {
 #[cfg(not(windows))]
 pub mod ops {
     pub fn watch(_webview: &tauri::Webview) {}
-    pub fn pause(_path: &str) -> bool {
+    pub fn pause(_url: &str) -> bool {
         false
     }
-    pub fn resume(_path: &str) -> bool {
+    pub fn resume(_url: &str) -> bool {
         false
     }
-    pub fn cancel(_path: &str) -> bool {
+    pub fn cancel(_url: &str) -> bool {
         false
     }
 }

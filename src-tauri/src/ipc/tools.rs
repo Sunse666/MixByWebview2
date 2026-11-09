@@ -34,7 +34,52 @@ pub async fn download_open(
     let Some(path) = path else {
         return Err(AppError::new("bad_download", "unknown download"));
     };
+    // Open the file itself with whatever Windows associates with it. Revealing the folder
+    // is a different action, and it is what this used to do.
+    shell_open(std::path::Path::new(&path))
+}
+
+/// Shows a finished download in Explorer.
+#[tauri::command]
+pub async fn download_reveal(
+    _window: tauri::Window,
+    state: State<'_, AppState>,
+    id: u64,
+) -> Result<(), AppError> {
+    let path = {
+        let tasks = state.downloads.read().unwrap_or_else(|e| e.into_inner());
+        tasks
+            .iter()
+            .find(|task| task.id == id)
+            .map(|task| task.path.clone())
+    };
+    let Some(path) = path else {
+        return Err(AppError::new("bad_download", "unknown download"));
+    };
     reveal_path(std::path::Path::new(&path))
+}
+
+/// Hands a file to the shell so it opens in its associated program.
+pub(crate) fn shell_open(path: &std::path::Path) -> Result<(), AppError> {
+    #[cfg(windows)]
+    {
+        // Through cmd so the shell association is used and spaces in the path are safe;
+        // the empty argument is the window title start expects.
+        std::process::Command::new("cmd")
+            .args(["/C", "start", "", &path.to_string_lossy()])
+            .spawn()
+            .map(|_| ())
+            .map_err(|err| AppError::new("open", err.to_string()))
+    }
+    #[cfg(not(windows))]
+    {
+        let opener = if cfg!(target_os = "macos") { "open" } else { "xdg-open" };
+        std::process::Command::new(opener)
+            .arg(path)
+            .spawn()
+            .map(|_| ())
+            .map_err(|err| AppError::new("open", err.to_string()))
+    }
 }
 #[tauri::command]
 pub async fn download_open_dir(_window: tauri::Window, state: State<'_, AppState>, id: u64) -> Result<(), AppError> {
@@ -472,18 +517,18 @@ pub async fn ui_log(message: String) -> Result<(), AppError> {
 pub async fn download_pause(
     app: AppHandle,
     state: State<'_, AppState>,
-    path: String,
+    url: String,
     paused: bool,
 ) -> Result<bool, AppError> {
     let ok = if paused {
-        crate::downloads::ops::pause(&path)
+        crate::downloads::ops::pause(&url)
     } else {
-        crate::downloads::ops::resume(&path)
+        crate::downloads::ops::resume(&url)
     };
     if ok {
         let tasks = {
             let mut tasks = state.downloads.write().unwrap_or_else(|e| e.into_inner());
-            if let Some(task) = tasks.iter_mut().find(|task| task.path == path) {
+            if let Some(task) = tasks.iter_mut().rev().find(|task| task.url == url) {
                 task.paused = paused;
                 if paused {
                     task.speed = 0;
@@ -494,7 +539,7 @@ pub async fn download_pause(
         let _ = app.emit("download:changed", tasks);
     }
     crate::logging::info(&format!(
-        "download {path} {}: {ok}",
+        "download {url} {}: {ok}",
         if paused { "pause" } else { "resume" }
     ));
     Ok(ok)
@@ -502,8 +547,10 @@ pub async fn download_pause(
 
 /// Cancels the download writing to this path.
 #[tauri::command]
-pub async fn download_cancel(path: String) -> Result<bool, AppError> {
-    Ok(crate::downloads::ops::cancel(&path))
+pub async fn download_cancel(url: String) -> Result<bool, AppError> {
+    let ok = crate::downloads::ops::cancel(&url);
+    crate::logging::info(&format!("download {url} cancel: {ok}"));
+    Ok(ok)
 }
 
 /// A userscript path arrives from the page, so it is resolved and checked

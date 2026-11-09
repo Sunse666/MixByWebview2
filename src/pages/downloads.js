@@ -102,15 +102,13 @@ async function boot() {
         pause.className = "button";
         pause.textContent = t(task.paused ? "Resume" : "Pause");
         pause.addEventListener("click", async () => {
-          await invoke("download_pause", { path: task.path, paused: !task.paused }).catch(
-            () => {},
-          );
+          await invoke("download_pause", { url: task.url, paused: !task.paused }).catch(() => {});
         });
         const cancel = document.createElement("button");
         cancel.className = "button";
         cancel.textContent = t("Cancel");
         cancel.addEventListener("click", async () => {
-          await invoke("download_cancel", { path: task.path }).catch(() => {});
+          await invoke("download_cancel", { url: task.url }).catch(() => {});
         });
         row.append(name, state, pause, cancel);
         list.append(row);
@@ -125,7 +123,7 @@ async function boot() {
       const reveal = document.createElement("button");
       reveal.className = "button";
       reveal.textContent = t("Show in folder");
-      reveal.addEventListener("click", () => invoke("download_open_dir", { id: task.id }).catch(() => {}));
+      reveal.addEventListener("click", () => invoke("download_reveal", { id: task.id }).catch(() => {}));
 
       row.append(name, state, open, reveal);
       list.append(row);

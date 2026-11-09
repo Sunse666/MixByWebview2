@@ -71,7 +71,7 @@ async function paint() {
       const name = item.fileName || item.url || "";
       body.append(
         row(name, item.state || "", null, () =>
-          invoke("download_open", { path: item.path }).catch(() => {}),
+          invoke("download_open", { id: item.id }).catch(() => {}),
         ),
       );
     }
