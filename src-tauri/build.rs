@@ -1,4 +1,11 @@
 fn main() {
+    // The frontend is embedded at compile time, so a change under ../src has to
+    // recompile this crate. Without this, editing only the pages or the chrome left the
+    // old javascript inside the binary - and every rebuild looked like it had done
+    // nothing at all.
+    println!("cargo:rerun-if-changed=../src");
+    println!("cargo:rerun-if-changed=build.rs");
+
     let git = std::process::Command::new("git")
         .args(["rev-parse", "--short", "HEAD"])
         .output()

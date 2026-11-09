@@ -157,5 +157,8 @@ async function check(name) {
     if (!(await check(name))) failures += 1;
   }
   console.log(failures ? failures + " page(s) failed" : "all pages build");
+  // The chrome page is not built the same way, but it has one silent failure mode of
+  // its own - being defined and never called - so it is checked here too.
+  await import("./check-chrome.js");
   process.exit(failures ? 1 : 0);
 })();

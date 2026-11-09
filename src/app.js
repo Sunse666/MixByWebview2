@@ -1032,7 +1032,9 @@ window.__mixSettingsChanged = async () => {
 };
 
 async function boot() {
+  report("boot 1");
   applyTheme(await invoke("theme_get"));
+  report("boot 2 theme");
   settings = await invoke("settings_get");
   setLanguage(settings.language || "en");
   renderMenuBar();
@@ -1398,10 +1400,15 @@ async function boot() {
     .addEventListener("auxclick", (event) => {
       if (event.button !== 1) return;
       const pill = event.target.closest(".tab");
-      if (pill && pill.dataset.id) invoke("tab_close", { id: pill.dataset.id });
+      if (pill && pill.dataset.tab) invoke("tab_close", { id: pill.dataset.tab });
     });
   document.getElementById("tab-new").addEventListener("click", () => invoke("tab_new", {}));
 
   // The address bar is not focused on purpose: it would open the suggestion
   // dropdown over the page on every launch. Ctrl+L focuses it.
 }
+
+// Called, and loudly if it fails. This line was dropped once while editing, and the
+// result looked exactly like a browser whose strip had stopped working: the functions
+// were all there, nothing ran them. scripts/check-chrome.js now refuses that.
+boot().catch((error) => reportError("boot", error));
