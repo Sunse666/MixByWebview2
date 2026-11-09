@@ -1,10 +1,16 @@
-// Reports screen strings that have no entry in the zh dictionary. The i18n table
-// is keyed by the English text, so a missing entry fails silently at runtime -
-// this script is the check that makes it visible.
+// Reports screen strings that have no entry in the zh dictionary, and dictionary entries
+// that nothing can ever show.
 //
 //   node scripts/check-i18n.js
 //
-// Exits 1 when something is missing, so it can gate a release.
+// The i18n table is keyed by the English text, so a missing entry fails silently at
+// runtime - this script is the check that makes it visible.
+//
+// "Used" is deliberately generous: a key counts as used when it appears inside t(...) or
+// when the same string appears anywhere in the sources as a literal. Text is often
+// translated through a variable (t(label) over a list of labels, menu definitions passed
+// around as data), and a narrower rule would report those as dead and invite their
+// deletion. Exits 1 when something is missing, so it can gate a release.
 
 const fs = require("fs");
 const path = require("path");
@@ -25,26 +31,42 @@ const walk = (dir) => {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) walk(full);
-    else if (entry.name.endsWith(".js")) files.push(full);
+    else if (/\.(js|html)$/.test(entry.name)) files.push(full);
   }
 };
 walk(src);
 
-const used = new Map();
+const calls = new Map();
+const literals = new Set();
+const unescape = (value) => value.replace(/\\(.)/g, "$1");
+
 for (const file of files) {
   if (file.endsWith(path.sep + "i18n.js")) continue;
   const text = fs.readFileSync(file, "utf8");
-  const re = /\bt\(\s*"((?:[^"\\]|\\.)*)"\s*\)|\bt\(\s*'((?:[^'\\]|\\.)*)'\s*\)/g;
+
+  const re = /\bt\(\s*(?:"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)')\s*\)/g;
   let match;
   while ((match = re.exec(text))) {
-    const key = match[1] !== undefined ? match[1] : match[2];
+    const key = unescape(match[1] !== undefined ? match[1] : match[2]);
     if (!key) continue;
-    if (!used.has(key)) used.set(key, new Set());
-    used.get(key).add(path.relative(root, file));
+    if (!calls.has(key)) calls.set(key, new Set());
+    calls.get(key).add(path.relative(root, file));
+  }
+
+  // Every literal in the file, so a key passed around as data still counts. Escapes are
+  // decoded too: page titles and labels are often written with \u sequences.
+  const strings = text.match(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/g) || [];
+  for (const raw of strings) {
+    literals.add(unescape(raw.slice(1, -1)));
   }
 }
 
-const missing = [...used.keys()].filter((key) => !dict.has(key)).sort();
+const used = new Set([...calls.keys()].filter((key) => dict.has(key)));
+for (const key of dict) {
+  if (literals.has(key)) used.add(key);
+}
+
+const missing = [...calls.keys()].filter((key) => !dict.has(key)).sort();
 const unused = [...dict].filter((key) => !used.has(key)).sort();
 
 console.log("keys in dictionary: " + dict.size);
@@ -52,14 +74,17 @@ console.log("keys used by the ui:  " + used.size);
 console.log("");
 if (missing.length) {
   console.log("missing " + missing.length + ":");
-  for (const key of missing) console.log('  "' + key + '"  <- ' + [...used.get(key)].join(", "));
+  for (const key of missing) console.log('  "' + key + '"  <- ' + [...calls.get(key)].join(", "));
   console.log("");
 } else {
   console.log("no missing keys");
 }
 if (unused.length) {
-  console.log("unused dictionary entries: " + unused.length);
-  for (const key of unused.slice(0, 20)) console.log('  "' + key + '"');
-  if (unused.length > 20) console.log("  ... " + (unused.length - 20) + " more");
+  // A hint, not a to-do list. Some of these are reached through a variable whose value
+  // comes from Rust (translation status, extension state, download state), and a scan of
+  // the pages cannot see those. Pruning on this list alone deletes live entries - it was
+  // tried, and it took "Suspended to save memory" with it.
+  console.log("dictionary entries no page mentions: " + unused.length + " (check before removing)");
+  for (const key of unused) console.log('  "' + key + '"');
 }
 process.exit(missing.length ? 1 : 0);
