@@ -130,6 +130,47 @@ function groupOf(id) {
   return (groups || []).find((group) => group.members.includes(id));
 }
 
+// The strip scrolls, but its scrollbar is hidden, so a row of tabs could run off the
+// right edge with no way to reach the end of it. Two arrows appear when there is more
+// than fits, and a wheel over the strip scrolls it sideways.
+const stripLeft = document.createElement("button");
+const stripRight = document.createElement("button");
+for (const [button, glyph, dir] of [
+  [stripLeft, "\u2039", -1],
+  [stripRight, "\u203a", 1],
+]) {
+  button.className = "tab-scroll";
+  button.textContent = glyph;
+  button.hidden = true;
+  button.addEventListener("click", () => {
+    tabStrip.scrollBy({ left: dir * Math.max(160, tabStrip.clientWidth * 0.6), behavior: "smooth" });
+  });
+}
+tabStrip.parentElement.insertBefore(stripLeft, tabStrip);
+tabStrip.after(stripRight);
+
+function syncStripScroll() {
+  const more = tabStrip.scrollWidth - tabStrip.clientWidth;
+  const left = tabStrip.scrollLeft;
+  stripLeft.hidden = more <= 1 || left <= 1;
+  stripRight.hidden = more <= 1 || left >= more - 1;
+}
+
+tabStrip.addEventListener("scroll", syncStripScroll, { passive: true });
+tabStrip.addEventListener(
+  "wheel",
+  (event) => {
+    if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
+    // A vertical wheel over a horizontal strip should scroll the strip.
+    if (tabStrip.scrollWidth <= tabStrip.clientWidth) return;
+    event.preventDefault();
+    tabStrip.scrollLeft += event.deltaY;
+    syncStripScroll();
+  },
+  { passive: false },
+);
+window.addEventListener("resize", syncStripScroll);
+
 // Tab elements are reused, not rebuilt. Replacing them on every update is what broke
 // dragging and double clicks: the first mousedown selects the tab, the strip redraws
 // with new elements, and the drag or the second click lands on a node that is already
@@ -547,6 +588,8 @@ function renderTabs() {
     fillTab(el, tab);
     tabStrip.append(el);
   }
+
+  syncStripScroll();
 
   // Anything no longer in the strip: a closed member, or a tab that was closed.
   for (const [key, el] of tabNodes) {
@@ -1437,6 +1480,20 @@ async function boot() {
       if (pill && pill.dataset.tab) invoke("tab_close", { id: pill.dataset.tab });
     });
   document.getElementById("tab-new").addEventListener("click", () => invoke("tab_new", {}));
+
+  // Ctrl+click on the strip's screenshot button takes the whole page; the plain click
+  // keeps taking what is on screen.
+  document.addEventListener(
+    "click",
+    (event) => {
+      const button = event.target.closest("[data-action='screenshot']");
+      if (!button || !event.ctrlKey) return;
+      event.preventDefault();
+      event.stopPropagation();
+      invoke("tab_screenshot", { full: true }).catch(() => {});
+    },
+    true,
+  );
 
   // The address bar is not focused on purpose: it would open the suggestion
   // dropdown over the page on every launch. Ctrl+L focuses it.

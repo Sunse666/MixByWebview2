@@ -87,6 +87,43 @@ pub fn capture(_webview: &tauri::Webview) -> Option<Vec<u8>> {
   None
 }
 
+/// Grabs the whole document, not just what is on screen.
+///
+/// The protocol needs the page's own height for this, and asking for its layout metrics
+/// first is the only reliable way to get it: the content size includes everything below
+/// the fold, while the visual viewport only ever describes the window.
+#[cfg(windows)]
+pub fn capture_full(webview: &tauri::Webview) -> Option<Vec<u8>> {
+  let metrics = call(webview, "Page.getLayoutMetrics", "{}")?;
+  let value: serde_json::Value = serde_json::from_str(&metrics).ok()?;
+  let size = value.get("cssContentSize").or_else(|| value.get("contentSize"))?;
+  let width = size.get("width")?.as_f64()?;
+  let height = size.get("height")?.as_f64()?;
+  if !(width.is_finite() && height.is_finite()) || width < 1.0 || height < 1.0 {
+    return None;
+  }
+  // A very long page would be a very large image; cap it so a runaway document cannot
+  // fill the disk or hang the capture.
+  let height = height.min(16000.0);
+  let params = format!(
+    r#"{{"format":"png","captureBeyondViewport":true,"clip":{{"x":0,"y":0,"width":{width},"height":{height},"scale":1}}}}"#
+  );
+  let json = call_timeout(
+    webview,
+    "Page.captureScreenshot",
+    &params,
+    std::time::Duration::from_secs(20),
+  )?;
+  let value: serde_json::Value = serde_json::from_str(&json).ok()?;
+  let data = value.get("data")?.as_str()?;
+  decode_base64(data)
+}
+
+#[cfg(not(windows))]
+pub fn capture_full(_webview: &tauri::Webview) -> Option<Vec<u8>> {
+  None
+}
+
 pub fn decode_base64(input: &str) -> Option<Vec<u8>> {
   let mut out = Vec::with_capacity(input.len() * 3 / 4);
   let mut buffer: u32 = 0;

@@ -331,6 +331,7 @@ const DICT = {
     "Browser": "浏览器",
     "Saved": "已保存",
     "Ungroup": "解散分组",
+    "Capture full page": "截取整页",
     "Group": "分组",
     "No bookmarks yet": "还没有书签",
     "No downloads": "没有下载记录",

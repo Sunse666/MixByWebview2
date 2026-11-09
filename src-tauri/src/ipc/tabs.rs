@@ -262,12 +262,19 @@ pub async fn tab_screenshot(
     app: AppHandle,
     window: tauri::Window,
     state: State<'_, AppState>,
+    full: Option<bool>,
 ) -> Result<String, AppError> {
     let id = selected_label(&state, &window);
     let Some(webview) = app.get_webview(&id) else {
         return Err(AppError::new("no_tab", "there is no tab to capture"));
     };
-    let Some(bytes) = crate::screenshot::capture(&webview) else {
+    // The whole document when asked for, otherwise what is on screen.
+    let shot = if full.unwrap_or(false) {
+        crate::screenshot::capture_full(&webview)
+    } else {
+        crate::screenshot::capture(&webview)
+    };
+    let Some(bytes) = shot else {
         return Err(AppError::new("capture", "the page did not answer with an image"));
     };
     let name = format!("Mix-shot-{}.png", crate::library::now());

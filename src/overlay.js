@@ -1197,6 +1197,7 @@ async function bootChromeMenu(kind) {
       else await invoke("group_add", { id, groupId: null }).catch(() => {});
     });
     item("Copy address", () => invoke("clipboard_write", { text: tab.url }).catch(() => {}));
+    item("Capture full page", () => invoke("tab_screenshot", { full: true }).catch(() => {}));
     const divider = document.createElement("div");
     divider.className = "divider";
     menu.append(divider);
