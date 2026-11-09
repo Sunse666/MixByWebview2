@@ -91,49 +91,59 @@ pub mod ops {
         });
     }
 
-    fn with_op(url: &str, run: impl FnOnce(&ICoreWebView2DownloadOperation)) -> bool {
-        let Ok(map) = ops().0.lock() else {
-            return false;
+    /// Runs something against the operation for this url, and says what actually happened.
+    ///
+    /// The result used to be "the operation was found", which reported success for a call
+    /// the browser had refused. Now it carries the state the operation was in and the error
+    /// the call returned, so a failure can be read instead of guessed at.
+    fn with_op(
+        url: &str,
+        run: impl FnOnce(&ICoreWebView2DownloadOperation) -> windows_core::Result<()>,
+    ) -> Result<String, String> {
+        let map = ops().0.lock().map_err(|_| "lock poisoned".to_string())?;
+        let operation = map.get(url).ok_or_else(|| "no operation for that url".to_string())?;
+        let state = unsafe {
+            let mut state = webview2_com::Microsoft::Web::WebView2::Win32::COREWEBVIEW2_DOWNLOAD_STATE::default();
+            operation.State(&mut state).map(|_| state.0).unwrap_or(-1)
         };
-        match map.get(url) {
-            Some(operation) => {
-                run(operation);
-                true
-            }
-            None => false,
+        // 0 created, 1 in progress, 2 interrupted, 3 completed.
+        let label = match state {
+            0 => "created",
+            1 => "in progress",
+            2 => "interrupted",
+            3 => "completed",
+            _ => "unknown",
+        };
+        match run(operation) {
+            Ok(()) => Ok(label.to_string()),
+            Err(err) => Err(format!("{label}: {err}")),
         }
     }
 
-    pub fn pause(url: &str) -> bool {
-        with_op(url, |operation| unsafe {
-            let _ = operation.Pause();
-        })
+    pub fn pause(url: &str) -> Result<String, String> {
+        with_op(url, |operation| unsafe { operation.Pause() })
     }
 
-    pub fn resume(url: &str) -> bool {
-        with_op(url, |operation| unsafe {
-            let _ = operation.Resume();
-        })
+    pub fn resume(url: &str) -> Result<String, String> {
+        with_op(url, |operation| unsafe { operation.Resume() })
     }
 
-    pub fn cancel(url: &str) -> bool {
-        with_op(url, |operation| unsafe {
-            let _ = operation.Cancel();
-        })
+    pub fn cancel(url: &str) -> Result<String, String> {
+        with_op(url, |operation| unsafe { operation.Cancel() })
     }
 }
 
 #[cfg(not(windows))]
 pub mod ops {
     pub fn watch(_webview: &tauri::Webview) {}
-    pub fn pause(_url: &str) -> bool {
-        false
+    pub fn pause(_url: &str) -> Result<String, String> {
+        Err("not supported on this platform".into())
     }
-    pub fn resume(_url: &str) -> bool {
-        false
+    pub fn resume(_url: &str) -> Result<String, String> {
+        Err("not supported on this platform".into())
     }
-    pub fn cancel(_url: &str) -> bool {
-        false
+    pub fn cancel(_url: &str) -> Result<String, String> {
+        Err("not supported on this platform".into())
     }
 }
 

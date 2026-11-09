@@ -520,11 +520,12 @@ pub async fn download_pause(
     url: String,
     paused: bool,
 ) -> Result<bool, AppError> {
-    let ok = if paused {
+    let outcome = if paused {
         crate::downloads::ops::pause(&url)
     } else {
         crate::downloads::ops::resume(&url)
     };
+    let ok = outcome.is_ok();
     if ok {
         let tasks = {
             let mut tasks = state.downloads.write().unwrap_or_else(|e| e.into_inner());
@@ -538,19 +539,32 @@ pub async fn download_pause(
         };
         let _ = app.emit("download:changed", tasks);
     }
-    crate::logging::info(&format!(
-        "download {url} {}: {ok}",
-        if paused { "pause" } else { "resume" }
-    ));
+    match &outcome {
+        Ok(state) => crate::logging::info(&format!(
+            "download {} ok while {state}",
+            if paused { "pause" } else { "resume" }
+        )),
+        Err(err) => crate::logging::warn(&format!(
+            "download {} failed: {err}",
+            if paused { "pause" } else { "resume" }
+        )),
+    }
     Ok(ok)
 }
 
 /// Cancels the download writing to this path.
 #[tauri::command]
 pub async fn download_cancel(url: String) -> Result<bool, AppError> {
-    let ok = crate::downloads::ops::cancel(&url);
-    crate::logging::info(&format!("download {url} cancel: {ok}"));
-    Ok(ok)
+    match crate::downloads::ops::cancel(&url) {
+        Ok(state) => {
+            crate::logging::info(&format!("download cancel ok while {state}"));
+            Ok(true)
+        }
+        Err(err) => {
+            crate::logging::warn(&format!("download cancel failed: {err}"));
+            Ok(false)
+        }
+    }
 }
 
 /// A userscript path arrives from the page, so it is resolved and checked
