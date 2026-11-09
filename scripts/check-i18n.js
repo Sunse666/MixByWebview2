@@ -35,6 +35,16 @@ const walk = (dir) => {
   }
 };
 walk(src);
+// The Rust side holds strings the pages translate through a variable: translation status,
+// script injection timing, download state. Without them the report calls live entries dead.
+const rustFiles = [];
+(function walkRust(dir) {
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) walkRust(full);
+    else if (entry.name.endsWith(".rs")) rustFiles.push(full);
+  }
+})(path.join(root, "src-tauri", "src"));
 
 const calls = new Map();
 const literals = new Set();
@@ -61,6 +71,13 @@ for (const file of files) {
   }
 }
 
+for (const file of rustFiles) {
+  const text = fs.readFileSync(file, "utf8");
+  for (const raw of text.match(/"((?:[^"\\]|\\.)*)"/g) || []) {
+    literals.add(unescape(raw.slice(1, -1)));
+  }
+}
+
 const used = new Set([...calls.keys()].filter((key) => dict.has(key)));
 for (const key of dict) {
   if (literals.has(key)) used.add(key);
@@ -80,10 +97,12 @@ if (missing.length) {
   console.log("no missing keys");
 }
 if (unused.length) {
-  // A hint, not a to-do list. Some of these are reached through a variable whose value
-  // comes from Rust (translation status, extension state, download state), and a scan of
-  // the pages cannot see those. Pruning on this list alone deletes live entries - it was
-  // tried, and it took "Suspended to save memory" with it.
+  // A hint, not a to-do list, and two attempts at pruning on it failed for different
+  // reasons: text can be translated through a variable whose value comes from Rust or from
+  // a data file (translation status, a userscript's @run-at, download state), and it can be
+  // a text node in html ("Allow" lives in overlay.html, not in a quoted string). A static
+  // scan cannot tell those from dead entries, and the dictionary is small enough that the
+  // wrong deletions cost more than the dead weight.
   console.log("dictionary entries no page mentions: " + unused.length + " (check before removing)");
   for (const key of unused) console.log('  "' + key + '"');
 }
