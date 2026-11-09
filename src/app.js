@@ -261,7 +261,29 @@ function onDragEnd(event) {
   const under = document
     .elementFromPoint(event.clientX, event.clientY)
     ?.closest(".tab, .group-chip");
-  if (!under) return;
+  if (!under) {
+    // Released on empty strip: drop it where the pointer is rather than nowhere. Only
+    // inside the strip, so releasing over the page still cancels.
+    const strip = tabStrip.getBoundingClientRect();
+    const inside =
+      event.clientX >= strip.left &&
+      event.clientX <= strip.right + 40 &&
+      event.clientY >= strip.top - 12 &&
+      event.clientY <= strip.bottom + 12;
+    if (!inside) return;
+    let to = tabs.length;
+    for (const pill of tabStrip.querySelectorAll(".tab[data-tab]")) {
+      const box = pill.getBoundingClientRect();
+      if (event.clientX < box.left + box.width / 2) {
+        const index = tabs.findIndex((tab) => tab.id === pill.dataset.tab);
+        if (index >= 0) to = index;
+        break;
+      }
+    }
+    const current = tabs.findIndex((tab) => tab.id === held.id);
+    if (to !== current) invoke("tab_move", { id: held.id, to }).catch(() => {});
+    return;
+  }
   // Dropping on a group chip joins that group; dropping on a tab moves the tab there.
   if (under.dataset.group) {
     invoke("group_add", { id: held.id, groupId: under.dataset.group }).catch(() => {});

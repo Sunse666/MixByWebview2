@@ -173,10 +173,40 @@ export function buildAppearance({ settings, invoke }) {
     await invoke("settings_set", { patch: { sidebar: sideSelect.value } }).catch(() => {});
   });
 
+  // Width next to the position, because it only means something when the sidebar is on.
+  const sideWidth = document.createElement("input");
+  sideWidth.type = "range";
+  sideWidth.min = "180";
+  sideWidth.max = "640";
+  sideWidth.step = "10";
+  sideWidth.className = "slider";
+  sideWidth.value = String(Math.round(settings.sidebar_width || 300));
+  const sideLabel = document.createElement("span");
+  sideLabel.className = "value";
+  sideLabel.textContent = sideWidth.value + "px";
+  sideWidth.addEventListener("input", () => {
+    sideLabel.textContent = sideWidth.value + "px";
+  });
+  sideWidth.addEventListener("change", async () => {
+    await invoke("settings_set", {
+      patch: { sidebar_width: Number(sideWidth.value) },
+    }).catch(() => {});
+  });
+
   themeCard.append(
     themeText,
     row("Mode", "Dark or light palette for the interface", modeSelect),
     row(t("Sidebar position"), t("Bookmarks, downloads and history in a column beside the page"), sideSelect),
+    row(
+      t("Sidebar width"),
+      t("How wide the column is"),
+      (() => {
+        const wrap = document.createElement("div");
+        wrap.className = "row-inline";
+        wrap.append(sideWidth, sideLabel);
+        return wrap;
+      })(),
+    ),
     themeRow,
     zoomRow,
     row(t("Standard font"), t("Empty keeps the site font, applies to new pages"), fontInput),

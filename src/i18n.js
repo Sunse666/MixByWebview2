@@ -336,6 +336,8 @@ const DICT = {
     "No downloads": "没有下载记录",
     "No history yet": "还没有历史记录",
     "Sidebar": "侧边栏",
+    "Sidebar width": "侧边栏宽度",
+    "How wide the column is": "这一列有多宽",
     "Bookmarks, downloads and history in a column beside the page":
       "在页面旁边用一列显示书签、下载和历史",
     "Sidebar position": "侧边栏位置",

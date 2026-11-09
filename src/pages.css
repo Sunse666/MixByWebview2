@@ -338,3 +338,19 @@ main h2 {
   border-color: #b3261e;
   color: #ffb4ab;
 }
+
+.row-inline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.row-inline .value {
+  min-width: 46px;
+  text-align: right;
+  opacity: 0.7;
+  font-variant-numeric: tabular-nums;
+}
+.slider {
+  width: 180px;
+  accent-color: var(--accent);
+}
