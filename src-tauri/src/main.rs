@@ -22,6 +22,7 @@ mod permissions;
 mod persist;
 mod platform;
 mod session;
+mod sidebar;
 mod screenshot;
 mod snap;
 mod translate;

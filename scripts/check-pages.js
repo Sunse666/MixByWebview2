@@ -160,5 +160,6 @@ async function check(name) {
   // The chrome page is not built the same way, but it has one silent failure mode of
   // its own - being defined and never called - so it is checked here too.
   await import("./check-chrome.js");
+  await import("./check-strings.js");
   process.exit(failures ? 1 : 0);
 })();

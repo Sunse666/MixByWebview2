@@ -35,57 +35,6 @@ fn debug_hooks() -> bool {
 
 
 
-/// Creates the sidebar webview for a window if it is wanted and missing.
-///
-/// Only call this outside a window event dispatch: add_child waits on the main thread,
-/// which a resize handler is already occupying.
-pub fn ensure_sidebar(app: &AppHandle, label: &str) {
-    let Some(state) = app.try_state::<AppState>() else {
-        return;
-    };
-    let (side, width) = {
-        let settings = state.settings.read();
-        (settings.sidebar.clone(), settings.sidebar_width)
-    };
-    if side != "left" && side != "right" {
-        return;
-    }
-    let label_side = format!("{label}-side");
-    if app.get_webview(&label_side).is_some() {
-        return;
-    }
-    let Some(win) = app.get_window(label) else {
-        return;
-    };
-    let Ok((width_px, height)) = logical_size(&win) else {
-        return;
-    };
-    let chrome_h = crate::ipc::chrome_height(app);
-    let reserve = width
-        .clamp(180.0, 640.0)
-        .min((width_px - 200.0).max(0.0));
-    if reserve <= 0.0 {
-        return;
-    }
-    let opts = state.opts.clone();
-    let builder = WebviewBuilder::new(
-        label_side.clone(),
-        WebviewUrl::App("pages/sidebar.html".into()),
-    )
-    .devtools(true);
-    let builder = tabs::apply_profile(builder, &opts.ui_data_dir);
-    let builder = tabs::apply_extensions(builder, &opts);
-    let x = if side == "left" { 0.0 } else { width_px - reserve };
-    match win.add_child(
-        builder,
-        LogicalPosition::new(x, chrome_h),
-        LogicalSize::new(reserve.max(1.0), (height - chrome_h).max(1.0)),
-    ) {
-        Ok(_) => crate::logging::info("sidebar created"),
-        Err(err) => crate::logging::warn(&format!("sidebar refused: {err}")),
-    }
-}
-
 /// Rebuilds the tab groups a session recorded. Members are indexes into the tabs the
 /// window was opened with, which are still in that order at this point.
 fn apply_groups(app: &AppHandle, label: &str, groups: &[crate::session::SessionGroup]) {
@@ -444,6 +393,17 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
         "main window ready, startup {} ms",
         crate::logging::elapsed_ms()
     ));
+
+    // One memory breakdown a few seconds in, when the first pages have settled. It is the
+    // only place the per-process detail is written down, and once is enough - repeating it
+    // on every hover card made the log unreadable.
+    {
+        let handle = app.handle().clone();
+        tauri::async_runtime::spawn_blocking(move || {
+            std::thread::sleep(std::time::Duration::from_secs(6));
+            crate::mem::report(&handle);
+        });
+    }
     Ok(())
 }
 
@@ -597,7 +557,7 @@ pub fn open_window(
 
     // The sidebar, if it was on last time. Created here, at window setup, rather than
     // lazily during a resize: a child webview cannot be added from inside a dispatch.
-    ensure_sidebar(app, label);
+    crate::sidebar::ensure(app, label);
 
     let handle = app.clone();
     let owner = label.to_string();
@@ -776,27 +736,10 @@ pub fn relayout(app: &AppHandle, label: &str) -> Result<(), tauri::Error> {
         set_bounds(&chrome, 0.0, 0.0, width, chrome_h)?;
     }
 
-    // The sidebar takes a column away from the pages, not from the strip: the tab strip
-    // and the address bar stay full width, the way the browsers this imitates do it.
-    let (side, side_w) = match app.try_state::<AppState>() {
-        Some(state) => {
-            let settings = state.settings.read();
-            let side = if fullscreen {
-                "off".to_string()
-            } else {
-                settings.sidebar.clone()
-            };
-            (side, settings.sidebar_width)
-        }
-        None => ("off".to_string(), 0.0),
-    };
-    let reserve = if side == "left" || side == "right" {
-        side_w.clamp(180.0, 640.0).min((width - 200.0).max(0.0))
-    } else {
-        0.0
-    };
-    let page_x = if side == "left" { reserve } else { 0.0 };
-    let page_w = (width - reserve).max(1.0);
+    // The sidebar takes a column from the pages, not from the strip: the tab strip and
+    // the address bar stay full width, the way the browsers this imitates do it.
+    let plan = crate::sidebar::plan(app, width, fullscreen);
+    let (page_x, page_w) = plan.page(width);
 
     let ids: Vec<String> = match app.try_state::<AppState>() {
         Some(state) => match state.try_read_core(label) {
@@ -811,28 +754,7 @@ pub fn relayout(app: &AppHandle, label: &str) -> Result<(), tauri::Error> {
         }
     }
 
-    // One sidebar webview per window, created the first time it is asked for and
-    // hidden rather than destroyed afterwards, so toggling it is instant.
-    let side_label = format!("{label}-side");
-    let side_x = if side == "left" { 0.0 } else { width - reserve };
-    match app.get_webview(&side_label) {
-        Some(webview) if reserve > 0.0 => {
-            let _ = webview.show();
-            set_bounds(&webview, side_x, chrome_h, reserve, tab_height)?;
-        }
-        Some(webview) => {
-            let _ = webview.hide();
-        }
-        // Never created here. relayout runs from the window's resize handler, i.e. on
-        // the main thread in the middle of a dispatch, and creating a child webview from
-        // there waits on the very thread that is busy - the window freezes, the strip
-        // stops answering and dragging does nothing. Creation belongs to open_window and
-        // to the settings command, both of which run outside a dispatch.
-        None if reserve > 0.0 => {
-            crate::logging::warn("sidebar is on but was never created; reopening the window will");
-        }
-        None => {}
-    }
+    crate::sidebar::apply(app, label, &plan, width, chrome_h, tab_height)?;
 
     let _ = app.emit_to(label, "layout:changed", (width, height));
     Ok(())
@@ -901,7 +823,6 @@ fn debug_gesture_test(app: &tauri::AppHandle) {
         }
     });
 }
-
 
 
 
