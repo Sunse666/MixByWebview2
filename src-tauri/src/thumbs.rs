@@ -149,10 +149,17 @@ pub fn capture_later(app: tauri::AppHandle, id: String, window_label: String) {
     crate::freeze::thaw(&webview);
     // One retry: a tab that has just been woken sometimes answers the devtools call
     // before it has a surface, and that is exactly the case that left the frame empty.
-    let mut shot = capture_live(selected.as_ref(), &webview);
-    if shot.is_none() {
+    // Asked fresh every time: the answer can change while the capture is working.
+    let still_hidden = || {
+      app
+        .try_state::<crate::ipc::AppState>()
+        .map(|state| state.read_core(&window_label).selected.as_deref() != Some(id.as_str()))
+        .unwrap_or(false)
+    };
+    let mut shot = capture_live(selected.as_ref(), &webview, &still_hidden);
+    if shot.is_none() && still_hidden() {
       std::thread::sleep(std::time::Duration::from_millis(150));
-      shot = capture_live(selected.as_ref(), &webview);
+      shot = capture_live(selected.as_ref(), &webview, &still_hidden);
     }
     if shot.is_none() {
       crate::logging::warn(&format!("thumbs: no picture for {id} after two tries"));
@@ -186,11 +193,13 @@ pub fn capture_later(app: tauri::AppHandle, id: String, window_label: String) {
         }
       }
     }
-    // Back to sleep: the wake-up was for the picture only.
-    if app
-      .try_state::<crate::ipc::AppState>()
-      .map(|state| state.settings.read().freeze_background)
-      .unwrap_or(false)
+    // Back to sleep: the wake-up was for the picture only, and only while the tab is
+    // still in the background - freezing the page someone is looking at blanks it.
+    if still_hidden()
+      && app
+        .try_state::<crate::ipc::AppState>()
+        .map(|state| state.settings.read().freeze_background)
+        .unwrap_or(false)
     {
       crate::freeze::freeze(&webview);
     }
@@ -225,7 +234,11 @@ const LIVE_PAINT_WAIT: std::time::Duration = std::time::Duration::from_millis(16
 ///
 /// The page does see a visibility change while this happens, which is why it is a
 /// setting of its own.
-pub fn capture_live(selected: Option<&tauri::Webview>, target: &tauri::Webview) -> Option<Vec<u8>> {
+pub fn capture_live(
+  selected: Option<&tauri::Webview>,
+  target: &tauri::Webview,
+  still_hidden: &dyn Fn() -> bool,
+) -> Option<Vec<u8>> {
   let id = target.label().to_string();
   if let Some(selected) = selected {
     if selected.label() == target.label() {
@@ -242,6 +255,12 @@ pub fn capture_live(selected: Option<&tauri::Webview>, target: &tauri::Webview) 
     crate::platform::place_below(target, selected);
   }
   std::thread::sleep(LIVE_PAINT_WAIT);
+  // The tab may have been selected while we waited for it to paint, and it is the page on
+  // screen now: hiding it at this point is what leaves an empty window behind.
+  if !still_hidden() {
+    crate::logging::info(&format!("thumbs: {id} became visible, left on screen"));
+    return None;
+  }
   let png = capture(target);
   let _ = target.hide();
   crate::logging::info(&format!(
