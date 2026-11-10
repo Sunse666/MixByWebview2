@@ -4,6 +4,72 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use tauri::{webview::DownloadEvent, Emitter, Manager, Webview};
 
+/// What a download is doing, as opposed to the string it is stored as.
+///
+/// The controls broke repeatedly because the phase was a bare string compared in half a
+/// dozen places, each with its own idea of what "started" meant. The rules live in one
+/// place now, with tests.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Phase {
+    /// The loop should be making progress.
+    Started,
+    /// Stopped on purpose, bytes kept, resumable.
+    Interrupted,
+    /// All bytes are on disk.
+    Finished,
+    /// Stopped for a reason that may not come back.
+    Failed,
+}
+
+impl Phase {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Phase::Started => "started",
+            Phase::Interrupted => "interrupted",
+            Phase::Finished => "finished",
+            Phase::Failed => "failed",
+        }
+    }
+
+    pub fn parse(text: &str) -> Phase {
+        match text {
+            "started" => Phase::Started,
+            "interrupted" => Phase::Interrupted,
+            "finished" => Phase::Finished,
+            _ => Phase::Failed,
+        }
+    }
+
+    /// True when a loop ought to exist for this task.
+    pub fn is_live(self) -> bool {
+        self == Phase::Started
+    }
+
+    /// True when asking again should continue this task rather than start another: the
+    /// partial file is the resume point and the row is already there.
+    pub fn is_retryable(self) -> bool {
+        matches!(self, Phase::Interrupted | Phase::Failed)
+    }
+
+    /// What a pause or resume asked for should look like once applied.
+    pub fn after_pause(paused: bool) -> Phase {
+        if paused {
+            Phase::Interrupted
+        } else {
+            Phase::Started
+        }
+    }
+}
+
+/// Turns a failed or interrupted task back into a running one.
+pub fn retry_phase(phase: Phase) -> Phase {
+    if phase.is_retryable() {
+        Phase::Started
+    } else {
+        phase
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DownloadTask {
     pub id: u64,
@@ -294,8 +360,8 @@ pub fn load_history(dirs: &crate::paths::AppDirs) -> Vec<DownloadTask> {
         return Vec::new();
     };
     for task in tasks.iter_mut() {
-        if task.state == "started" {
-            task.state = "interrupted".to_string();
+        if Phase::parse(&task.state).is_live() {
+            task.state = Phase::Interrupted.as_str().to_string();
             task.speed = 0;
         }
     }
@@ -316,7 +382,7 @@ pub fn reconcile(app: &tauri::AppHandle) {
         let tasks = state.downloads.read().unwrap_or_else(|e| e.into_inner());
         tasks
             .iter()
-            .filter(|task| task.state == "started" && !crate::fetch::busy(task.id))
+            .filter(|task| Phase::parse(&task.state).is_live() && !crate::fetch::busy(task.id))
             .map(|task| task.id)
             .collect()
     };
@@ -378,6 +444,8 @@ pub fn set_progress(app: &tauri::AppHandle, id: u64, bytes: u64, speed: u64) {
 
 /// Moves a task to another state, and reports it.
 pub fn set_state(app: &tauri::AppHandle, id: u64, next: &str) {
+    let next = Phase::parse(next);
+    let next = next.as_str();
     let Some(index) = task_index(app, id) else {
         return;
     };
@@ -425,17 +493,17 @@ pub fn start_with_engine(app: &tauri::AppHandle, url: &str, path: &Path) -> u64 
         tasks
             .iter()
             .rev()
-            .find(|task| task.url == url && (task.state == "failed" || task.state == "interrupted"))
-            .map(|task| (task.id, task.path.clone()))
+            .find(|task| task.url == url && Phase::parse(&task.state).is_retryable())
+            .map(|task| (task.id, task.path.clone(), task.state.clone()))
     };
     let (id, path) = match existing {
-        Some((id, held)) if !held.is_empty() => {
+        Some((id, held, held_state)) if !held.is_empty() => {
             let held = Path::new(&held);
             crate::logging::info(&format!(
                 "download {id} continued for {}",
                 held.display()
             ));
-            set_state(app, id, "started");
+            set_state(app, id, retry_phase(Phase::parse(&held_state)).as_str());
             (id, held.to_path_buf())
         }
         _ => {
@@ -702,5 +770,51 @@ mod tests {
         std::fs::write(dir.join("report.pdf"), b"x").expect("seed");
         let path = target_for(&dir, "https://example.com/report.pdf", "");
         assert_eq!(path.file_name().unwrap(), "report (1).pdf");
+    }
+
+    #[test]
+    fn a_pause_leaves_something_resumable() {
+        assert_eq!(Phase::after_pause(true), Phase::Interrupted);
+        assert_eq!(Phase::after_pause(false), Phase::Started);
+        assert!(Phase::Interrupted.is_retryable());
+        assert!(!Phase::Interrupted.is_live());
+    }
+
+    #[test]
+    fn only_a_running_task_has_a_loop() {
+        assert!(Phase::Started.is_live());
+        assert!(!Phase::Finished.is_live());
+        assert!(!Phase::Failed.is_live());
+        assert!(!Phase::Interrupted.is_live());
+    }
+
+    #[test]
+    fn a_finished_download_is_not_retried_in_place() {
+        // Asking again after a finished download must start a new file: resuming the old
+        // one would leave a row claiming to download something already complete.
+        assert!(!Phase::Finished.is_retryable());
+        assert_eq!(retry_phase(Phase::Finished), Phase::Finished);
+        assert_eq!(retry_phase(Phase::Failed), Phase::Started);
+        assert_eq!(retry_phase(Phase::Interrupted), Phase::Started);
+    }
+
+    #[test]
+    fn unknown_text_reads_as_failed() {
+        assert_eq!(Phase::parse("interrupted"), Phase::Interrupted);
+        assert_eq!(Phase::parse("finished"), Phase::Finished);
+        assert_eq!(Phase::parse("something else"), Phase::Failed);
+        assert_eq!(Phase::parse(""), Phase::Failed);
+    }
+
+    #[test]
+    fn every_phase_survives_a_round_trip() {
+        for phase in [
+            Phase::Started,
+            Phase::Interrupted,
+            Phase::Finished,
+            Phase::Failed,
+        ] {
+            assert_eq!(Phase::parse(phase.as_str()), phase);
+        }
     }
 }

@@ -608,7 +608,9 @@ fn mark_paused(app: &AppHandle, state: &AppState, id: u64, paused: bool) {
         let mut tasks = state.downloads.write().unwrap_or_else(|e| e.into_inner());
         if let Some(task) = tasks.iter_mut().find(|task| task.id == id) {
             task.paused = paused;
-            task.state = if paused { "interrupted" } else { "started" }.to_string();
+            task.state = crate::downloads::Phase::after_pause(paused)
+                .as_str()
+                .to_string();
             if paused {
                 task.speed = 0;
             }
