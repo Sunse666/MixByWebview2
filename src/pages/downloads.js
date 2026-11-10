@@ -97,7 +97,7 @@ async function boot() {
       if (task.state === "started" && task.speed) parts.push(size(task.speed) + "/s");
       state.textContent = parts.join(" · ");
 
-      if (task.state === "started") {
+      if (task.state === "started" || task.state === "interrupted") {
         const pause = document.createElement("button");
         pause.className = "button";
         pause.textContent = t(task.paused ? "Resume" : "Pause");

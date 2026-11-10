@@ -753,7 +753,7 @@ async function bootDownloads() {
       text.append(name, meta);
       row.append(text);
 
-      if (task.state === "started") {
+      if (task.state === "started" || task.state === "interrupted") {
         const pause = document.createElement("button");
         pause.className = "download-action";
         pause.textContent = task.paused ? t("Resume") : t("Pause");

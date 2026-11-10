@@ -562,6 +562,13 @@ pub async fn download_pause(
             let mut tasks = state.downloads.write().unwrap_or_else(|e| e.into_inner());
             if let Some(task) = tasks.iter_mut().rev().find(|task| task.url == url) {
                 task.paused = paused;
+                // Resuming gives the transfer back its running state; pausing leaves it
+                // resumable rather than finished, whatever the browser reported in between.
+                task.state = if paused {
+                    "interrupted".to_string()
+                } else {
+                    "started".to_string()
+                };
                 if paused {
                     task.speed = 0;
                 }

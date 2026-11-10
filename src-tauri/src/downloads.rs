@@ -224,7 +224,15 @@ fn record(app: &tauri::AppHandle, url: Option<&str>, path: Option<&Path>, state:
                     .iter()
                     .rposition(|task| Some(task.url.as_str()) == url && task.state == "started");
                 if let Some(index) = target {
-                    tasks[index].state = state.to_string();
+                    // Pausing makes the browser report the transfer as not successful. It is
+                    // interrupted, not failed, and it keeps its resume button - marking it
+                    // failed is what made the download look broken and unresumable.
+                    let interrupted = tasks[index].paused && state != "finished";
+                    tasks[index].state = if interrupted {
+                        "interrupted".to_string()
+                    } else {
+                        state.to_string()
+                    };
                     if let Some(path) = path {
                         tasks[index].path = path.display().to_string();
                         tasks[index].file_name = file_name(path);
@@ -252,7 +260,10 @@ pub fn start_progress_watch(app: tauri::AppHandle) {
         let mut changed = false;
         let tasks = {
             let mut tasks = state.downloads.write().unwrap_or_else(|e| e.into_inner());
-            for task in tasks.iter_mut().filter(|task| task.state == "started") {
+            for task in tasks
+                .iter_mut()
+                .filter(|task| task.state == "started" || task.state == "interrupted")
+            {
                 let size = std::fs::metadata(&task.path).map(|meta| meta.len()).unwrap_or(0);
                 if size != task.bytes {
                     // The poll runs every 500 ms, so the difference is a rate over half a
