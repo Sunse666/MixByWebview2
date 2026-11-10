@@ -517,6 +517,7 @@ pub async fn ui_log(message: String) -> Result<(), AppError> {
 /// DownloadOperation answers only from that thread - anywhere else it returns
 /// RPC_E_WRONG_THREAD (0x802A000C) and the call is dropped, which is what made pause and
 /// cancel look like they worked while the file kept growing.
+#[allow(dead_code)]
 fn on_main<T: Send + 'static>(
     app: &AppHandle,
     run: impl FnOnce() -> T + Send + 'static,
@@ -537,63 +538,27 @@ pub async fn download_pause(
     id: u64,
     paused: bool,
 ) -> Result<bool, AppError> {
-    // The internal engine decides between chunks, so a pause is a flag it reads.
-    if crate::fetch::knows(id) {
-        if paused {
-            return Ok(crate::fetch::pause(id));
-        }
-        return Ok(crate::fetch::resume(app, id));
-    }
-    let url = task_url(&state, id);
-    let Some(url) = url else {
-        return Err(AppError::new("bad_download", "unknown download"));
+    // Every download belongs to the engine now: a pause is a flag its loop reads between
+    // chunks, so it takes effect instead of being accepted and ignored.
+    let _ = &state;
+    let ok = if paused {
+        crate::fetch::pause(id)
+    } else {
+        crate::fetch::resume(app, id)
     };
-    let target = url.clone();
-    let outcome = on_main(&app, move || {
-        if paused {
-            crate::downloads::ops::pause(&target)
-        } else {
-            crate::downloads::ops::resume(&target)
-        }
-    })
-    .unwrap_or_else(|| Err("the browser did not answer".to_string()));
-    let ok = outcome.is_ok();
-    match &outcome {
-        Ok(state) => crate::logging::info(&format!(
-            "download {} ok while {state}",
-            if paused { "pause" } else { "resume" }
-        )),
-        Err(err) => crate::logging::warn(&format!(
-            "download {} failed: {err}",
-            if paused { "pause" } else { "resume" }
-        )),
-    }
-    mark_paused(&app, &state, id, paused);
+    crate::logging::info(&format!(
+        "download {id} {}{}{}",
+        if paused { "pause" } else { "resume" },
+        ": ",
+        ok
+    ));
     Ok(ok)
 }
 
 /// Cancels a download, whichever engine owns it.
 #[tauri::command]
-pub async fn download_cancel(app: AppHandle, state: State<'_, AppState>, id: u64) -> Result<bool, AppError> {
-    if crate::fetch::knows(id) {
-        return Ok(crate::fetch::cancel(id));
-    }
-    let Some(url) = task_url(&state, id) else {
-        return Err(AppError::new("bad_download", "unknown download"));
-    };
-    let target = url.clone();
-    let outcome = on_main(&app, move || crate::downloads::ops::cancel(&target))
-        .unwrap_or_else(|| Err("the browser did not answer".to_string()));
-    match outcome {
-        Ok(state) => {
-            crate::logging::info(&format!("download cancel ok while {state}"));
-            Ok(true)
-        }
-        Err(err) => {
-            crate::logging::warn(&format!("download cancel failed: {err}"));
-            Ok(false)
-        }
-    }
+pub async fn download_cancel(_app: AppHandle, id: u64) -> Result<bool, AppError> {
+    Ok(crate::fetch::cancel(id))
 }
 
 /// Fetches this download again with the internal engine.
@@ -618,10 +583,12 @@ fn task_parts(state: &AppState, id: u64) -> Option<(String, String)> {
         .map(|task| (task.url.clone(), task.path.clone()))
 }
 
+#[allow(dead_code)]
 fn task_url(state: &AppState, id: u64) -> Option<String> {
     task_parts(state, id).map(|(url, _)| url)
 }
 
+#[allow(dead_code)]
 fn mark_paused(app: &AppHandle, state: &AppState, id: u64, paused: bool) {
     let tasks = {
         let mut tasks = state.downloads.write().unwrap_or_else(|e| e.into_inner());

@@ -22,6 +22,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 use tauri::Emitter;
 
 /// One transfer, whether it is running, paused or finished.
+#[allow(dead_code)]
 pub struct Job {
     pub id: u64,
     pub url: String,
@@ -207,6 +208,7 @@ pub fn cancel(id: u64) -> bool {
 }
 
 /// True when this id belongs to the internal engine rather than the webview's.
+#[allow(dead_code)]
 pub fn knows(id: u64) -> bool {
     jobs().lock().map(|map| map.contains_key(&id)).unwrap_or(false)
 }

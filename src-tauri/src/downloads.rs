@@ -29,6 +29,7 @@ static NEXT_ID: AtomicU64 = AtomicU64::new(1);
 /// the only handle with Pause/Resume/Cancel on it. The webview builder's own callback only
 /// reports that a download began, which is why the list could show progress but not stop it.
 #[cfg(windows)]
+#[allow(dead_code)]
 pub mod ops {
     use std::collections::HashMap;
     use std::sync::{Mutex, OnceLock};
@@ -36,7 +37,26 @@ pub mod ops {
         ICoreWebView2DownloadOperation, ICoreWebView2_4,
     };
     use webview2_com::DownloadStartingEventHandler;
+    use tauri::Manager;
     use windows_core::{Interface, PWSTR};
+
+    /// The file name the browser would have used, taken from its chosen path.
+    fn suggested_name(
+        args: &webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2DownloadStartingEventArgs,
+    ) -> String {
+        let mut path = PWSTR::null();
+        if unsafe { args.ResultFilePath(&mut path) }.is_err() || path.is_null() {
+            return String::new();
+        }
+        unsafe { path.to_string() }
+            .ok()
+            .and_then(|text| {
+                std::path::Path::new(&text)
+                    .file_name()
+                    .map(|name| name.to_string_lossy().to_string())
+            })
+            .unwrap_or_default()
+    }
 
     /// COM interfaces from one webview are usable from the threads that ask about them;
     /// the map is behind a mutex, so the only thing being asserted is that the interface
@@ -70,20 +90,42 @@ pub mod ops {
 
     /// Attaches the handler that keeps a handle on every download this page starts.
     pub fn watch(webview: &tauri::Webview) {
+        // Hand every download to the internal engine instead of steering the webview's own.
+        // Its Pause is accepted and ignored while a transfer starts and refused once paused,
+        // which is what made the controls unreliable; the engine pauses by not reading.
+        let Some(state) = webview.app_handle().try_state::<crate::ipc::AppState>() else {
+            return;
+        };
+        let app = webview.app_handle().clone();
+        let downloads = state.dirs.downloads.clone();
         // The handler is built inside the closure: it holds a COM pointer and is not Send,
         // and WebView2 keeps its own reference once the event is hooked up.
-        let _ = webview.with_webview(|platform| unsafe {
+        let _ = webview.with_webview(move |platform| unsafe {
             let controller = platform.controller();
             let Ok(core) = controller.CoreWebView2() else {
                 return;
             };
+            let app = app.clone();
+            let downloads = downloads.clone();
             let handler = DownloadStartingEventHandler::create(Box::new(move |_sender, args| {
-                if let Some(args) = args {
-                    let key = remember(&args);
-                if let Some(key) = key {
-                    crate::logging::info(&format!("download operation: {key}"));
+                let Some(args) = args else {
+                    return Ok(());
+                };
+                let Ok(operation) = args.DownloadOperation() else {
+                    return Ok(());
+                };
+                let mut uri = PWSTR::null();
+                if operation.Uri(&mut uri).is_err() || uri.is_null() {
+                    return Ok(());
                 }
-                }
+                let Ok(url) = uri.to_string() else {
+                    return Ok(());
+                };
+                let suggested = suggested_name(&args);
+                let target = crate::downloads::target_for(&downloads, &url, &suggested);
+                let _ = args.SetCancel(true);
+                crate::logging::info(&format!("download via engine: {}", target.display()));
+                crate::downloads::start_with_engine(&app, &url, &target);
                 Ok(())
             }));
             if let Ok(core) = core.cast::<ICoreWebView2_4>() {
@@ -170,6 +212,7 @@ pub mod ops {
 }
 
 #[cfg(not(windows))]
+#[allow(dead_code)]
 pub mod ops {
     pub fn watch(_webview: &tauri::Webview) {}
     pub fn pause(_url: &str) -> Result<String, String> {
