@@ -120,16 +120,50 @@ pub mod ops {
         }
     }
 
+    /// Pauses, and says whether it took effect.
+    ///
+    /// The call itself succeeds even when nothing changes - a pause requested before the
+    /// transfer has started is accepted and then ignored - so the state is read back until
+    /// it says interrupted. That is the difference between "paused" and "we asked".
     pub fn pause(url: &str) -> Result<String, String> {
-        with_op(url, |operation| unsafe { operation.Pause() })
+        for _ in 0..10 {
+            let state = with_op(url, |operation| unsafe { operation.Pause() })?;
+            if state == "interrupted" || state == "completed" {
+                return Ok(state);
+            }
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            let now = state_of(url)?;
+            if now == "interrupted" || now == "completed" {
+                return Ok(now);
+            }
+        }
+        Err(format!("still {} after pausing", state_of(url)?))
     }
 
     pub fn resume(url: &str) -> Result<String, String> {
-        with_op(url, |operation| unsafe { operation.Resume() })
+        let state = with_op(url, |operation| unsafe { operation.Resume() })?;
+        Ok(state)
     }
 
+    /// Cancels, resuming first when the transfer is paused.
+    ///
+    /// A paused operation refuses Cancel - it is mid-transition as far as the browser is
+    /// concerned - so it is nudged back to running and then cancelled.
     pub fn cancel(url: &str) -> Result<String, String> {
-        with_op(url, |operation| unsafe { operation.Cancel() })
+        let state = state_of(url)?;
+        if state == "interrupted" {
+            let _ = with_op(url, |operation| unsafe { operation.Resume() });
+            std::thread::sleep(std::time::Duration::from_millis(120));
+        }
+        match with_op(url, |operation| unsafe { operation.Cancel() }) {
+            Ok(state) => Ok(state),
+            Err(err) => Err(err),
+        }
+    }
+
+    /// The state the browser reports for this operation.
+    pub fn state_of(url: &str) -> Result<String, String> {
+        with_op(url, |_| Ok(()))
     }
 }
 
@@ -143,6 +177,9 @@ pub mod ops {
         Err("not supported on this platform".into())
     }
     pub fn cancel(_url: &str) -> Result<String, String> {
+        Err("not supported on this platform".into())
+    }
+    pub fn state_of(_url: &str) -> Result<String, String> {
         Err("not supported on this platform".into())
     }
 }
