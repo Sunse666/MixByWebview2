@@ -344,9 +344,42 @@ pub fn set_state(app: &tauri::AppHandle, id: u64, next: &str) {
 }
 
 /// Starts a transfer with the internal engine and records it as a task.
+///
+/// One task per file: a retry, or a second DownloadStarting for the same download after a
+/// redirect, takes over the existing row instead of adding another that writes the same
+/// file - two loops appending to one file is how a download reports 113 MB/s and still ends
+/// up corrupt.
 pub fn start_with_engine(app: &tauri::AppHandle, url: &str, path: &Path) -> u64 {
-    let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
-    record_into(app, id, url, path);
+    let existing = {
+        let Some(state) = app.try_state::<AppState>() else {
+            return 0;
+        };
+        let tasks = state.downloads.read().unwrap_or_else(|e| e.into_inner());
+        tasks
+            .iter()
+            .rev()
+            .find(|task| task.path == path.display().to_string() && task.url == url)
+            .map(|task| task.id)
+    };
+    let id = match existing {
+        Some(id) => {
+            crate::logging::info(&format!("download {id} restarted for {}", path.display()));
+            set_state(app, id, "started");
+            id
+        }
+        None => {
+            let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
+            record_into(app, id, url, path);
+            id
+        }
+    };
+    if !crate::fetch::claim(path) {
+        crate::logging::warn(&format!(
+            "download {id}: {} is already being written",
+            path.display()
+        ));
+        return id;
+    }
     crate::fetch::start(app.clone(), id, url.to_string(), path.to_path_buf());
     id
 }

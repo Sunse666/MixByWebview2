@@ -36,6 +36,32 @@ pub struct Job {
     cancelled: Arc<AtomicBool>,
 }
 
+/// Files a transfer is currently writing, so two loops can never share one.
+fn claimed() -> &'static Mutex<std::collections::HashSet<String>> {
+    static CLAIMED: OnceLock<Mutex<std::collections::HashSet<String>>> = OnceLock::new();
+    CLAIMED.get_or_init(|| Mutex::new(std::collections::HashSet::new()))
+}
+
+/// Takes ownership of a file for one transfer, replacing any earlier claim. A redirect can make the webview ask twice
+/// for the same download, and two loops appending to one file report double the speed and
+/// leave a corrupt result.
+pub fn claim(path: &std::path::Path) -> bool {
+    let key = path.to_string_lossy().to_string();
+    claimed().lock().map(|mut set| set.insert(key)).unwrap_or(false)
+}
+
+/// Gives the file back when its transfer is over, so the next attempt can take it.
+pub fn unclaim(path: &std::path::Path) {
+    release(path);
+}
+
+fn release(path: &std::path::Path) {
+    let key = path.to_string_lossy().to_string();
+    if let Ok(mut set) = claimed().lock() {
+        set.remove(&key);
+    }
+}
+
 fn jobs() -> &'static Mutex<HashMap<u64, Job>> {
     static JOBS: OnceLock<Mutex<HashMap<u64, Job>>> = OnceLock::new();
     JOBS.get_or_init(|| Mutex::new(HashMap::new()))
@@ -78,6 +104,7 @@ pub fn start(app: tauri::AppHandle, id: u64, url: String, path: std::path::PathB
             .build();
         let Ok(client) = client else {
             crate::downloads::set_state(&app, id, "failed");
+                release(&path);
             return;
         };
 
@@ -93,12 +120,14 @@ pub fn start(app: tauri::AppHandle, id: u64, url: String, path: std::path::PathB
                 Err(err) => {
                     crate::logging::warn(&format!("fetch {id} failed: {err}"));
                     crate::downloads::set_state(&app, id, "failed");
+                release(&path);
                     return;
                 }
             };
             if !response.status().is_success() {
                 crate::logging::warn(&format!("fetch {id}: http {}", response.status()));
                 crate::downloads::set_state(&app, id, "failed");
+                release(&path);
                 return;
             }
             let total = response.content_length().map(|length| length + offset);
@@ -115,6 +144,7 @@ pub fn start(app: tauri::AppHandle, id: u64, url: String, path: std::path::PathB
                 Err(err) => {
                     crate::logging::warn(&format!("fetch {id}: cannot write {}: {err}", path.display()));
                     crate::downloads::set_state(&app, id, "failed");
+                release(&path);
                     return;
                 }
             };
@@ -130,6 +160,7 @@ pub fn start(app: tauri::AppHandle, id: u64, url: String, path: std::path::PathB
                     drop(file);
                     let _ = std::fs::remove_file(&path);
                     crate::downloads::set_state(&app, id, "failed");
+                release(&path);
                     return;
                 }
                 if paused.load(Ordering::Relaxed) || !running.load(Ordering::Relaxed) {
@@ -142,6 +173,7 @@ pub fn start(app: tauri::AppHandle, id: u64, url: String, path: std::path::PathB
                 if let Err(err) = file.write_all(&chunk) {
                     crate::logging::warn(&format!("fetch {id}: write failed: {err}"));
                     crate::downloads::set_state(&app, id, "failed");
+                release(&path);
                     return;
                 }
                 written += chunk.len() as u64;
@@ -189,6 +221,8 @@ pub fn resume(app: tauri::AppHandle, id: u64) -> bool {
             None => return false,
         }
     };
+    // The file is still claimed from the paused transfer; taking it again is the point.
+    unclaim(&path);
     start(app, id, url, path);
     true
 }

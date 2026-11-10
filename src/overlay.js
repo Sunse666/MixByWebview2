@@ -726,7 +726,19 @@ async function bootDownloads() {
 
   const paint = (tasks) => {
     list.replaceChildren();
-    const recent = (tasks || []).slice(-8).reverse();
+    // One row per file: a retry, or a redirect that asked twice, used to leave several
+    // rows writing the same download.
+    const seen = new Set();
+    const recent = (tasks || [])
+      .slice()
+      .reverse()
+      .filter((task) => {
+        const key = task.path || task.url;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .slice(0, 8);
     if (!recent.length) {
       const empty = document.createElement("div");
       empty.className = "download-empty";
