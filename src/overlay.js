@@ -728,17 +728,17 @@ async function bootDownloads() {
     list.replaceChildren();
     // One row per file: a retry, or a redirect that asked twice, used to leave several
     // rows writing the same download.
-    const seen = new Set();
-    const recent = (tasks || [])
-      .slice()
-      .reverse()
-      .filter((task) => {
-        const key = task.path || task.url;
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      })
-      .slice(0, 8);
+    // One row per download: a retry continues the same transfer, so the list should not
+    // show the failed attempt and the running one as two things.
+    const seen = new Map();
+    for (const task of tasks || []) {
+      const key = task.url;
+      const rank = (entry) =>
+        entry.state === "started" ? 3 : entry.state === "interrupted" ? 2 : 1;
+      const held = seen.get(key);
+      if (!held || rank(task) >= rank(held)) seen.set(key, task);
+    }
+    const recent = [...seen.values()].slice(-8).reverse();
     if (!recent.length) {
       const empty = document.createElement("div");
       empty.className = "download-empty";

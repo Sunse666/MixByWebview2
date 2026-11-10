@@ -389,6 +389,10 @@ pub fn set_state(app: &tauri::AppHandle, id: u64, next: &str) {
 /// file - two loops appending to one file is how a download reports 113 MB/s and still ends
 /// up corrupt.
 pub fn start_with_engine(app: &tauri::AppHandle, url: &str, path: &Path) -> u64 {
+    // A download that failed or was interrupted is *the same download*: its row and its
+    // partial file are reused, so the list keeps one line per download and the bytes
+    // already on disk are the resume point. Only a finished one starts anew, under the
+    // next free name.
     let existing = {
         let Some(state) = app.try_state::<AppState>() else {
             return 0;
@@ -397,21 +401,26 @@ pub fn start_with_engine(app: &tauri::AppHandle, url: &str, path: &Path) -> u64 
         tasks
             .iter()
             .rev()
-            .find(|task| task.path == path.display().to_string() && task.url == url)
-            .map(|task| task.id)
+            .find(|task| task.url == url && (task.state == "failed" || task.state == "interrupted"))
+            .map(|task| (task.id, task.path.clone()))
     };
-    let id = match existing {
-        Some(id) => {
-            crate::logging::info(&format!("download {id} restarted for {}", path.display()));
+    let (id, path) = match existing {
+        Some((id, held)) if !held.is_empty() => {
+            let held = Path::new(&held);
+            crate::logging::info(&format!(
+                "download {id} continued for {}",
+                held.display()
+            ));
             set_state(app, id, "started");
-            id
+            (id, held.to_path_buf())
         }
-        None => {
+        _ => {
             let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
             record_into(app, id, url, path);
-            id
+            (id, path.to_path_buf())
         }
     };
+    let path = path.as_path();
     if !crate::fetch::claim(path) {
         crate::logging::warn(&format!(
             "download {id}: {} is already being written",
