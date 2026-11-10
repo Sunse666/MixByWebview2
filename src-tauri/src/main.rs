@@ -161,6 +161,7 @@ fn main() {
             ipc::download_cancel,
             ipc::download_reveal,
             ipc::download_retry,
+            ipc::download_reconcile,
             ipc::script_set_enabled,
             ipc::script_remove,
             ipc::script_list,

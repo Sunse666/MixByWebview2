@@ -103,7 +103,8 @@ async function boot() {
       if (task.state === "started" || task.state === "interrupted") {
         const pause = document.createElement("button");
         pause.className = "button";
-        pause.textContent = t(task.paused ? "Resume" : "Pause");
+        pause.textContent =
+          t(task.paused || task.state === "interrupted" ? "Resume" : "Pause");
         pause.addEventListener("click", async () => {
           await invoke("download_pause", { id: task.id, paused: !task.paused }).catch(() => {});
         });

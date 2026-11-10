@@ -278,6 +278,14 @@ pub fn cancel(id: u64) -> bool {
     }
 }
 
+/// True when a loop for this id is alive right now.
+pub fn busy(id: u64) -> bool {
+    jobs()
+        .lock()
+        .map(|map| map.get(&id).map(|job| job.active.load(Ordering::Relaxed)).unwrap_or(false))
+        .unwrap_or(false)
+}
+
 /// True when this id belongs to the internal engine rather than the webview's.
 #[allow(dead_code)]
 pub fn knows(id: u64) -> bool {

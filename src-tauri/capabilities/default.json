@@ -25,6 +25,7 @@
     "allow-download-pause",
     "allow-download-cancel",
     "allow-download-retry",
+    "allow-download-reconcile",
     "allow-window-control",
     "allow-window-drag",
     "allow-window-resize",

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-download-reconcile"
+description = "Enables the download_reconcile command without any pre-configured scope."
+commands.allow = ["download_reconcile"]
+
+[[permission]]
+identifier = "deny-download-reconcile"
+description = "Disables the download_reconcile command without any pre-configured scope."
+commands.deny = ["download_reconcile"]

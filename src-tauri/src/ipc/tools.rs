@@ -575,6 +575,13 @@ pub async fn download_cancel(_app: AppHandle, id: u64) -> Result<bool, AppError>
 /// while the transfer is starting, and refused once it is paused. The engine reads a flag
 /// between chunks, so retrying through it gives working controls.
 #[tauri::command]
+pub async fn download_reconcile(app: AppHandle) -> Result<(), AppError> {
+    crate::downloads::reconcile(&app);
+    Ok(())
+}
+
+/// Fetches this download again with the engine, from whatever is on disk.
+#[tauri::command]
 pub async fn download_retry(app: AppHandle, state: State<'_, AppState>, id: u64) -> Result<u64, AppError> {
     let Some((url, path)) = task_parts(&state, id) else {
         return Err(AppError::new("bad_download", "unknown download"));

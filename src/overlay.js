@@ -732,7 +732,9 @@ async function bootDownloads() {
     // show the failed attempt and the running one as two things.
     const seen = new Map();
     for (const task of tasks || []) {
-      const key = task.url;
+      // By file, not by url: a signed download link changes between attempts, so the same
+      // download arrives with a different url every time it is retried.
+      const key = task.path || task.url;
       const rank = (entry) =>
         entry.state === "started" ? 3 : entry.state === "interrupted" ? 2 : 1;
       const held = seen.get(key);
@@ -782,7 +784,8 @@ async function bootDownloads() {
       if (task.state === "started" || task.state === "interrupted") {
         const pause = document.createElement("button");
         pause.className = "download-action";
-        pause.textContent = task.paused ? t("Resume") : t("Pause");
+        pause.textContent =
+          task.paused || task.state === "interrupted" ? t("Resume") : t("Pause");
         pause.addEventListener("click", () => {
           invoke("download_pause", { id: task.id, paused: !task.paused }).catch(() => {});
         });
@@ -818,6 +821,9 @@ async function bootDownloads() {
     }
   };
 
+  // Rows that claim to be running when their loop is gone become paused rows before the
+  // first paint, so the panel never shows a download stuck at nothing.
+  await invoke("download_reconcile").catch(() => {});
   paint(await invoke("download_list").catch(() => []));
   listen("download:changed", (event) => paint(event.payload)).catch(() => {});
 }

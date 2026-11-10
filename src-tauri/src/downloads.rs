@@ -302,6 +302,30 @@ pub fn load_history(dirs: &crate::paths::AppDirs) -> Vec<DownloadTask> {
     tasks
 }
 
+
+/// Marks rows that claim to be running when nothing is.
+///
+/// A loop can end without its row hearing about it - a failed claim, an aborted task, a
+/// download started before the engine took over. Those rows sat at "downloading" with no
+/// progress and no way back, so they are turned into interrupted ones, which can be resumed.
+pub fn reconcile(app: &tauri::AppHandle) {
+    let Some(state) = app.try_state::<AppState>() else {
+        return;
+    };
+    let stale: Vec<u64> = {
+        let tasks = state.downloads.read().unwrap_or_else(|e| e.into_inner());
+        tasks
+            .iter()
+            .filter(|task| task.state == "started" && !crate::fetch::busy(task.id))
+            .map(|task| task.id)
+            .collect()
+    };
+    for id in stale {
+        crate::logging::info(&format!("download {id} was not actually running"));
+        set_state(app, id, "interrupted");
+    }
+}
+
 /// The task for this id, if it still exists.
 fn task_index(app: &tauri::AppHandle, id: u64) -> Option<usize> {
     let state = app.try_state::<AppState>()?;
