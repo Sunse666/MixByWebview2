@@ -512,7 +512,24 @@ pub async fn ui_log(message: String) -> Result<(), AppError> {
     Ok(())
 }
 
-/// Pauses or resumes the download writing to this path.
+/// Runs a COM call on the thread that created the webview.
+///
+/// DownloadOperation answers only from that thread - anywhere else it returns
+/// RPC_E_WRONG_THREAD (0x802A000C) and the call is dropped, which is what made pause and
+/// cancel look like they worked while the file kept growing.
+fn on_main<T: Send + 'static>(
+    app: &AppHandle,
+    run: impl FnOnce() -> T + Send + 'static,
+) -> Option<T> {
+    let (sender, receiver) = std::sync::mpsc::channel();
+    app.run_on_main_thread(move || {
+        let _ = sender.send(run());
+    })
+    .ok()?;
+    receiver.recv_timeout(std::time::Duration::from_secs(4)).ok()
+}
+
+/// Pauses or resumes a running download.
 #[tauri::command]
 pub async fn download_pause(
     app: AppHandle,
@@ -520,12 +537,26 @@ pub async fn download_pause(
     url: String,
     paused: bool,
 ) -> Result<bool, AppError> {
-    let outcome = if paused {
-        crate::downloads::ops::pause(&url)
-    } else {
-        crate::downloads::ops::resume(&url)
-    };
+    let target = url.clone();
+    let outcome = on_main(&app, move || {
+        if paused {
+            crate::downloads::ops::pause(&target)
+        } else {
+            crate::downloads::ops::resume(&target)
+        }
+    })
+    .unwrap_or_else(|| Err("the browser did not answer".to_string()));
     let ok = outcome.is_ok();
+    match &outcome {
+        Ok(state) => crate::logging::info(&format!(
+            "download {} ok while {state}",
+            if paused { "pause" } else { "resume" }
+        )),
+        Err(err) => crate::logging::warn(&format!(
+            "download {} failed: {err}",
+            if paused { "pause" } else { "resume" }
+        )),
+    }
     if ok {
         let tasks = {
             let mut tasks = state.downloads.write().unwrap_or_else(|e| e.into_inner());
@@ -539,23 +570,16 @@ pub async fn download_pause(
         };
         let _ = app.emit("download:changed", tasks);
     }
-    match &outcome {
-        Ok(state) => crate::logging::info(&format!(
-            "download {} ok while {state}",
-            if paused { "pause" } else { "resume" }
-        )),
-        Err(err) => crate::logging::warn(&format!(
-            "download {} failed: {err}",
-            if paused { "pause" } else { "resume" }
-        )),
-    }
     Ok(ok)
 }
 
-/// Cancels the download writing to this path.
+/// Cancels a running download.
 #[tauri::command]
-pub async fn download_cancel(url: String) -> Result<bool, AppError> {
-    match crate::downloads::ops::cancel(&url) {
+pub async fn download_cancel(app: AppHandle, url: String) -> Result<bool, AppError> {
+    let target = url.clone();
+    let outcome = on_main(&app, move || crate::downloads::ops::cancel(&target))
+        .unwrap_or_else(|| Err("the browser did not answer".to_string()));
+    match outcome {
         Ok(state) => {
             crate::logging::info(&format!("download cancel ok while {state}"));
             Ok(true)
