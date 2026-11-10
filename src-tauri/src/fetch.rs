@@ -19,7 +19,7 @@ use std::io::Write;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 
-use tauri::Emitter;
+
 
 /// One transfer, whether it is running, paused or finished.
 #[allow(dead_code)]
@@ -34,6 +34,11 @@ pub struct Job {
     paused: Arc<AtomicBool>,
     /// Set when the file is no longer wanted, partial file and all.
     cancelled: Arc<AtomicBool>,
+    /// True while a loop is actually running. Resuming while one is alive must nudge it,
+    /// not start a second - two loops on one file is what put two progress rows on screen.
+    active: Arc<AtomicBool>,
+    /// The loop, so a pause can stop it at the next await rather than after the next chunk.
+    handle: Option<tauri::async_runtime::JoinHandle<()>>,
 }
 
 /// Files a transfer is currently writing, so two loops can never share one.
@@ -73,6 +78,22 @@ pub fn start(app: tauri::AppHandle, id: u64, url: String, path: std::path::PathB
     let paused = Arc::new(AtomicBool::new(false));
     let cancelled = Arc::new(AtomicBool::new(false));
 
+    // Already running: clear the pause and let the live loop carry on. Starting a second
+    // loop here is what produced two progress rows for one download.
+    {
+        let Ok(map) = jobs().lock() else {
+            return;
+        };
+        if let Some(job) = map.get(&id) {
+            if job.active.load(Ordering::Relaxed) {
+                job.paused.store(false, Ordering::Relaxed);
+                job.cancelled.store(false, Ordering::Relaxed);
+                return;
+            }
+        }
+    }
+
+    let active = Arc::new(AtomicBool::new(true));
     {
         let Ok(mut map) = jobs().lock() else {
             return;
@@ -81,6 +102,7 @@ pub fn start(app: tauri::AppHandle, id: u64, url: String, path: std::path::PathB
             job.running = running.clone();
             job.paused = paused.clone();
             job.cancelled = cancelled.clone();
+            job.active = active.clone();
         } else {
             map.insert(
                 id,
@@ -92,12 +114,15 @@ pub fn start(app: tauri::AppHandle, id: u64, url: String, path: std::path::PathB
                     running: running.clone(),
                     paused: paused.clone(),
                     cancelled: cancelled.clone(),
+                    active: active.clone(),
+                    handle: None,
                 },
             );
         }
     }
 
-    tauri::async_runtime::spawn(async move {
+    let active_guard = active.clone();
+    let handle = tauri::async_runtime::spawn(async move {
         let client = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(600))
             .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) Mix")
@@ -190,20 +215,32 @@ pub fn start(app: tauri::AppHandle, id: u64, url: String, path: std::path::PathB
             drop(file);
             crate::downloads::set_progress(&app, id, written, 0);
             crate::downloads::set_state(&app, id, "finished");
-            let _ = app.emit("download:changed", Vec::<serde_json::Value>::new());
+            release(&path);
+            active_guard.store(false, Ordering::Relaxed);
             return;
         }
     });
+    if let Ok(mut map) = jobs().lock() {
+        if let Some(job) = map.get_mut(&id) {
+            job.handle = Some(handle);
+        }
+    }
 }
 
 /// Stops the loop but keeps the bytes, so it can be resumed.
 pub fn pause(id: u64) -> bool {
-    let Ok(map) = jobs().lock() else {
+    let Ok(mut map) = jobs().lock() else {
         return false;
     };
-    match map.get(&id) {
+    match map.get_mut(&id) {
         Some(job) => {
             job.paused.store(true, Ordering::Relaxed);
+            // Abort rather than wait: a chunk read can be in flight for seconds, and a
+            // pause that only lands after the next chunk is a pause that does not work.
+            if let Some(handle) = job.handle.take() {
+                handle.abort();
+            }
+            job.active.store(false, Ordering::Relaxed);
             true
         }
         None => false,

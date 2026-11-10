@@ -544,8 +544,16 @@ pub async fn download_pause(
     let ok = if paused {
         crate::fetch::pause(id)
     } else {
-        crate::fetch::resume(app, id)
+        crate::fetch::resume(app.clone(), id)
     };
+    if ok {
+        // The row changes the moment the button is pressed, rather than waiting for the
+        // transfer to notice - a pause that looks delayed is a pause nobody trusts.
+        let state = app.try_state::<AppState>();
+        if let Some(state) = state.as_ref() {
+            mark_paused(&app, state, id, paused);
+        }
+    }
     crate::logging::info(&format!(
         "download {id} {}{}{}",
         if paused { "pause" } else { "resume" },
@@ -588,7 +596,6 @@ fn task_url(state: &AppState, id: u64) -> Option<String> {
     task_parts(state, id).map(|(url, _)| url)
 }
 
-#[allow(dead_code)]
 fn mark_paused(app: &AppHandle, state: &AppState, id: u64, paused: bool) {
     let tasks = {
         let mut tasks = state.downloads.write().unwrap_or_else(|e| e.into_inner());
