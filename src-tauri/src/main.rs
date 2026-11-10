@@ -10,6 +10,7 @@ mod downloads;
 mod ext_live;
 mod extensions;
 mod favicons;
+mod fetch;
 mod ipc;
 mod library;
 mod net;
@@ -159,6 +160,7 @@ fn main() {
             ipc::download_pause,
             ipc::download_cancel,
             ipc::download_reveal,
+            ipc::download_retry,
             ipc::script_set_enabled,
             ipc::script_remove,
             ipc::script_list,

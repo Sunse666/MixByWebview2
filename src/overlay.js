@@ -758,13 +758,13 @@ async function bootDownloads() {
         pause.className = "download-action";
         pause.textContent = task.paused ? t("Resume") : t("Pause");
         pause.addEventListener("click", () => {
-          invoke("download_pause", { url: task.url, paused: !task.paused }).catch(() => {});
+          invoke("download_pause", { id: task.id, paused: !task.paused }).catch(() => {});
         });
         const cancel = document.createElement("button");
         cancel.className = "download-action";
         cancel.textContent = t("Cancel");
         cancel.addEventListener("click", () => {
-          invoke("download_cancel", { url: task.url }).catch(() => {});
+          invoke("download_cancel", { id: task.id }).catch(() => {});
         });
         row.append(pause, cancel);
       } else {
@@ -776,6 +776,17 @@ async function bootDownloads() {
           invoke("overlay_close").catch(() => {});
         });
         row.append(open);
+        // The webview's own download cannot always be steered; a retry through the
+        // internal engine can.
+        if (task.state === "failed" || task.state === "interrupted") {
+          const retry = document.createElement("button");
+          retry.className = "download-action";
+          retry.textContent = t("Download again");
+          retry.addEventListener("click", () => {
+            invoke("download_retry", { id: task.id }).catch(() => {});
+          });
+          row.append(retry);
+        }
       }
       list.append(row);
     }

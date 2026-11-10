@@ -18,6 +18,8 @@ pub struct DownloadTask {
     pub speed: u64,
     /// True while the download operation is paused.
     pub paused: bool,
+    /// Size the server announced, when it did. A percentage needs it.
+    pub total: Option<u64>,
 }
 
 static NEXT_ID: AtomicU64 = AtomicU64::new(1);
@@ -218,6 +220,120 @@ pub fn handle(webview: Webview, event: DownloadEvent<'_>) -> bool {
     }
 }
 
+
+/// The task for this id, if it still exists.
+fn task_index(app: &tauri::AppHandle, id: u64) -> Option<usize> {
+    let state = app.try_state::<AppState>()?;
+    let tasks = state.downloads.read().unwrap_or_else(|e| e.into_inner());
+    tasks.iter().position(|task| task.id == id)
+}
+
+/// Records the size the server announced, which is what makes a percentage possible.
+pub fn set_total(app: &tauri::AppHandle, id: u64, total: Option<u64>) {
+    let Some(index) = task_index(app, id) else {
+        return;
+    };
+    let Some(state) = app.try_state::<AppState>() else {
+        return;
+    };
+    let tasks = {
+        let mut tasks = state.downloads.write().unwrap_or_else(|e| e.into_inner());
+        if let Some(task) = tasks.get_mut(index) {
+            task.total = total;
+        }
+        tasks.clone()
+    };
+    let _ = app.emit("download:changed", tasks);
+}
+
+/// Updates how far a transfer has got and how fast it is going.
+pub fn set_progress(app: &tauri::AppHandle, id: u64, bytes: u64, speed: u64) {
+    let Some(index) = task_index(app, id) else {
+        return;
+    };
+    let Some(state) = app.try_state::<AppState>() else {
+        return;
+    };
+    let mut changed = false;
+    let tasks = {
+        let mut tasks = state.downloads.write().unwrap_or_else(|e| e.into_inner());
+        if let Some(task) = tasks.get_mut(index) {
+            if task.bytes != bytes || task.speed != speed {
+                task.bytes = bytes;
+                task.speed = speed;
+                changed = true;
+            }
+        }
+        tasks.clone()
+    };
+    if changed {
+        let _ = app.emit("download:changed", tasks);
+    }
+}
+
+/// Moves a task to another state, and reports it.
+pub fn set_state(app: &tauri::AppHandle, id: u64, next: &str) {
+    let Some(index) = task_index(app, id) else {
+        return;
+    };
+    let Some(state) = app.try_state::<AppState>() else {
+        return;
+    };
+    let tasks = {
+        let mut tasks = state.downloads.write().unwrap_or_else(|e| e.into_inner());
+        if let Some(task) = tasks.get_mut(index) {
+            task.state = next.to_string();
+            task.paused = next == "interrupted";
+            if next == "finished" {
+                task.bytes = std::fs::metadata(&task.path)
+                    .map(|meta| meta.len())
+                    .unwrap_or(task.bytes);
+                task.total = Some(task.bytes);
+            }
+            if next != "started" {
+                task.speed = 0;
+            }
+        }
+        tasks.clone()
+    };
+    crate::logging::info(&format!("download {id} -> {next}"));
+    let _ = app.emit("download:changed", tasks);
+}
+
+/// Starts a transfer with the internal engine and records it as a task.
+pub fn start_with_engine(app: &tauri::AppHandle, url: &str, path: &Path) -> u64 {
+    let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
+    record_into(app, id, url, path);
+    crate::fetch::start(app.clone(), id, url.to_string(), path.to_path_buf());
+    id
+}
+
+/// Adds a task with an id of the caller's choosing, so the engine and the task agree.
+fn record_into(app: &tauri::AppHandle, id: u64, url: &str, path: &Path) {
+    let Some(state) = app.try_state::<AppState>() else {
+        return;
+    };
+    let tasks = {
+        let mut tasks = state.downloads.write().unwrap_or_else(|e| e.into_inner());
+        tasks.push(DownloadTask {
+            id,
+            url: url.to_string(),
+            file_name: file_name(path),
+            path: path.display().to_string(),
+            state: "started".to_string(),
+            bytes: 0,
+            speed: 0,
+            paused: false,
+            total: None,
+        });
+        if tasks.len() > KEEP {
+            let drop_count = tasks.len() - KEEP;
+            tasks.drain(0..drop_count);
+        }
+        tasks.clone()
+    };
+    let _ = app.emit("download:changed", tasks);
+}
 /// Records a file that we wrote ourselves (image save), so it shows up in the
 /// same list as the webview downloads.
 /// Fills in the byte count for a finished task from the file on disk.
@@ -249,6 +365,7 @@ fn record(app: &tauri::AppHandle, url: Option<&str>, path: Option<&Path>, state:
                     bytes: 0,
                     speed: 0,
                     paused: false,
+                    total: None,
                 });
                 if tasks.len() > KEEP {
                     let drop_count = tasks.len() - KEEP;

@@ -102,13 +102,13 @@ async function boot() {
         pause.className = "button";
         pause.textContent = t(task.paused ? "Resume" : "Pause");
         pause.addEventListener("click", async () => {
-          await invoke("download_pause", { url: task.url, paused: !task.paused }).catch(() => {});
+          await invoke("download_pause", { id: task.id, paused: !task.paused }).catch(() => {});
         });
         const cancel = document.createElement("button");
         cancel.className = "button";
         cancel.textContent = t("Cancel");
         cancel.addEventListener("click", async () => {
-          await invoke("download_cancel", { url: task.url }).catch(() => {});
+          await invoke("download_cancel", { id: task.id }).catch(() => {});
         });
         row.append(name, state, pause, cancel);
         list.append(row);

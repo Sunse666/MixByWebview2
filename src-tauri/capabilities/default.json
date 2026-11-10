@@ -24,6 +24,7 @@
     "allow-tab-focus-any",
     "allow-download-pause",
     "allow-download-cancel",
+    "allow-download-retry",
     "allow-window-control",
     "allow-window-drag",
     "allow-window-resize",

@@ -529,14 +529,25 @@ fn on_main<T: Send + 'static>(
     receiver.recv_timeout(std::time::Duration::from_secs(4)).ok()
 }
 
-/// Pauses or resumes a running download.
+/// Pauses or resumes a download, whichever engine owns it.
 #[tauri::command]
 pub async fn download_pause(
     app: AppHandle,
     state: State<'_, AppState>,
-    url: String,
+    id: u64,
     paused: bool,
 ) -> Result<bool, AppError> {
+    // The internal engine decides between chunks, so a pause is a flag it reads.
+    if crate::fetch::knows(id) {
+        if paused {
+            return Ok(crate::fetch::pause(id));
+        }
+        return Ok(crate::fetch::resume(app, id));
+    }
+    let url = task_url(&state, id);
+    let Some(url) = url else {
+        return Err(AppError::new("bad_download", "unknown download"));
+    };
     let target = url.clone();
     let outcome = on_main(&app, move || {
         if paused {
@@ -557,32 +568,19 @@ pub async fn download_pause(
             if paused { "pause" } else { "resume" }
         )),
     }
-    if ok {
-        let tasks = {
-            let mut tasks = state.downloads.write().unwrap_or_else(|e| e.into_inner());
-            if let Some(task) = tasks.iter_mut().rev().find(|task| task.url == url) {
-                task.paused = paused;
-                // Resuming gives the transfer back its running state; pausing leaves it
-                // resumable rather than finished, whatever the browser reported in between.
-                task.state = if paused {
-                    "interrupted".to_string()
-                } else {
-                    "started".to_string()
-                };
-                if paused {
-                    task.speed = 0;
-                }
-            }
-            tasks.clone()
-        };
-        let _ = app.emit("download:changed", tasks);
-    }
+    mark_paused(&app, &state, id, paused);
     Ok(ok)
 }
 
-/// Cancels a running download.
+/// Cancels a download, whichever engine owns it.
 #[tauri::command]
-pub async fn download_cancel(app: AppHandle, url: String) -> Result<bool, AppError> {
+pub async fn download_cancel(app: AppHandle, state: State<'_, AppState>, id: u64) -> Result<bool, AppError> {
+    if crate::fetch::knows(id) {
+        return Ok(crate::fetch::cancel(id));
+    }
+    let Some(url) = task_url(&state, id) else {
+        return Err(AppError::new("bad_download", "unknown download"));
+    };
     let target = url.clone();
     let outcome = on_main(&app, move || crate::downloads::ops::cancel(&target))
         .unwrap_or_else(|| Err("the browser did not answer".to_string()));
@@ -596,6 +594,47 @@ pub async fn download_cancel(app: AppHandle, url: String) -> Result<bool, AppErr
             Ok(false)
         }
     }
+}
+
+/// Fetches this download again with the internal engine.
+///
+/// The webview's own download cannot always be steered - its pause is accepted and ignored
+/// while the transfer is starting, and refused once it is paused. The engine reads a flag
+/// between chunks, so retrying through it gives working controls.
+#[tauri::command]
+pub async fn download_retry(app: AppHandle, state: State<'_, AppState>, id: u64) -> Result<u64, AppError> {
+    let Some((url, path)) = task_parts(&state, id) else {
+        return Err(AppError::new("bad_download", "unknown download"));
+    };
+    let target = std::path::PathBuf::from(path);
+    Ok(crate::downloads::start_with_engine(&app, &url, &target))
+}
+
+fn task_parts(state: &AppState, id: u64) -> Option<(String, String)> {
+    let tasks = state.downloads.read().unwrap_or_else(|e| e.into_inner());
+    tasks
+        .iter()
+        .find(|task| task.id == id)
+        .map(|task| (task.url.clone(), task.path.clone()))
+}
+
+fn task_url(state: &AppState, id: u64) -> Option<String> {
+    task_parts(state, id).map(|(url, _)| url)
+}
+
+fn mark_paused(app: &AppHandle, state: &AppState, id: u64, paused: bool) {
+    let tasks = {
+        let mut tasks = state.downloads.write().unwrap_or_else(|e| e.into_inner());
+        if let Some(task) = tasks.iter_mut().find(|task| task.id == id) {
+            task.paused = paused;
+            task.state = if paused { "interrupted" } else { "started" }.to_string();
+            if paused {
+                task.speed = 0;
+            }
+        }
+        tasks.clone()
+    };
+    let _ = app.emit("download:changed", tasks);
 }
 
 /// A userscript path arrives from the page, so it is resolved and checked

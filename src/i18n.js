@@ -335,6 +335,7 @@ const DICT = {
     "Show all downloads": "查看全部下载",
     "Pause": "暂停",
     "interrupted": "已暂停",
+    "Download again": "用内置下载器重试",
     "Resume": "继续",
     "Cancel": "取消",
     "paused": "已暂停",
