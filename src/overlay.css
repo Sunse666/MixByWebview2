@@ -760,3 +760,16 @@ footer { margin-top: auto; display: flex; justify-content: flex-end; gap: 8px; }
   opacity: 0.6;
   font-size: 12px;
 }
+
+.download-bar {
+  height: 3px;
+  margin-top: 4px;
+  border-radius: 2px;
+  background: rgb(255 255 255 / 12%);
+  overflow: hidden;
+}
+.download-bar-fill {
+  height: 100%;
+  background: var(--accent, #4c8dff);
+  transition: width 200ms linear;
+}

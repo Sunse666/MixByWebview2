@@ -95,6 +95,9 @@ async function boot() {
       if (task.bytes) parts.push(size(task.bytes));
       // A rate only means something while the file is still growing.
       if (task.state === "started" && task.speed) parts.push(size(task.speed) + "/s");
+      if (task.total && task.state !== "finished") {
+        parts.push(Math.min(100, Math.round((task.bytes / task.total) * 100)) + "%");
+      }
       state.textContent = parts.join(" · ");
 
       if (task.state === "started" || task.state === "interrupted") {

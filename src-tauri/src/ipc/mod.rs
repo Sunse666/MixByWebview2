@@ -130,6 +130,7 @@ impl AppState {
         // The loader travels with every tab webview; keeping it in the options means
         // tab creation does not have to reach back into state for it.
         opts.userscripts = scripts_js.clone();
+        let downloads = crate::downloads::load_history(&dirs);
         let history = crate::library::load_visits(&dirs.history_file);
         let bookmarks = crate::library::load_bookmarks(&dirs.bookmarks_file);
         let mut cores = std::collections::HashMap::new();
@@ -160,7 +161,9 @@ impl AppState {
             settings: parking_lot::RwLock::new(settings),
             baseline: parking_lot::RwLock::new(theme.clone()),
             theme: parking_lot::RwLock::new(theme),
-            downloads: RwLock::new(Vec::new()),
+            // The list survives a restart; anything that was running comes back as
+            // interrupted, because a transfer cannot outlive the process but its file can.
+            downloads: RwLock::new(downloads),
             menu_context: RwLock::new(MenuContext::default()),
             overlay: RwLock::new(std::collections::HashMap::new()),
             overlay_from_page: RwLock::new(std::collections::HashMap::new()),

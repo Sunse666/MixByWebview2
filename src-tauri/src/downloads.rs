@@ -1,10 +1,10 @@
 use crate::ipc::AppState;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use tauri::{webview::DownloadEvent, Emitter, Manager, Webview};
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DownloadTask {
     pub id: u64,
     pub url: String,
@@ -264,6 +264,44 @@ pub fn handle(webview: Webview, event: DownloadEvent<'_>) -> bool {
 }
 
 
+
+/// Where the download list is kept between runs.
+fn history_file(dirs: &crate::paths::AppDirs) -> std::path::PathBuf {
+    dirs.root.join("downloads.json")
+}
+
+/// Writes the list, so the downloads page still shows what happened last time.
+pub fn save_history(app: &tauri::AppHandle) {
+    let Some(state) = app.try_state::<AppState>() else {
+        return;
+    };
+    let tasks = state.downloads.read().unwrap_or_else(|e| e.into_inner()).clone();
+    let path = history_file(&state.dirs);
+    if let Ok(bytes) = serde_json::to_vec_pretty(&tasks) {
+        if let Err(err) = crate::paths::write_atomic(&path, &bytes) {
+            crate::logging::warn(&format!("cannot save downloads: {err}"));
+        }
+    }
+}
+
+/// Reads the list back. Anything that was running is shown as interrupted: a transfer
+/// cannot survive a restart, but the file and the row can, and the row can be resumed.
+pub fn load_history(dirs: &crate::paths::AppDirs) -> Vec<DownloadTask> {
+    let Ok(text) = std::fs::read_to_string(history_file(dirs)) else {
+        return Vec::new();
+    };
+    let Ok(mut tasks) = serde_json::from_str::<Vec<DownloadTask>>(&text) else {
+        return Vec::new();
+    };
+    for task in tasks.iter_mut() {
+        if task.state == "started" {
+            task.state = "interrupted".to_string();
+            task.speed = 0;
+        }
+    }
+    tasks
+}
+
 /// The task for this id, if it still exists.
 fn task_index(app: &tauri::AppHandle, id: u64) -> Option<usize> {
     let state = app.try_state::<AppState>()?;
@@ -341,6 +379,7 @@ pub fn set_state(app: &tauri::AppHandle, id: u64, next: &str) {
     };
     crate::logging::info(&format!("download {id} -> {next}"));
     let _ = app.emit("download:changed", tasks);
+    save_history(app);
 }
 
 /// Starts a transfer with the internal engine and records it as a task.
@@ -476,6 +515,7 @@ fn record(app: &tauri::AppHandle, url: Option<&str>, path: Option<&Path>, state:
 
     crate::logging::info(&format!("download {state}: {}", url.unwrap_or_default()));
     let _ = app.emit("download:changed", tasks);
+    save_history(app);
 }
 
 /// WebView2 reports only start and finish, so the size on disk is polled to

@@ -761,8 +761,22 @@ async function bootDownloads() {
       if (task.bytes) parts.push(size(task.bytes));
       // Only a running download has a rate worth showing.
       if (task.state === "started" && task.speed) parts.push(size(task.speed) + "/s");
+      // A share of the total is what the size alone could never say: the engine knows the
+      // length the server announced, so the row can show how far along it is.
+      if (task.total && task.state !== "finished") {
+        parts.push(Math.min(100, Math.round((task.bytes / task.total) * 100)) + "%");
+      }
       meta.textContent = parts.join(" \u00b7 ");
       text.append(name, meta);
+      if (task.total && task.state !== "finished") {
+        const bar = document.createElement("div");
+        bar.className = "download-bar";
+        const fill = document.createElement("div");
+        fill.className = "download-bar-fill";
+        fill.style.width = Math.min(100, Math.round((task.bytes / task.total) * 100)) + "%";
+        bar.append(fill);
+        text.append(bar);
+      }
       row.append(text);
 
       if (task.state === "started" || task.state === "interrupted") {
