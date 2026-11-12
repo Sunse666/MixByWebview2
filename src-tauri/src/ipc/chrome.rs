@@ -93,10 +93,7 @@ pub async fn context_menu(
         editable: request.editable.unwrap_or(false),
         tab: None,
     };
-    {
-        let mut slot = state.ui.menu_context.write();
-        *slot = context.clone();
-    }
+    state.ui.write().menu_context = context.clone();
 
     let win = window_of(&window);
     let (width, height) = crate::window::logical_size(&win)?;
@@ -136,10 +133,7 @@ pub async fn tab_menu(
     x: f64,
     y: f64,
 ) -> Result<(), AppError> {
-    {
-        let mut context = state.ui.menu_context.write();
-        context.tab = Some(id);
-    }
+    state.ui.write().menu_context.tab = Some(id);
     let _ = app.emit_to(window.label(), "chrome-menu", ());
     let _ = crate::overlay::open_at(&app, &window, "tab_menu", x, y, 200.0, 224.0);
     Ok(())
@@ -147,7 +141,7 @@ pub async fn tab_menu(
 
 #[tauri::command]
 pub async fn menu_context_get(_window: tauri::Window, state: State<'_, AppState>) -> Result<MenuContext, AppError> {
-    Ok(state.ui.menu_context.read().clone())
+    Ok(state.ui.read().menu_context.clone())
 }
 
 /// What the page gets back: an answer, or a prompt id to poll.

@@ -85,14 +85,14 @@ pub struct Library {
 
 /// What the chrome is showing right now: menu, suggestions, find and translation.
 pub struct Ui {
-    pub menu_context: parking_lot::RwLock<MenuContext>,
-    pub suggest_width: parking_lot::RwLock<f64>,
+    pub menu_context: MenuContext,
+    pub suggest_width: f64,
     /// Result of the last in-page translation.
-    pub translate_result: parking_lot::RwLock<(usize, Option<String>)>,
+    pub translate_result: (usize, Option<String>),
     /// Tabs whose text the translator replaced.
-    pub translated_tabs: parking_lot::RwLock<std::collections::HashSet<String>>,
+    pub translated_tabs: std::collections::HashSet<String>,
     /// Whether the last in-page search matched anything.
-    pub find_hit: parking_lot::RwLock<bool>,
+    pub find_hit: bool,
 }
 
 /// Navigation bookkeeping: what each tab is loading, where the bundled pages live and
@@ -119,7 +119,7 @@ pub struct AppState {
     /// Overlay, suggestion and session state, one entry per window.
     pub windows: WindowMaps,
     pub library: Library,
-    pub ui: Ui,
+    pub ui: parking_lot::RwLock<Ui>,
     pub permissions: crate::permissions::PermissionStore,
     pub snap: parking_lot::Mutex<crate::snap::SnapState>,
     pub opts: crate::tabs::WebviewOpts,
@@ -155,13 +155,13 @@ impl AppState {
                 bookmarks: parking_lot::RwLock::new(bookmarks),
                 zoom: parking_lot::RwLock::new(crate::zoom::ZoomStore::load(&dirs.zoom_file)),
             },
-            ui: Ui {
-                menu_context: parking_lot::RwLock::new(MenuContext::default()),
-                suggest_width: parking_lot::RwLock::new(420.0),
-                translate_result: parking_lot::RwLock::new((0, None)),
-                translated_tabs: parking_lot::RwLock::new(std::collections::HashSet::new()),
-                find_hit: parking_lot::RwLock::new(true),
-            },
+            ui: parking_lot::RwLock::new(Ui {
+                menu_context: MenuContext::default(),
+                suggest_width: 420.0,
+                translate_result: (0, None),
+                translated_tabs: std::collections::HashSet::new(),
+                find_hit: true,
+            }),
             nav: Nav {
                 app_base: parking_lot::RwLock::new(String::new()),
                 pending: parking_lot::RwLock::new(std::collections::HashMap::new()),

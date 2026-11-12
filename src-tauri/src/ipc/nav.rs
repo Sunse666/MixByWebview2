@@ -207,7 +207,7 @@ pub async fn suggest_open(
     {
         return Ok(());
     }
-    *app.state::<AppState>().ui.suggest_width.write() = width;
+    app.state::<AppState>().ui.write().suggest_width = width;
     crate::overlay::open_at(
         &app,
         &window,
@@ -298,7 +298,7 @@ fn push_suggestions(app: &AppHandle, window_label: &str, state: &AppState) -> Ve
     let json = serde_json::to_string(&items).unwrap_or_else(|_| "[]".into());
     let rows = count as f64;
     let height = if rows == 0.0 { 40.0 } else { rows * 34.0 + 14.0 };
-    let width = *state.ui.suggest_width.read();
+    let width = state.ui.read().suggest_width;
     let _ = webview.set_size(tauri::LogicalSize::new(width, height));
     let _ = webview.eval(&format!("window.__mixSuggest && window.__mixSuggest({json})"));
     items
@@ -422,13 +422,13 @@ window.__TAURI_INTERNALS__.invoke('find_result', {{ hit: Boolean(hit) }}).catch(
 /// The page reports the outcome of a find, because eval cannot return a value.
 #[tauri::command]
 pub async fn find_result(state: State<'_, AppState>, hit: bool) -> Result<(), AppError> {
-    *state.ui.find_hit.write() = hit;
+    state.ui.write().find_hit = hit;
     Ok(())
 }
 
 #[tauri::command]
 pub async fn find_status(state: State<'_, AppState>) -> Result<bool, AppError> {
-    Ok(*state.ui.find_hit.read())
+    Ok(state.ui.read().find_hit)
 }
 
 
