@@ -1020,6 +1020,8 @@ async function bootThumb() {
 }
 
 async function bootZoom() {
+  // A single row of controls: the panel only needs the room that row takes.
+  document.body.classList.add("zoom-panel");
   menu.hidden = false;
   appMenu.hidden = true;
   themePanel.hidden = true;

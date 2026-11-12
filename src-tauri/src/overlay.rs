@@ -67,9 +67,9 @@ fn panel_size(base: &str, settings_size: (f64, f64)) -> (f64, f64) {
         "url_menu" => (190.0, 150.0),
         "chrome_menu" => (190.0, 110.0),
         "find" => (380.0, 44.0),
-        // The row is 26 + 6 + 54 + 6 + 26 wide and 26 tall inside its own 8px padding,
-        // which sits inside the menu's 6px padding and 1px border.
-        "zoom" => (168.0, 58.0),
+        // The row is 26 + 6 + 54 + 6 + 26 wide and 26 tall, inside 6x4 padding and the
+        // menu's 2px padding and 1px border.
+        "zoom" => (136.0, 40.0),
         "thumb" => (372.0, 232.0),
         _ => DEFAULT,
     }
@@ -111,6 +111,12 @@ pub fn open(app: &AppHandle, win: &tauri::Window, kind: &str) -> Result<(), Stri
     open_at(app, win, kind, x, y, ow, oh)
 }
 
+/// A css pixel from a page is smaller than a logical pixel of the window by exactly the
+/// window scale, so positions measured in a page have to be multiplied by it.
+pub fn page_scale(win: &tauri::Window) -> f64 {
+    win.scale_factor().unwrap_or(1.0)
+}
+
 /// Opens a panel centered on a control, the way a browser shows a bubble under a button.
 pub fn open_under(
     app: &AppHandle,
@@ -121,10 +127,36 @@ pub fn open_under(
 ) -> Result<(), String> {
     let (win_w, _) = logical_size(win).map_err(|e| e.to_string())?;
     let base = kind.split('&').next().unwrap_or(kind);
+    let scale = page_scale(win);
+    // The size is a page size too, so it is converted the same way as the position.
     let (ow, oh) = panel_size(base, SETTINGS);
+    let (ow, oh) = (ow * scale, oh * scale);
+    let center = center * scale;
+    let y = y * scale;
     let x = (center - ow / 2.0)
         .min((win_w - ow - 8.0).max(0.0))
         .max(8.0);
+    let chrome = app.get_webview(&format!("{}-chrome", win.label()));
+    let chrome_rect = chrome.and_then(|view| {
+        let pos = view.position().ok()?;
+        let size = view.size().ok()?;
+        Some(format!(
+            "{:.0},{:.0} {:.0}x{:.0}",
+            pos.x as f64 / scale,
+            pos.y as f64 / scale,
+            size.width as f64 / scale,
+            size.height as f64 / scale
+        ))
+    });
+    let inner = win.inner_size().map(|s| (s.width, s.height)).unwrap_or((0, 0));
+    let outer = win.outer_size().map(|s| (s.width, s.height)).unwrap_or((0, 0));
+    crate::logging::info(&format!(
+        "overlay under: anchor={center:.0} y={y:.0} panel={ow:.0}x{oh:.0} at {x:.0} window={win_w:.0} inner={:?} outer={:?} scale={:.2} chrome={:?}",
+        inner,
+        outer,
+        win.scale_factor().unwrap_or(0.0),
+        chrome_rect
+    ));
     open_at(app, win, kind, x, y, ow, oh)
 }
 

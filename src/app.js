@@ -722,6 +722,17 @@ const TOOLBAR_ITEMS = {
     run: (button) => {
       const box = button.getBoundingClientRect();
       // The panel centers on the control it belongs to.
+      report(
+        "zoom anchor " +
+          JSON.stringify({
+            left: Math.round(box.left),
+            width: Math.round(box.width),
+            bottom: Math.round(box.bottom),
+            inner: window.innerWidth,
+            client: document.documentElement.clientWidth,
+            dpr: window.devicePixelRatio,
+          }),
+      );
       return invoke("overlay_toggle", {
         kind: "zoom",
         x: Math.round(box.left + box.width / 2),

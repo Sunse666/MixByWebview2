@@ -274,7 +274,17 @@ pub async fn overlay_open_at(
     } else {
         (232.0, menu_h)
     };
-    let _ = crate::overlay::open_at(&app, &window, &kind, x, y, width, height);
+    // Measured in css pixels by the page; placed in logical pixels by the window.
+    let scale = crate::overlay::page_scale(&window);
+    let _ = crate::overlay::open_at(
+        &app,
+        &window,
+        &kind,
+        x * scale,
+        y * scale,
+        width * scale,
+        height * scale,
+    );
     Ok(())
 }
 
