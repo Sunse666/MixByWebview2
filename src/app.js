@@ -465,6 +465,9 @@ function wireTab(el, id) {
   });
   el.addEventListener("pointerdown", (event) => {
     if (event.button !== 0) return;
+    // A press on the close button is a click, not a drag: capturing the pointer here
+    // would send that click to the tab instead of the button and swallow the close.
+    if (event.target && event.target.closest && event.target.closest("button")) return;
     try {
       el.setPointerCapture(event.pointerId);
     } catch {
