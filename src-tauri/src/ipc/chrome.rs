@@ -471,6 +471,8 @@ pub async fn overlay_toggle(
     app: AppHandle,
     window: tauri::Window,
     kind: String,
+    x: Option<f64>,
+    y: Option<f64>,
 ) -> Result<bool, AppError> {
     let open = app
         .state::<AppState>()
@@ -481,7 +483,12 @@ pub async fn overlay_toggle(
         crate::overlay::close(&app, window.label());
         return Ok(false);
     }
-    crate::overlay::open(&app, &window, &kind).map_err(|e| AppError::new("overlay", e))?;
+    match (x, y) {
+        // The caller knows where its button is, so the panel opens under it.
+        (Some(x), Some(y)) => crate::overlay::open_under(&app, &window, &kind, x, y)
+            .map_err(|e| AppError::new("overlay", e))?,
+        _ => crate::overlay::open(&app, &window, &kind).map_err(|e| AppError::new("overlay", e))?,
+    }
     Ok(true)
 }
 

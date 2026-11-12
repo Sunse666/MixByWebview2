@@ -56,6 +56,23 @@ pub(crate) fn parse_color(hex: &str) -> tauri::window::Color {
     tauri::window::Color(r, g, b, 255)
 }
 
+/// Size of a panel, in logical pixels. Each page brings its own content, so the size
+/// belongs to the kind rather than to the page.
+fn panel_size(base: &str, settings_size: (f64, f64)) -> (f64, f64) {
+    match base {
+        "settings" => settings_size,
+        "translate" => (380.0, 46.0),
+        "app_menu" => APP_MENU,
+        "context_menu" => (250.0, 184.0),
+        "url_menu" => (190.0, 150.0),
+        "chrome_menu" => (190.0, 110.0),
+        "find" => (380.0, 44.0),
+        "zoom" => (210.0, 64.0),
+        "thumb" => (372.0, 232.0),
+        _ => DEFAULT,
+    }
+}
+
 /// Opens the overlay panel, recreating it each time.
 pub fn open(app: &AppHandle, win: &tauri::Window, kind: &str) -> Result<(), String> {
     let (win_w, win_h) = logical_size(win).map_err(|e| e.to_string())?;
@@ -73,22 +90,12 @@ pub fn open(app: &AppHandle, win: &tauri::Window, kind: &str) -> Result<(), Stri
         _ => SETTINGS,
     };
 
-    let (ow, oh) = match base {
-        "settings" => settings_size,
-        "translate" => (380.0, 46.0),
-        "app_menu" => APP_MENU,
-        "context_menu" => (250.0, 184.0),
-        "url_menu" => (190.0, 150.0),
-        "chrome_menu" => (190.0, 110.0),
-        "find" => (380.0, 44.0),
-        "thumb" => (372.0, 232.0),
-        _ => DEFAULT,
-    };
+    let (ow, oh) = panel_size(base, settings_size);
     let chrome_h = crate::ipc::chrome_height(app);
     let room = (win_h - chrome_h - 12.0).max(oh.min(180.0));
     let oh = oh.min(room);
 
-    let (x, y) = if base == "app_menu" || base == "find" {
+    let (x, y) = if base == "app_menu" || base == "find" || base == "zoom" {
         ((win_w - ow - 8.0).max(0.0), chrome_h + 6.0)
     } else {
         (((win_w - ow) / 2.0).max(0.0), chrome_h + 6.0)
@@ -99,6 +106,22 @@ pub fn open(app: &AppHandle, win: &tauri::Window, kind: &str) -> Result<(), Stri
         win.scale_factor().unwrap_or(0.0)
     ));
 
+    open_at(app, win, kind, x, y, ow, oh)
+}
+
+/// Opens a panel with its top left at the given point, as wide as its kind asks for and
+/// kept inside the window.
+pub fn open_under(
+    app: &AppHandle,
+    win: &tauri::Window,
+    kind: &str,
+    x: f64,
+    y: f64,
+) -> Result<(), String> {
+    let (win_w, _) = logical_size(win).map_err(|e| e.to_string())?;
+    let base = kind.split('&').next().unwrap_or(kind);
+    let (ow, oh) = panel_size(base, SETTINGS);
+    let x = x.min((win_w - ow - 8.0).max(0.0));
     open_at(app, win, kind, x, y, ow, oh)
 }
 

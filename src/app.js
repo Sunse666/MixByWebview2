@@ -715,7 +715,19 @@ const TOOLBAR_ITEMS = {
   shot: { glyph: "\u{1F4F7}", label: "Take a screenshot", where: "outside", run: () => takeScreenshot() },
   reopen: { glyph: "\u21ba", label: "Reopen closed tab", where: "outside", run: () => invoke("shortcut", { action: "reopen_tab" }) },
   translate: { glyph: "\u6587", label: "Translate this page", where: "inside", run: () => toggleTranslate() },
-  zoom: { glyph: "\u2315", label: "Zoom", where: "inside", run: () => invoke("overlay_toggle", { kind: "zoom" }) },
+  zoom: {
+    glyph: "\u2315",
+    label: "Zoom",
+    where: "inside",
+    run: (button) => {
+      const box = button.getBoundingClientRect();
+      return invoke("overlay_toggle", {
+        kind: "zoom",
+        x: Math.round(box.left),
+        y: Math.round(box.bottom + 6),
+      });
+    },
+  },
   find: { glyph: "\u2315", label: "Find in page", where: "outside", run: () => invoke("overlay_toggle", { kind: "find" }) },
   bookmark: { glyph: "\u2606", label: "Bookmark this page", where: "inside", run: () => invoke("bookmark_toggle") },
   extensions: { glyph: "\u25a4", label: "Extensions", where: "outside", run: () => invoke("overlay_open", { kind: "app_menu&page=extensions" }) },
@@ -765,7 +777,7 @@ async function renderToolbar(extensions) {
     } else {
       button.textContent = spec.glyph;
     }
-    button.addEventListener("click", () => spec.run().catch(() => {}));
+    button.addEventListener("click", () => spec.run(button).catch(() => {}));
     (spec.where === "inside" ? inner : outer).push(button);
   }
 
