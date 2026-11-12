@@ -590,7 +590,11 @@ fn window_geometry(app: &AppHandle, label: &str) -> Option<crate::session::Windo
 pub(crate) fn save_sessions(app: &AppHandle) {
     let state = app.state::<AppState>();
 
-    let mut windows: Vec<crate::session::WindowSession> = Vec::new();
+    // The geometry of a window is asked for on the main thread, so the tab state has to
+    // be copied out first: waiting for the event loop while holding this lock is what
+    // deadlocks against relayout.
+    let mut snapshots: Vec<(String, Vec<crate::session::SessionTab>, usize, Vec<crate::session::SessionGroup>)> =
+        Vec::new();
     for (label, core) in state.cores.read().iter() {
         let tabs: Vec<crate::session::SessionTab> = core
             .tabs
@@ -631,13 +635,18 @@ pub(crate) fn save_sessions(app: &AppHandle) {
                 })
             })
             .collect();
-        windows.push(crate::session::WindowSession {
+        snapshots.push((label.clone(), tabs, selected, groups));
+    }
+
+    let windows: Vec<crate::session::WindowSession> = snapshots
+        .into_iter()
+        .map(|(label, tabs, selected, groups)| crate::session::WindowSession {
             tabs,
             selected,
-            window: window_geometry(app, label),
+            window: window_geometry(app, &label),
             groups,
-        });
-    }
+        })
+        .collect();
 
     let session = crate::session::Session {
         schema_version: crate::session::SCHEMA,

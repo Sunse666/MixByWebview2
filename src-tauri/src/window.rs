@@ -548,9 +548,13 @@ pub fn open_window(
     crate::ipc::emit_tabs(app, label);
     start_url_watch(app.clone(), label.to_string());
 
+    crate::logging::info(&format!("window {label} prepared"));
     win.show()?;
+    crate::logging::info(&format!("window {label} shown"));
     win.set_focus()?;
+    crate::logging::info(&format!("window {label} focused"));
     crate::ipc::save_sessions(app);
+    crate::logging::info(&format!("window {label} ready"));
     Ok(win)
 }
 

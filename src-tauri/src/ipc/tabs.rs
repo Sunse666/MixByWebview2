@@ -196,7 +196,11 @@ pub async fn tab_close(app: AppHandle, window: tauri::Window, state: State<'_, A
     crate::thumbs::forget(&id);
     crate::freeze::forget(&id);
 
-    let (remaining, next_url) = {
+    let (go_left, next_url) = {
+        let settings = state.settings.read();
+        (settings.tab_close_goes_left, settings.start_url.clone())
+    };
+    let remaining = {
         let mut core = state.write_core(window.label());
         if let Some(index) = core.tabs.iter().position(|tab| tab.id == id) {
             let closed = core.tabs[index].clone();
@@ -217,7 +221,6 @@ pub async fn tab_close(app: AppHandle, window: tauri::Window, state: State<'_, A
         }
         core.groups.retain(|group| !group.members.is_empty());
         if core.selected.as_deref() == Some(id.as_str()) {
-            let go_left = state.settings.read().tab_close_goes_left;
             core.selected = match closed_at {
                 Some(index) if go_left => core
                     .tabs
@@ -228,7 +231,7 @@ pub async fn tab_close(app: AppHandle, window: tauri::Window, state: State<'_, A
             }
             .or_else(|| core.tabs.last().map(|tab| tab.id.clone()));
         }
-        (core.tabs.len(), state.settings.read().start_url.clone())
+        core.tabs.len()
     };
 
     if remaining == 0 {

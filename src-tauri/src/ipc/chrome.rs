@@ -386,10 +386,10 @@ pub async fn tab_pop_out(
     x: f64,
     y: f64,
 ) -> Result<(), AppError> {
-    let (url, scroll, pinned) = {
+    let (url, scroll, pinned, only_tab) = {
         let core = state.read_core(window.label());
         match core.tabs.iter().find(|tab| tab.id == id) {
-            Some(tab) => (tab.url.clone(), tab.scroll, tab.pinned),
+            Some(tab) => (tab.url.clone(), tab.scroll, tab.pinned, core.tabs.len() == 1),
             None => return Ok(()),
         }
     };
@@ -405,6 +405,14 @@ pub async fn tab_pop_out(
     };
     crate::window::open_window(&app, &label, vec![(url, scroll, pinned)], 0, Some(geometry))?;
     crate::logging::info(&format!("tab {id} popped out into {label}"));
+
+    // The window that just gave away its last tab goes with it, the way a browser does:
+    // leaving a fresh blank tab behind is not what dragging one out means. The primary
+    // window keeps its strip, since the tray depends on it.
+    if only_tab && window.label() != crate::window::PRIMARY {
+        let _ = window.close();
+        return Ok(());
+    }
     tab_close(app.clone(), window, app.state::<AppState>(), id).await?;
     Ok(())
 }
