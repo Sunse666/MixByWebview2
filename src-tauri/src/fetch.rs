@@ -1,18 +1,4 @@
-//! A download engine of our own.
-//!
-//! WebView2 hands out a download operation with Pause/Resume on it, but the calls are
-//! fragile: accepted before the transfer starts and then ignored, refused while paused, and
-//! only callable from the thread that owns the webview. Between them those rules made the
-//! controls unreliable in a way no amount of argument-checking could fix.
-//!
-//! This fetches the file itself, so a pause is a decision the loop takes between chunks:
-//! stop reading, keep what is on disk, and resume by asking for the rest with a Range
-//! header. That is how a browser download manager works, and it makes the three controls
-//! mean what they say.
-//!
-//! The cost is the browser's cookie jar: this client has its own. Signed download links
-//! (the usual case) are fine; a download behind a login needs the webview's own download,
-//! which is why the caller decides which engine to use.
+//! A download engine with working pause, resume and cancel.
 
 use std::collections::HashMap;
 use std::io::Write;
@@ -30,12 +16,11 @@ pub struct Job {
     pub total: Option<u64>,
     /// Set while the loop should keep running.
     running: Arc<AtomicBool>,
-    /// Set while the user wants it paused: the loop stops but the bytes stay.
+    /// Set while the user wants it paused; the bytes stay.
     paused: Arc<AtomicBool>,
     /// Set when the file is no longer wanted, partial file and all.
     cancelled: Arc<AtomicBool>,
-    /// True while a loop is actually running. Resuming while one is alive must nudge it,
-    /// not start a second - two loops on one file is what put two progress rows on screen.
+    /// True while a loop is actually running.
     active: Arc<AtomicBool>,
     /// The loop, so a pause can stop it at the next await rather than after the next chunk.
     handle: Option<tauri::async_runtime::JoinHandle<()>>,
@@ -47,9 +32,7 @@ fn claimed() -> &'static Mutex<std::collections::HashSet<String>> {
     CLAIMED.get_or_init(|| Mutex::new(std::collections::HashSet::new()))
 }
 
-/// Takes ownership of a file for one transfer, replacing any earlier claim. A redirect can make the webview ask twice
-/// for the same download, and two loops appending to one file report double the speed and
-/// leave a corrupt result.
+/// Takes ownership of a file for one transfer.
 pub fn claim(path: &std::path::Path) -> bool {
     let key = path.to_string_lossy().to_string();
     claimed().lock().map(|mut set| set.insert(key)).unwrap_or(false)
@@ -78,8 +61,6 @@ pub fn start(app: tauri::AppHandle, id: u64, url: String, path: std::path::PathB
     let paused = Arc::new(AtomicBool::new(false));
     let cancelled = Arc::new(AtomicBool::new(false));
 
-    // Already running: clear the pause and let the live loop carry on. Starting a second
-    // loop here is what produced two progress rows for one download.
     {
         let Ok(map) = jobs().lock() else {
             return;
@@ -134,7 +115,6 @@ pub fn start(app: tauri::AppHandle, id: u64, url: String, path: std::path::PathB
         };
 
         loop {
-            // Where to continue from: whatever the file already holds.
             let offset = std::fs::metadata(&path).map(|meta| meta.len()).unwrap_or(0);
             let mut request = client.get(&url);
             if offset > 0 {
@@ -191,7 +171,6 @@ pub fn start(app: tauri::AppHandle, id: u64, url: String, path: std::path::PathB
                 if paused.load(Ordering::Relaxed) || !running.load(Ordering::Relaxed) {
                     let _ = file.flush();
                     drop(file);
-                    // The bytes on disk are the resume point; the transfer is not over.
                     crate::downloads::set_state(&app, id, "interrupted");
                     return;
                 }
@@ -235,8 +214,6 @@ pub fn pause(id: u64) -> bool {
     match map.get_mut(&id) {
         Some(job) => {
             job.paused.store(true, Ordering::Relaxed);
-            // Abort rather than wait: a chunk read can be in flight for seconds, and a
-            // pause that only lands after the next chunk is a pause that does not work.
             if let Some(handle) = job.handle.take() {
                 handle.abort();
             }
@@ -258,7 +235,6 @@ pub fn resume(app: tauri::AppHandle, id: u64) -> bool {
             None => return false,
         }
     };
-    // The file is still claimed from the paused transfer; taking it again is the point.
     unclaim(&path);
     start(app, id, url, path);
     true
