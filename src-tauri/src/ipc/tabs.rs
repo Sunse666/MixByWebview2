@@ -615,7 +615,7 @@ pub async fn tab_icon(
             let state = app.try_state::<AppState>();
             match state {
                 Some(state) => state
-                    .favicons
+                    .library.favicons
                     .write()
                     
                     .set(&host, &icon),
@@ -625,7 +625,7 @@ pub async fn tab_icon(
         if changed {
             if let Some(state) = app.try_state::<AppState>() {
                 state
-                    .favicons
+                    .library.favicons
                     .read()
                     
                     .save(&state.dirs.favicons_file);

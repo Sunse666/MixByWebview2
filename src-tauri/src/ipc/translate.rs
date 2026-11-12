@@ -9,7 +9,7 @@ pub async fn translate_page_inplace(
     window: tauri::Window,
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
-    *state.translate_result.write() = (0, None);
+    *state.ui.translate_result.write() = (0, None);
     let id = selected_label(&state, &window);
     let Some(webview) = app.get_webview(&id) else {
         return Ok(());
@@ -23,7 +23,7 @@ pub async fn translate_page_inplace(
 pub async fn translate_status(
     state: State<'_, AppState>,
 ) -> Result<(usize, Option<String>), AppError> {
-    Ok(state.translate_result.read().clone())
+    Ok(state.ui.translate_result.read().clone())
 }
 
 /// Puts the original text back.
@@ -37,7 +37,7 @@ pub async fn translate_restore(
     if let Some(webview) = app.get_webview(&id) {
         let _ = webview.eval("window.__mixStopTranslate && window.__mixStopTranslate()");
     }
-    state.translated_tabs.write().remove(&id);
+    state.ui.translated_tabs.write().remove(&id);
     Ok(())
 }
 
@@ -48,7 +48,7 @@ pub async fn translate_state(
     state: State<'_, AppState>,
 ) -> Result<bool, AppError> {
     let id = selected_label(&state, &window);
-    Ok(state.translated_tabs.read().contains(&id))
+    Ok(state.ui.translated_tabs.read().contains(&id))
 }
 
 /// The page reports how many nodes it replaced, and Chrome shows a hint.
@@ -61,8 +61,8 @@ pub async fn translate_done(
 ) -> Result<(), AppError> {
     let tab = webview.label().to_string();
     if let Some(state) = app.try_state::<AppState>() {
-        *state.translate_result.write() = (count, error.clone());
-        let mut tabs = state.translated_tabs.write();
+        *state.ui.translate_result.write() = (count, error.clone());
+        let mut tabs = state.ui.translated_tabs.write();
         if error.is_none() && count > 0 {
             tabs.insert(tab.clone());
         } else if error.is_some() {

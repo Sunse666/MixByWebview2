@@ -68,7 +68,7 @@ pub(crate) fn attach_title(app: &AppHandle, url: &str, title: &str) {
         return;
     };
     let changed = {
-        let mut visits = state.history.write();
+        let mut visits = state.library.history.write();
         match visits.iter_mut().find(|visit| visit.url == url) {
             Some(visit) if visit.title != title => {
                 visit.title = title.to_string();
@@ -88,7 +88,7 @@ pub(crate) fn attach_icon(app: &AppHandle, url: &str, icon: &str) {
         return;
     };
     let changed = {
-        let mut visits = state.history.write();
+        let mut visits = state.library.history.write();
         match visits
             .iter_mut()
             .find(|visit| visit.url == url && visit.icon.as_deref() != Some(icon))
@@ -113,7 +113,7 @@ pub(crate) fn record_visit(app: &AppHandle, url: &str, title: &str) {
         return;
     };
     {
-        let mut visits = state.history.write();
+        let mut visits = state.library.history.write();
         crate::library::push_visit(&mut visits, url, title);
     }
     crate::persist::touch_history();
@@ -124,7 +124,7 @@ pub(crate) fn flush_history(app: &AppHandle) {
     let Some(state) = app.try_state::<AppState>() else {
         return;
     };
-    let snapshot = state.history.read().clone();
+    let snapshot = state.library.history.read().clone();
     if let Err(err) = crate::library::save_visits(&state.dirs.history_file, &snapshot) {
         crate::logging::warn(&format!("history flush failed: {err}"));
     }
@@ -133,7 +133,7 @@ pub(crate) fn flush_history(app: &AppHandle) {
 /// host -> icon url, used by the bookmarks and new tab pages.
 #[tauri::command]
 pub async fn favicon_map(state: State<'_, AppState>) -> Result<std::collections::BTreeMap<String, String>, AppError> {
-    let icons = state.favicons.read();
+    let icons = state.library.favicons.read();
     let mut out = std::collections::BTreeMap::new();
     for (host, remote) in icons.hosts.iter() {
         let value = crate::favicons::cache_path(&state.dirs.favicons_dir, host)
@@ -146,8 +146,8 @@ pub async fn favicon_map(state: State<'_, AppState>) -> Result<std::collections:
 
 #[tauri::command]
 pub async fn history_list(_window: tauri::Window, state: State<'_, AppState>, limit: Option<usize>) -> Result<Vec<Visit>, AppError> {
-    let visits = state.history.read();
-    let icons = state.favicons.read();
+    let visits = state.library.history.read();
+    let icons = state.library.favicons.read();
     let take = limit.unwrap_or(500).min(visits.len());
     Ok(visits
         .iter()
@@ -172,7 +172,7 @@ pub async fn history_remove(
 ) -> Result<usize, AppError> {
     require_trusted(&webview)?;
     let removed = {
-        let mut visits = state.history.write();
+        let mut visits = state.library.history.write();
         let before = visits.len();
         visits.retain(|visit| {
             !entries
@@ -184,7 +184,7 @@ pub async fn history_remove(
         }
         before - visits.len()
     };
-    let snapshot = state.history.read().clone();
+    let snapshot = state.library.history.read().clone();
     crate::library::save_visits(&state.dirs.history_file, &snapshot)?;
     crate::logging::info(&format!("history: removed {removed} entries"));
     Ok(removed)
@@ -202,13 +202,13 @@ pub async fn clear_data(
     let mut done = Vec::new();
 
     if kinds.iter().any(|kind| kind == "history") {
-        state.history.write().clear();
+        state.library.history.write().clear();
         crate::library::save_visits(&state.dirs.history_file, &[])?;
         done.push("history".to_string());
     }
 
     if kinds.iter().any(|kind| kind == "bookmarks") {
-        state.bookmarks.write().clear();
+        state.library.bookmarks.write().clear();
         crate::library::save_bookmarks(&state.dirs.bookmarks_file, &[])?;
         let _ = app.emit("bookmarks:changed", false);
         done.push("bookmarks".to_string());
@@ -216,12 +216,12 @@ pub async fn clear_data(
 
     if kinds.iter().any(|kind| kind == "favicons") {
         state
-            .favicons
+            .library.favicons
             .write()
             
             .clear();
         let _ = std::fs::remove_dir_all(&state.dirs.favicons_dir);
-        let empty = state.favicons.read().clone();
+        let empty = state.library.favicons.read().clone();
         empty.save(&state.dirs.favicons_file);
         done.push("favicons".to_string());
     }
@@ -232,7 +232,7 @@ pub async fn clear_data(
     }
 
     if kinds.iter().any(|kind| kind == "zoom") {
-        let mut zoom = state.zoom.write();
+        let mut zoom = state.library.zoom.write();
         zoom.forget_all();
         let _ = zoom.save(&state.dirs.zoom_file);
         done.push("zoom".to_string());
@@ -246,7 +246,7 @@ pub async fn clear_data(
 pub async fn history_clear(webview: tauri::Webview, state: State<'_, AppState>) -> Result<(), AppError> {
     require_trusted(&webview)?;
     {
-        let mut visits = state.history.write();
+        let mut visits = state.library.history.write();
         visits.clear();
     }
     crate::library::save_visits(&state.dirs.history_file, &[])?;
@@ -256,7 +256,7 @@ pub async fn history_clear(webview: tauri::Webview, state: State<'_, AppState>) 
 
 #[tauri::command]
 pub async fn bookmark_list(_window: tauri::Window, state: State<'_, AppState>) -> Result<Vec<Bookmark>, AppError> {
-    Ok(state.bookmarks.read().clone())
+    Ok(state.library.bookmarks.read().clone())
 }
 
 /// Toggles the selected tab and reports whether it is bookmarked now.
@@ -275,7 +275,7 @@ pub async fn bookmark_toggle(app: AppHandle, window: tauri::Window, state: State
     };
 
     let (added, snapshot) = {
-        let mut bookmarks = state.bookmarks.write();
+        let mut bookmarks = state.library.bookmarks.write();
         let added = crate::library::toggle_bookmark(&mut bookmarks, &url, &title);
         (added, bookmarks.clone())
     };
@@ -299,7 +299,7 @@ pub async fn bookmark_add(
         return Ok(());
     }
     let snapshot = {
-        let mut bookmarks = state.bookmarks.write();
+        let mut bookmarks = state.library.bookmarks.write();
         if !bookmarks.iter().any(|bookmark| bookmark.url == url) {
             crate::library::toggle_bookmark(&mut bookmarks, &url, &title);
         }
@@ -320,7 +320,7 @@ pub async fn bookmark_move(
 ) -> Result<(), AppError> {
     require_trusted(&webview)?;
     let snapshot = {
-        let mut bookmarks = state.bookmarks.write();
+        let mut bookmarks = state.library.bookmarks.write();
         move_bookmark(&mut bookmarks, &from, to);
         bookmarks.clone()
     };
@@ -353,7 +353,7 @@ pub async fn bookmark_set_folder(
 ) -> Result<bool, AppError> {
     require_trusted(&webview)?;
     let changed = {
-        let mut list = state.bookmarks.write();
+        let mut list = state.library.bookmarks.write();
         let Some(item) = list.iter_mut().find(|item| item.url == url) else {
             return Err(AppError::new("not_found", "no such bookmark"));
         };
@@ -366,7 +366,7 @@ pub async fn bookmark_set_folder(
         }
     };
     if changed {
-        let snapshot = state.bookmarks.read().clone();
+        let snapshot = state.library.bookmarks.read().clone();
         crate::library::save_bookmarks(&state.dirs.bookmarks_file, &snapshot)?;
         let _ = app.emit("bookmarks:changed", false);
     }
@@ -384,7 +384,7 @@ pub async fn bookmark_update(
 ) -> Result<bool, AppError> {
     require_trusted(&webview)?;
     let changed = {
-        let mut list = state.bookmarks.write();
+        let mut list = state.library.bookmarks.write();
         let Some(item) = list.iter_mut().find(|item| item.url == url) else {
             return Err(AppError::new("not_found", "no such bookmark"));
         };
@@ -405,7 +405,7 @@ pub async fn bookmark_update(
     };
 
     if changed {
-        let snapshot = state.bookmarks.read().clone();
+        let snapshot = state.library.bookmarks.read().clone();
         crate::library::save_bookmarks(&state.dirs.bookmarks_file, &snapshot)?;
         let _ = app.emit("bookmarks:changed", false);
     }
@@ -419,7 +419,7 @@ pub async fn bookmark_remove(
 ) -> Result<(), AppError> {
     require_trusted(&webview)?;
     let snapshot = {
-        let mut bookmarks = state.bookmarks.write();
+        let mut bookmarks = state.library.bookmarks.write();
         bookmarks.retain(|bookmark| bookmark.url != url);
         bookmarks.clone()
     };

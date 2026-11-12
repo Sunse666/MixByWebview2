@@ -74,6 +74,27 @@ pub struct WindowMaps {
     pub fullscreen: parking_lot::RwLock<std::collections::HashSet<String>>,
 }
 
+/// Browsing data that outlives the window: history, bookmarks, site icons and zoom.
+pub struct Library {
+    pub history: parking_lot::RwLock<Vec<Visit>>,
+    /// host -> favicon url, shared by history, bookmarks and the new tab page.
+    pub favicons: parking_lot::RwLock<crate::favicons::Favicons>,
+    pub bookmarks: parking_lot::RwLock<Vec<Bookmark>>,
+    pub zoom: parking_lot::RwLock<crate::zoom::ZoomStore>,
+}
+
+/// What the chrome is showing right now: menu, suggestions, find and translation.
+pub struct Ui {
+    pub menu_context: parking_lot::RwLock<MenuContext>,
+    pub suggest_width: parking_lot::RwLock<f64>,
+    /// Result of the last in-page translation.
+    pub translate_result: parking_lot::RwLock<(usize, Option<String>)>,
+    /// Tabs whose text the translator replaced.
+    pub translated_tabs: parking_lot::RwLock<std::collections::HashSet<String>>,
+    /// Whether the last in-page search matched anything.
+    pub find_hit: parking_lot::RwLock<bool>,
+}
+
 pub struct AppState {
     pub dirs: AppDirs,
     /// One tab set per window, keyed by the window label.
@@ -82,33 +103,22 @@ pub struct AppState {
     pub theme: parking_lot::RwLock<Theme>,
     pub baseline: parking_lot::RwLock<Theme>,
     pub downloads: parking_lot::RwLock<Vec<crate::downloads::DownloadTask>>,
-    pub menu_context: parking_lot::RwLock<MenuContext>,
     /// Overlay, suggestion and session state, one entry per window.
     pub windows: WindowMaps,
+    pub library: Library,
+    pub ui: Ui,
     pub permissions: crate::permissions::PermissionStore,
     pub snap: parking_lot::Mutex<crate::snap::SnapState>,
     pub opts: crate::tabs::WebviewOpts,
     pub extensions: Vec<ExtInfo>,
-    pub history: parking_lot::RwLock<Vec<Visit>>,
-    /// host -> favicon url, shared by history, bookmarks and the new tab page.
-    pub favicons: parking_lot::RwLock<crate::favicons::Favicons>,
-    pub suggest_width: parking_lot::RwLock<f64>,
-    pub zoom: parking_lot::RwLock<crate::zoom::ZoomStore>,
     /// Origin of the bundled pages.
     pub app_base: parking_lot::RwLock<String>,
     /// Tab id -> the url it is currently loading.
     pub pending: parking_lot::RwLock<std::collections::HashMap<String, String>>,
     /// Reachability cache shared with the probe thread.
     pub reachability: std::sync::Arc<crate::net::Reachability>,
-    /// Result of the last in-page translation.
-    pub translate_result: parking_lot::RwLock<(usize, Option<String>)>,
-    /// Tabs whose text the translator replaced.
-    pub translated_tabs: parking_lot::RwLock<std::collections::HashSet<String>>,
-    /// Whether the last in-page search matched anything.
-    pub find_hit: parking_lot::RwLock<bool>,
     /// Tab id -> the url whose error page is already showing.
     pub error_shown: parking_lot::RwLock<std::collections::HashMap<String, String>>,
-    pub bookmarks: parking_lot::RwLock<Vec<Bookmark>>,
     pub scripts: Vec<crate::userscripts::ScriptInfo>,
 }
 
@@ -133,18 +143,23 @@ impl AppState {
         Self {
             opts,
             extensions,
-            favicons: parking_lot::RwLock::new(crate::favicons::Favicons::load(&dirs.favicons_file)),
-        history: parking_lot::RwLock::new(history),
-            suggest_width: parking_lot::RwLock::new(420.0),
-            zoom: parking_lot::RwLock::new(crate::zoom::ZoomStore::load(&dirs.zoom_file)),
+            library: Library {
+                history: parking_lot::RwLock::new(history),
+                favicons: parking_lot::RwLock::new(crate::favicons::Favicons::load(&dirs.favicons_file)),
+                bookmarks: parking_lot::RwLock::new(bookmarks),
+                zoom: parking_lot::RwLock::new(crate::zoom::ZoomStore::load(&dirs.zoom_file)),
+            },
+            ui: Ui {
+                menu_context: parking_lot::RwLock::new(MenuContext::default()),
+                suggest_width: parking_lot::RwLock::new(420.0),
+                translate_result: parking_lot::RwLock::new((0, None)),
+                translated_tabs: parking_lot::RwLock::new(std::collections::HashSet::new()),
+                find_hit: parking_lot::RwLock::new(true),
+            },
             app_base: parking_lot::RwLock::new(String::new()),
             pending: parking_lot::RwLock::new(std::collections::HashMap::new()),
             reachability: std::sync::Arc::new(crate::net::Reachability::default()),
-            translate_result: parking_lot::RwLock::new((0, None)),
-            translated_tabs: parking_lot::RwLock::new(std::collections::HashSet::new()),
-            find_hit: parking_lot::RwLock::new(true),
             error_shown: parking_lot::RwLock::new(std::collections::HashMap::new()),
-            bookmarks: parking_lot::RwLock::new(bookmarks),
             scripts,
             dirs,
             cores: parking_lot::RwLock::new(cores),
@@ -152,7 +167,6 @@ impl AppState {
             baseline: parking_lot::RwLock::new(theme.clone()),
             theme: parking_lot::RwLock::new(theme),
             downloads: parking_lot::RwLock::new(downloads),
-            menu_context: parking_lot::RwLock::new(MenuContext::default()),
             windows: WindowMaps::default(),
             permissions: crate::permissions::PermissionStore::default(),
             snap: parking_lot::Mutex::new(crate::snap::SnapState::default()),

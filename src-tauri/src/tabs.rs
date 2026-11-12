@@ -401,7 +401,7 @@ pub fn create(
             }
             if loading {
                 if let Some(state) = app.try_state::<crate::ipc::AppState>() {
-                    let level = state.zoom.read().level_for(payload.url().as_str());
+                    let level = state.library.zoom.read().level_for(payload.url().as_str());
                     if (level - 1.0).abs() > f64::EPSILON {
                         let _ = webview.set_zoom(level);
                         crate::logging::info(&format!(

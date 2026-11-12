@@ -90,7 +90,7 @@ pub(crate) fn set_zoom(app: &AppHandle, label: &str, level: f64) -> Result<(), A
         return Ok(());
     }
     {
-        let mut store = state.zoom.write();
+        let mut store = state.library.zoom.write();
         if store.remember(&url, level) {
             if let Err(err) = store.save(&state.dirs.zoom_file) {
                 crate::logging::warn(&format!("zoom save failed: {err}"));
@@ -143,7 +143,7 @@ fn collect_suggestions(state: &AppState, text: &str, limit: usize) -> Vec<Sugges
 
     let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
     {
-        let history = state.history.read();
+        let history = state.library.history.read();
         for visit in history.iter() {
             if seen.insert(visit.url.clone()) {
                 found.push(Suggestion {
@@ -155,7 +155,7 @@ fn collect_suggestions(state: &AppState, text: &str, limit: usize) -> Vec<Sugges
         }
     }
     {
-        let bookmarks = state.bookmarks.read();
+        let bookmarks = state.library.bookmarks.read();
         for bookmark in bookmarks.iter() {
             if seen.insert(bookmark.url.clone()) {
                 found.push(Suggestion {
@@ -207,7 +207,7 @@ pub async fn suggest_open(
     {
         return Ok(());
     }
-    *app.state::<AppState>().suggest_width.write() = width;
+    *app.state::<AppState>().ui.suggest_width.write() = width;
     crate::overlay::open_at(
         &app,
         &window,
@@ -298,7 +298,7 @@ fn push_suggestions(app: &AppHandle, window_label: &str, state: &AppState) -> Ve
     let json = serde_json::to_string(&items).unwrap_or_else(|_| "[]".into());
     let rows = count as f64;
     let height = if rows == 0.0 { 40.0 } else { rows * 34.0 + 14.0 };
-    let width = *state.suggest_width.read();
+    let width = *state.ui.suggest_width.read();
     let _ = webview.set_size(tauri::LogicalSize::new(width, height));
     let _ = webview.eval(&format!("window.__mixSuggest && window.__mixSuggest({json})"));
     items
@@ -422,13 +422,13 @@ window.__TAURI_INTERNALS__.invoke('find_result', {{ hit: Boolean(hit) }}).catch(
 /// The page reports the outcome of a find, because eval cannot return a value.
 #[tauri::command]
 pub async fn find_result(state: State<'_, AppState>, hit: bool) -> Result<(), AppError> {
-    *state.find_hit.write() = hit;
+    *state.ui.find_hit.write() = hit;
     Ok(())
 }
 
 #[tauri::command]
 pub async fn find_status(state: State<'_, AppState>) -> Result<bool, AppError> {
-    Ok(*state.find_hit.read())
+    Ok(*state.ui.find_hit.read())
 }
 
 
