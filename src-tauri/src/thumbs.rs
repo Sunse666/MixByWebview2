@@ -1,14 +1,4 @@
 //! Tab preview pictures for the hover card.
-//!
-//! The capture is the same DevTools protocol call the screenshot button uses. It
-//! has to come from a webview that is actually on screen: a hidden one is not
-//! composited and the protocol answers with whatever surface sits in its place.
-//! So a picture is taken while the tab is visible - on hover when it is the
-//! selected tab, and on the way out, before it is hidden, when it is switched
-//! away from.
-//!
-//! The png is kept at full size and the card scales it in css: asking the protocol
-//! for a clipped, scaled shot makes Chromium re-raster the page, which flashes.
 
 use std::collections::HashMap;
 use std::sync::Mutex;
@@ -49,10 +39,6 @@ fn capture_once(webview: &tauri::Webview) -> Option<Vec<u8>> {
   let json = crate::screenshot::call(
     webview,
     "Page.captureScreenshot",
-    // Jpeg rather than png: a full-window png runs to about 900 KB for a page with
-    // pictures in it, and that is a 1.2 MB data url through the ipc for every card - the
-    // ones that big were the ones that arrived broken. At quality 70 the same frame is a
-    // fraction of the size and the card is 372 px wide anyway.
     r#"{"format":"jpeg","quality":70,"captureBeyondViewport":false,"optimizeForSpeed":true}"#,
   )?;
   let value: serde_json::Value = serde_json::from_str(&json).ok()?;
@@ -75,8 +61,7 @@ pub fn capture(_webview: &tauri::Webview) -> Option<Vec<u8>> {
   None
 }
 
-/// Cheap fingerprint over the first 64 KB: two captures of the same pixels hash
-/// the same, so the log shows whether a forced repaint produced new content.
+/// Cheap fingerprint over the first 64 KB of a capture.
 fn fingerprint(png: &[u8]) -> u64 {
   let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
   for byte in &png[..png.len().min(64 * 1024)] {
@@ -126,9 +111,6 @@ pub fn forget(id: &str) {
 
 
 /// Photographs a background tab off the command thread.
-///
-/// The wake-up and the wait for a frame are deliberately slow; doing them inline made
-/// the card feel glued to the pointer.
 pub fn capture_later(app: tauri::AppHandle, id: String, window_label: String) {
   tauri::async_runtime::spawn_blocking(move || {
     let Some(state) = app.try_state::<crate::ipc::AppState>() else {
@@ -137,9 +119,6 @@ pub fn capture_later(app: tauri::AppHandle, id: String, window_label: String) {
     if !state.settings.read().live_thumbs {
       return;
     }
-    // A tab that was on screen moments ago already has a fresh picture, and waking one is
-    // the operation that can hide the page someone is looking at. Only tabs that have been
-    // parked for a while are worth the wake-up.
     const WAKE_AFTER_SECS: u64 = 30;
     let shown = state
       .shown_at
@@ -159,11 +138,7 @@ pub fn capture_later(app: tauri::AppHandle, id: String, window_label: String) {
     let Some(webview) = app.get_webview(&id) else {
       return;
     };
-    // A frozen page cannot paint, so wake it for the photograph.
     crate::freeze::thaw(&webview);
-    // One retry: a tab that has just been woken sometimes answers the devtools call
-    // before it has a surface, and that is exactly the case that left the frame empty.
-    // Asked fresh every time: the answer can change while the capture is working.
     let still_hidden = || {
       app
         .try_state::<crate::ipc::AppState>()
@@ -180,10 +155,7 @@ pub fn capture_later(app: tauri::AppHandle, id: String, window_label: String) {
     }
     if let Some(png) = shot {
       remember(&id, png.clone());
-      // The card may already be open with nothing in it; hand it the picture rather
-      // than making the pointer wait for the next hover.
       if let Some(state) = app.try_state::<crate::ipc::AppState>() {
-        // The card is an overlay webview, one per window, tracked by the state.
         let overlay = {
           let guard = state.overlay.read().unwrap_or_else(|e| e.into_inner());
           guard.get(&window_label).cloned()
@@ -196,8 +168,6 @@ pub fn capture_later(app: tauri::AppHandle, id: String, window_label: String) {
             .contains(&window_label)
           {
             use tauri::Emitter;
-            // A data url, not the raw bytes: the page puts this straight into an img
-            // src, and a byte array there is just a broken picture.
             let payload = serde_json::json!({
               "id": id,
               "image": format!("data:image/jpeg;base64,{}", crate::extensions::base64(&png)),
@@ -207,8 +177,6 @@ pub fn capture_later(app: tauri::AppHandle, id: String, window_label: String) {
         }
       }
     }
-    // Back to sleep: the wake-up was for the picture only, and only while the tab is
-    // still in the background - freezing the page someone is looking at blanks it.
     if still_hidden()
       && app
         .try_state::<crate::ipc::AppState>()
@@ -228,26 +196,13 @@ pub fn needs(id: &str, seconds: u64) -> bool {
     None => true,
   }
 }
-/// A live preview is refreshed when the stored picture is older than this. Short
-/// enough that a video tab looks alive while hovering it, long enough that moving
-/// the pointer across the strip does not wake a page over and over.
+/// Age after which a live preview is refreshed.
 const LIVE_REFRESH_SECS: u64 = 4;
 
 /// How long the wake-up is given to paint before the photograph is taken.
-///
-/// Showing a webview does not paint it on the spot: the compositor produces the
-/// next frame a little later, so an immediate capture hands back the frame from
-/// before the wake-up - which is exactly why the card seemed frozen.
 const LIVE_PAINT_WAIT: std::time::Duration = std::time::Duration::from_millis(160);
 
 /// Takes a picture of a tab that is not the selected one.
-///
-/// A hidden webview does not paint, so the only way to get a fresh frame is to
-/// show it for a moment - underneath the tab the user is looking at, so nothing
-/// becomes visible - let it paint, photograph it, and hide it again.
-///
-/// The page does see a visibility change while this happens, which is why it is a
-/// setting of its own.
 pub fn capture_live(
   selected: Option<&tauri::Webview>,
   target: &tauri::Webview,
@@ -264,13 +219,10 @@ pub fn capture_live(
   }
 
   target.show().ok()?;
-  // Underneath the tab on screen, so the photograph cannot catch itself.
   if let Some(selected) = selected {
     crate::platform::place_below(target, selected);
   }
   std::thread::sleep(LIVE_PAINT_WAIT);
-  // The tab may have been selected while we waited for it to paint, and it is the page on
-  // screen now: hiding it at this point is what leaves an empty window behind.
   if !still_hidden() {
     crate::logging::info(&format!("thumbs: {id} became visible, left on screen"));
     return None;
@@ -280,8 +232,6 @@ pub fn capture_live(
   crate::logging::info(&format!(
     "thumbs: live {id} -> {}",
     match &png {
-      // The fingerprint says whether the wake-up really produced a new frame or
-      // handed back the one the card was already showing.
       Some(bytes) => format!("{} bytes fp={:x}", bytes.len(), fingerprint(bytes)),
       None => "nothing".to_string(),
     }
