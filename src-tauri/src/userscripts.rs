@@ -167,7 +167,6 @@ pub fn compiled_patterns(script: &Userscript) -> (Vec<String>, Vec<String>) {
     (allow, deny)
 }
 
-/// https://developer.chrome.com/docs/extensions/develop/concepts/match-patterns
 pub fn match_to_regex(pattern: &str) -> Option<String> {
     let pattern = pattern.trim();
     if pattern == "<all_urls>" {
@@ -188,7 +187,6 @@ pub fn match_to_regex(pattern: &str) -> Option<String> {
     let host_regex = if host == "*" {
         "[^/]+".to_string()
     } else if let Some(domain) = host.strip_prefix("*.") {
-        // Chrome treats *.example.com as "example.com and any subdomain".
         let dot = r"\.";
         format!("(?:[^/]+{dot})?{}", regex::escape_component(domain))
     } else {
@@ -367,12 +365,9 @@ mod tests {
 
     #[test]
     fn match_regex_has_no_inner_anchors() {
-        // The path fragment must not bring its own anchors: a second one would
-        // only match at the start of the url and the pattern would never hit.
         let fragment = glob_fragment("/*");
         assert!(!fragment.contains('^') && !fragment.contains('$'));
 
-        // Locks the contract the loader relies on.
         assert_eq!(match_to_regex("*://*/*").unwrap(), "^(?:https?)://[^/]+/.*$");
         let site = match_to_regex("https://example.com/docs/*").unwrap();
         assert!(site.starts_with("^https://example"), "got {site}");
