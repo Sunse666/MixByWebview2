@@ -35,6 +35,9 @@ body.resizing .grip {
 body.resizing {
   user-select: none;
 }
+.side-tabs[hidden] {
+  display: none;
+}
 .side-tabs {
   display: flex;
   flex: 0 0 auto;

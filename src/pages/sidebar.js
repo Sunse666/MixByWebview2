@@ -229,7 +229,11 @@ function knownViews(list) {
 }
 
 function renderButtons() {
+  if (!views.includes(current)) current = views[0];
+  // One panel needs no row of buttons: the strip would only repeat its name.
+  tabs.hidden = views.length <= 1;
   tabs.replaceChildren();
+  if (tabs.hidden) return;
   for (const view of views) {
     const button = document.createElement("button");
     button.className = "side-tab";
@@ -241,7 +245,6 @@ function renderButtons() {
     });
     tabs.append(button);
   }
-  if (!views.includes(current)) current = views[0];
 }
 
 window.__mixSidebarViews = (list) => {
