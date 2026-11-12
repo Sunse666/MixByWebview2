@@ -4,7 +4,7 @@
 
 ## 快速开始
 
-1. 解压 `Mix-0.3.0-release.zip`（`dist/` 里按版本号命名）到任意目录
+1. 解压 `Mix-0.4.0-release.zip`（`dist/` 里按版本号命名）到任意目录
 2. 双击 `mix.exe`
 3. 首次启动会在同目录生成 `UserData/`、`crx/`、`javascript/`
 
