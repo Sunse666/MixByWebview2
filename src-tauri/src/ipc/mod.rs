@@ -201,17 +201,31 @@ impl AppState {
         parking_lot::RwLockWriteGuard::try_map(self.cores.write(), |map| map.get_mut(label)).ok()
     }
 
+    /// Tab state of one window. A window whose state is gone — a webview callback that
+    /// outlived its window — gets an empty one instead of taking the process down.
     pub fn read_core(&self, label: &str) -> parking_lot::MappedRwLockReadGuard<'_, Core> {
-        parking_lot::RwLockReadGuard::map(self.cores.read(), |map| {
-            map.get(label)
-                .unwrap_or_else(|| panic!("window {label} has no tab state"))
+        if let Some(core) = self.try_read_core(label) {
+            return core;
+        }
+        let mut guard = self.cores.write();
+        guard.entry(label.to_string()).or_insert_with(Core::default);
+        crate::logging::warn(&format!("no tab state for window {label}; using an empty one"));
+        let read = parking_lot::RwLockWriteGuard::downgrade(guard);
+        // The entry cannot vanish here: the lock was never released between the
+        // insert and the downgrade.
+        parking_lot::RwLockReadGuard::map(read, |map| {
+            map.get(label).expect("core inserted under the same lock")
         })
     }
 
     pub fn write_core(&self, label: &str) -> parking_lot::MappedRwLockWriteGuard<'_, Core> {
-        parking_lot::RwLockWriteGuard::map(self.cores.write(), |map| {
-            map.get_mut(label)
-                .unwrap_or_else(|| panic!("window {label} has no tab state"))
+        let mut guard = self.cores.write();
+        if !guard.contains_key(label) {
+            crate::logging::warn(&format!("no tab state for window {label}; using an empty one"));
+            guard.insert(label.to_string(), Core::default());
+        }
+        parking_lot::RwLockWriteGuard::map(guard, |map| {
+            map.get_mut(label).expect("core inserted under the same lock")
         })
     }
 }
