@@ -1,3 +1,4 @@
+// The settings page: builds each section and folds them into the sidebar order.
 import { setLanguage, t } from "../i18n.js";
 import { withFeedback, setFeedbackText } from "./feedback.js";
 import { addNavItem, groupSections } from "./settings/shell.js";
@@ -17,16 +18,11 @@ import { buildBackup } from "./settings/sections/backup.js";
 import { buildBrowser } from "./settings/sections/browser.js";
 import { buildToolbar } from "./settings/sections/toolbar.js";
 
-// Every section saves as you change it; this wrapper says whether it worked.
 const invoke = withFeedback(window.__TAURI__.core.invoke);
 
 const nav = document.getElementById("nav");
 const main = document.getElementById("main");
 
-// The page is nothing but an order: each section module returns its own heading
-// and card, and groupSections folds them into the sidebar afterwards. The order
-// here is only the reading order before folding; the sidebar sorts by PREFERRED
-// in shell.js.
 const SECTIONS = [
   buildStartup,
   buildBookmarks,

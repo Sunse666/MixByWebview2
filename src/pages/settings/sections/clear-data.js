@@ -1,4 +1,4 @@
-// Generated from the old inline section; behaviour unchanged.
+// Clearing local data.
 import { t } from "../../../i18n.js";
 import { row, toggle, switchEl } from "../ui.js";
 
@@ -42,7 +42,6 @@ export function buildClearData({ settings, invoke }) {
   run.className = "button";
   run.textContent = t("Clear selected data");
   run.addEventListener("click", async () => {
-    // Irreversible: history, bookmarks, session and zoom have no undo.
     if (!window.confirm(t("Clear the selected data? This cannot be undone."))) return;
     const done = await invoke("clear_data", { kinds: [...picked] }).catch(() => []);
     run.textContent = t("Cleared") + ": " + (done || []).join(", ");

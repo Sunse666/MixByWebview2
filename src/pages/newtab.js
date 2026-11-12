@@ -42,7 +42,6 @@ async function boot() {
   document.getElementById("go").addEventListener("click", () => open(input.value));
   input.focus();
 
-  // Most visited hosts become the shortcut tiles.
   const visits = (await invoke("history_list", { limit: 400 }).catch(() => [])) || [];
   const counts = new Map();
   for (const visit of visits) {

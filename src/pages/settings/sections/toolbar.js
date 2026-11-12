@@ -1,4 +1,4 @@
-// Generated from the old inline section; behaviour unchanged.
+// Toolbar buttons: which ones show and in what order.
 import { t } from "../../../i18n.js";
 import { row, toggle, switchEl } from "../ui.js";
 import { TOOLBAR_CHOICES, DEFAULT_TOOLBAR } from "../tables.js";
@@ -12,8 +12,6 @@ export function buildToolbar({ settings, invoke }) {
   toolbarCard.className = "card";
   toolbarCard.style.maxWidth = "720px";
 
-  // The strip draws these from settings.toolbar, and the order in that array is
-  // the order they appear in, so a position is just an index.
   const toolbarIds = () =>
     Array.isArray(settings.toolbar) && settings.toolbar.length
       ? [...settings.toolbar]

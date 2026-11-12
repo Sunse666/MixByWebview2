@@ -55,7 +55,6 @@ async function boot() {
   restartBar.append(restartHint, restart);
   main.append(restartBar);
 
-  // Extensions WebView2 actually loaded: toggling here takes effect at once.
   const live = (await invoke("extension_live_list").catch(() => [])) || [];
   if (live.length) {
     const head = document.createElement("h2");
@@ -83,9 +82,6 @@ async function boot() {
       id.className = "host";
       id.textContent = item.id;
 
-      // Status only: the switch belongs on the card below, which carries the folder
-      // and can switch an extension back on as well as off. Two switches doing the
-      // same thing in two places was the confusing part of this page.
       const state = document.createElement("span");
       state.className = "card-note";
       state.textContent = item.enabled ? t("Enabled") : t("Disabled");
@@ -101,8 +97,6 @@ async function boot() {
   main.append(grid);
 
   const list = (await invoke("ext_list").catch(() => [])) || [];
-  // "off" cards are shown too: the switch that turns them back on lives on the card, so
-  // leaving them out of the list leaves no way to switch them on again.
   const loaded = list.filter((ext) => ext.status === "loaded" || ext.status === "off");
 
   if (!loaded.length) {
@@ -119,8 +113,6 @@ async function boot() {
   for (const ext of loaded) {
     const card = document.createElement("div");
     card.className = "card";
-    // The status line a switch writes into. It was created but never added to the card,
-    // which is why every message about a restart went nowhere.
     const note2 = document.createElement("div");
     note2.className = "card-note";
     note2.textContent = "";
@@ -183,17 +175,10 @@ async function boot() {
     });
     actions.append(bar);
 
-    // One control, both directions: turning it off asks the browser to unload the
-    // extension, turning it on hands the browser the folder again, which is the only
-    // handle left once an extension has been switched off.
-    // Matching by name is the only handle we have; compare loosely so a difference in
-    // case or spacing does not read as "not loaded".
     const norm = (value) => String(value || "").toLowerCase().replace(/\s+/g, "");
     const liveEntry = live.find((item) => norm(item.name) === norm(ext.name))
       || live.find((item) => norm(item.name).includes(norm(ext.name)))
       || live.find((item) => norm(ext.name).includes(norm(item.name)) && norm(item.name).length > 3);
-    // The settings list is the state: the browser's own off switch is one way, so it
-    // cannot be the place a switch keeps its answer.
     const enabledNow = !(disabledList || []).includes(ext.name);
     const toggle = document.createElement("button");
     toggle.className = "switch";
@@ -216,7 +201,6 @@ async function boot() {
         return;
       }
       toggle.setAttribute("aria-checked", String(!on));
-      // The folder changes right away; the browser reads it on the next start.
       note2.textContent = on ? t("Off after a restart") : t("On after a restart");
     });
     actions.append(toggle);

@@ -1,8 +1,6 @@
-// UI language. Strings are keyed by their English text: anything missing from a
-// dictionary falls back to English, so a partial translation is always usable.
+// UI language; strings are keyed by their English text.
 const DICT = {
   zh: {
-    // menu pages
     Settings: "设置",
     Extensions: "扩展",
     Scripts: "脚本",
@@ -306,7 +304,6 @@ const DICT = {
     "Reload extensions": "重新加载扩展",
     "Hide from the toolbar": "从工具栏隐藏",
     "Show in the toolbar": "显示在工具栏",
-    // toolbar settings page
     "Downloads folder": "下载目录",
     "Show the bookmarks bar": "显示书签栏",
     "Restore the last session on start": "启动时恢复上次会话",

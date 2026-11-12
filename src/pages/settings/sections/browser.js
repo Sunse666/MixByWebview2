@@ -1,4 +1,4 @@
-// Generated from the old inline section; behaviour unchanged.
+// Browser settings: proxy and default-browser registration.
 import { t } from "../../../i18n.js";
 import { row, toggle, switchEl } from "../ui.js";
 
@@ -28,8 +28,6 @@ export function buildBrowser({ settings, invoke }) {
     row2,
   );
 
-  // Proxy. It sits with the browser settings because that is what it changes - how this
-  // one app reaches the network - and it says plainly that a restart is needed.
   const proxyHead = document.createElement("h2");
   proxyHead.textContent = t("Network");
   proxyHead.style.margin = "18px 0 10px";

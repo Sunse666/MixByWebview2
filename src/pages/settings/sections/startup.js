@@ -1,4 +1,4 @@
-// Generated from the old inline section; behaviour unchanged.
+// Startup: session restore and the start page.
 import { t } from "../../../i18n.js";
 import { row, toggle, switchEl } from "../ui.js";
 

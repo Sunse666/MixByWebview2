@@ -1,5 +1,4 @@
-// Shared widgets for the settings page. Every row is a title plus one control,
-// so the same three helpers carry the whole page.
+// Shared widgets for the settings page.
 import { t } from "../../i18n.js";
 
 const { invoke } = window.__TAURI__.core;
@@ -146,7 +145,6 @@ async function openThemeEditor(holder) {
   actions.append(save, reset);
   holder.append(actions);
 
-  // live preview while editing: applied but not written to theme.json yet
   const preview = () => invoke("theme_apply", { theme: draft, persist: false }).catch(() => {});
   holder.addEventListener("input", preview);
 }

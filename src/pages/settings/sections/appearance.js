@@ -31,8 +31,6 @@ export function buildAppearance({ settings, invoke }) {
     await invoke("settings_set", { patch: { font_family: fontInput.value } }).catch(() => {});
   });
 
-  // Size presets, like the appearance pages of the browsers this imitates:
-  // 0 keeps whatever the site asked for.
   const sizeSelect = document.createElement("select");
   sizeSelect.className = "button";
   for (const [size, label] of SIZE_PRESETS) {
@@ -70,7 +68,6 @@ export function buildAppearance({ settings, invoke }) {
     await invoke("settings_set", { patch: { font_mono: monoInput.value } }).catch(() => {});
   });
 
-  // Live preview: the same sample line drawn twice, once in each family.
   const preview = document.createElement("div");
   preview.style.padding = "10px 0 2px";
   const previewText = document.createElement("div");
@@ -154,8 +151,6 @@ export function buildAppearance({ settings, invoke }) {
     location.reload();
   });
 
-  // The sidebar lives next to the pages, so its switch belongs with the interface
-  // rather than with the tab behaviour.
   const sideSelect = document.createElement("select");
   sideSelect.className = "button";
   for (const [value, label] of [
@@ -173,7 +168,6 @@ export function buildAppearance({ settings, invoke }) {
     await invoke("settings_set", { patch: { sidebar: sideSelect.value } }).catch(() => {});
   });
 
-  // Width next to the position, because it only means something when the sidebar is on.
   const sideWidth = document.createElement("input");
   sideWidth.type = "range";
   sideWidth.min = "180";

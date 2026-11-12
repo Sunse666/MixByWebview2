@@ -1,4 +1,4 @@
-// Generated from the old inline section; behaviour unchanged.
+// Interface language.
 import { setLanguage, t } from "../../../i18n.js";
 import { row } from "../ui.js";
 

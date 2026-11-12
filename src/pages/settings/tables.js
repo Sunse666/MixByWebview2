@@ -1,5 +1,4 @@
-// Every list the settings page offers, in one place: the page itself is layout,
-// these are the choices.
+// The lists the settings page offers.
 
 export const SIZE_PRESETS = [
   [0, "Site default"],
@@ -154,8 +153,6 @@ export const SHORTCUT_DEFAULTS = {
   group_tab: "ctrl+shift+g",
 };
 
-// The strip draws these from settings.toolbar, and the order in that array is
-// the order they appear in, so a position is just an index.
 export const TOOLBAR_CHOICES = [
   ["home", "Home"],
   ["reopen", "Reopen closed tab"],

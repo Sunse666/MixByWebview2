@@ -1,4 +1,4 @@
-// Generated from the old inline section; behaviour unchanged.
+// Performance: memory saving and tab freezing.
 import { t } from "../../../i18n.js";
 import { row, toggle, switchEl } from "../ui.js";
 
@@ -53,7 +53,6 @@ export function buildPerformance({ settings, invoke }) {
     await invoke("settings_set", { patch: { mark_suspended: next } }).catch(() => {});
   });
 
-  // Frozen tabs stop their timers; a tab that is playing sound is never frozen.
   const freezeSwitch = switchEl(settings.freeze_background !== false, async (next) => {
     await invoke("settings_set", { patch: { freeze_background: next } }).catch(() => {});
   });

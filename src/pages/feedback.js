@@ -1,8 +1,4 @@
-// A small confirmation for the pages that save as you go.
-//
-// Every setting is applied the moment it changes - there is no save button to
-// press, which is the point - but the calls used to end in .catch(() => {}) so a
-// failure looked exactly like a success, and nothing said anything either way.
+// A small confirmation for the pages that save as they go.
 
 const SHOWN_MS = 1400;
 

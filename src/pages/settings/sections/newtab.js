@@ -1,4 +1,4 @@
-// Generated from the old inline section; behaviour unchanged.
+// New tab page settings.
 import { t } from "../../../i18n.js";
 import { row, toggle, switchEl } from "../ui.js";
 

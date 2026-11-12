@@ -69,7 +69,6 @@ async function boot() {
 
   let items = (await invoke("bookmark_list").catch(() => [])) || [];
 
-  // Folder names are derived from the bookmarks themselves, so no extra store.
   const foldersOf = (list) => [...new Set(list.map((item) => item.folder || ""))].filter(Boolean);
 
   const paint = () => {
@@ -237,7 +236,6 @@ async function boot() {
     if (event.key !== "Enter") return;
     const name = newFolder.value.trim();
     if (!name) return;
-    // Folders exist once a bookmark joins them, so move the first visible row.
     const first = items[0];
     if (first) {
       await invoke("bookmark_set_folder", { url: first.url, folder: name }).catch(() => {});

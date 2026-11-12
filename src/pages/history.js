@@ -14,7 +14,6 @@ const PAGES = {
 
 let visits = [];
 const selection = new Set();
-// Deleted rows are remembered so a failed or slow write cannot bring them back.
 const tombstones = new Set();
 
 function keyOf(visit) {
@@ -140,7 +139,6 @@ function rowFor(visit, repaint) {
   row.dataset.at = String(visit.at);
   remove.dataset.action = "remove";
   row.append(box, iconFor(visit), time, title, host, remove);
-  // A single click opens the entry, like the address list in a desktop browser.
   row.addEventListener("click", (event) => {
     if (event.target === box || event.target === remove) return;
     invoke("tab_navigate", { url: visit.url }).catch(() => {});
@@ -303,7 +301,6 @@ async function boot() {
     if (!row) return;
     const key = (row.dataset.url || "") + "|" + (row.dataset.at || "0");
 
-    // Same path as the checkbox: select the row, then run the bulk delete.
     selection.add(key);
     tombstones.add(key);
 
@@ -374,7 +371,6 @@ async function boot() {
 
 
 
-  // The page stays open while other tabs record visits, so poll for changes.
   setInterval(reload, 1500);
   window.addEventListener("focus", reload);
 }

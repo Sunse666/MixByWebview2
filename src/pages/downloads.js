@@ -93,7 +93,6 @@ async function boot() {
       state.className = "host";
       const parts = [t(task.state) || task.state];
       if (task.bytes) parts.push(size(task.bytes));
-      // A rate only means something while the file is still growing.
       if (task.state === "started" && task.speed) parts.push(size(task.speed) + "/s");
       if (task.total && task.state !== "finished") {
         parts.push(Math.min(100, Math.round((task.bytes / task.total) * 100)) + "%");
@@ -137,7 +136,6 @@ async function boot() {
   tasks = (await invoke("download_list").catch(() => [])) || [];
   paint(tasks);
 
-  // progress arrives while the page is open
   setInterval(async () => {
     const fresh = (await invoke("download_list").catch(() => [])) || [];
     if (JSON.stringify(fresh) !== JSON.stringify(tasks)) {

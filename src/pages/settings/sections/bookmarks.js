@@ -1,4 +1,4 @@
-// Generated from the old inline section; behaviour unchanged.
+// Bookmarks bar setting.
 import { t } from "../../../i18n.js";
 import { row, toggle, switchEl } from "../ui.js";
 

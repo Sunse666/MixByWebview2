@@ -1,11 +1,9 @@
-// The page is a flat list of h2 + card pairs; this folds them into the sections
-// the sidebar switches between, and puts the section list in the nav.
+// Folds the settings page into the sections the sidebar switches between.
 import { t } from "../../i18n.js";
 
 const { invoke } = window.__TAURI__.core;
 
-// The order the sections appear in the sidebar, mirroring the appearance page of
-// the browsers this imitates: one entry per concern, not per card.
+// The order the sections appear in the sidebar.
 const PREFERRED = [
   "Performance",
   "Appearance",

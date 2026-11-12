@@ -1,7 +1,4 @@
-// The sidebar: bookmarks, downloads and history in one narrow column.
-//
-// It is its own webview so the page next to it keeps its own layout, and it asks for
-// the same data as the internal pages do rather than duplicating any of it.
+// The sidebar: bookmarks, downloads and history in one column.
 import { setLanguage, t } from "../i18n.js";
 import { withFeedback, setFeedbackText } from "./feedback.js";
 
@@ -116,8 +113,6 @@ async function boot() {
     });
     tabs.append(button);
   }
-  // Keep the lists current: a bookmark saved in a tab, a finished download or a new
-  // visit should appear here without reopening the sidebar.
   await listen("bookmarks:changed", () => paint()).catch(() => {});
   await listen("download:changed", () => paint()).catch(() => {});
   await paint();

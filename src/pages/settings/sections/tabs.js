@@ -18,11 +18,9 @@ export function buildTabs({ settings, invoke }) {
     return row(t(label), t(note), control);
   };
 
-  // Off by default: the card costs a screenshot per tab switch.
   const preview = switchEl(settings.tab_hover_preview === true, async (next) => {
     await invoke("settings_set", { patch: { tab_hover_preview: next } }).catch(() => {});
   });
-  // Off by default, and only meaningful with the card on: this one wakes the page.
   const live = switchEl(settings.live_thumbs === true, async (next) => {
     await invoke("settings_set", { patch: { live_thumbs: next } }).catch(() => {});
   });
