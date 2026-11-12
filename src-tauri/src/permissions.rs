@@ -8,8 +8,7 @@ use tauri::{AppHandle, Manager};
 /// A prompt that was never answered is not worth keeping around.
 const PROMPT_TTL: Duration = Duration::from_secs(300);
 
-/// One outstanding question. The page polls for the answer instead of the
-/// command blocking a thread until the user makes up their mind.
+/// One outstanding question, answered by polling.
 pub struct Pending {
     /// Window whose page asked; the answer only belongs to it.
     pub window: String,
@@ -24,8 +23,7 @@ pub struct Pending {
 pub struct PermissionStore {
     /// "origin|kind" -> allow
     pub decisions: Mutex<HashMap<String, bool>>,
-    /// Outstanding prompts, answered by permission_reply and collected by
-    /// permission_poll.
+    /// Outstanding prompts, keyed by "origin|kind".
     pub pending: Mutex<HashMap<u64, Pending>>,
 }
 
@@ -93,8 +91,7 @@ pub fn answer(app: &AppHandle, id: u64, allow: bool) -> bool {
     }
 }
 
-/// The answer, once. None means the user has not decided yet; an id nobody
-/// knows about is denied rather than left waiting.
+/// The answer, once; None means the user has not decided yet.
 pub fn poll(app: &AppHandle, id: u64) -> Option<bool> {
     let (answer, key) = {
         let state = app.state::<AppState>();
@@ -111,8 +108,6 @@ pub fn poll(app: &AppHandle, id: u64) -> Option<bool> {
             },
         }
     };
-    // Remembered here so both a user answer and a dismissed prompt are covered,
-    // exactly once per prompt.
     remember(app, &key, answer);
     let state = app.state::<AppState>();
     state
@@ -124,8 +119,7 @@ pub fn poll(app: &AppHandle, id: u64) -> Option<bool> {
     Some(answer)
 }
 
-/// A prompt whose overlay closed without an answer counts as denied, otherwise
-/// the page would keep polling for something nobody can answer any more.
+/// A prompt whose overlay closed without an answer counts as denied.
 pub fn cancel_window(app: &AppHandle, window: &str) -> usize {
     let state = app.state::<AppState>();
     let mut pending = state

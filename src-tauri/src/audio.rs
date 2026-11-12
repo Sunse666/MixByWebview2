@@ -1,9 +1,4 @@
-//! Per tab audio state and muting, straight from WebView2.
-//!
-//! Polled rather than subscribed: WebView2 raises IsDocumentPlayingAudioChanged
-//! and IsMutedChanged, but the toolbar only ever shows the tab the user is
-//! looking at, so one cheap COM call per second beats wiring two delegates per
-//! webview that never go away.
+//! Per tab audio state and muting, read from WebView2.
 
 use std::sync::Mutex;
 use std::time::Duration;
@@ -98,8 +93,6 @@ pub fn watch(app: tauri::AppHandle) {
     let Some(state) = app.try_state::<crate::ipc::AppState>() else {
       continue;
     };
-    // Collected under the lock, probed without it: a COM round trip must never
-    // happen while the tab table is borrowed.
     let targets: Vec<(String, String)> = state
       .cores
       .read()
@@ -126,8 +119,6 @@ pub fn watch(app: tauri::AppHandle) {
         );
       }
     }
-    // Tab ids are not reused within a session, so the map would keep growing;
-    // once it is big enough, drop the tabs that no longer exist.
     let mut last = LAST.lock().unwrap_or_else(|e| e.into_inner());
     if let Some(map) = last.as_mut() {
       if map.len() > 200 {

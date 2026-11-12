@@ -1,13 +1,4 @@
 //! Freezing the tabs that are not on screen.
-//!
-//! A hidden webview keeps its renderer alive with every timer, animation and poll
-//! still scheduled; that is most of what a background tab costs. Chromium has a
-//! ready answer for it - the page lifecycle state - and it is the same one a real
-//! browser uses: a frozen page stops running script until something asks for it.
-//!
-//! Two tabs are never frozen: the one on screen, and the one that is playing sound,
-//! because a browser that silences your music when you switch tabs is broken. Both
-//! rules mirror what the browsers this imitates do.
 
 use std::collections::HashSet;
 use std::sync::Mutex;
@@ -32,16 +23,13 @@ fn mark(id: &str, frozen: bool) {
   }
 }
 
-/// Stops the page: no timers, no animation frames, no polling. The renderer stays,
-/// so the tab keeps its scroll position and its history, and thawing it is instant.
+/// Stops the page: no timers, no animation frames, no polling.
 #[cfg(windows)]
 pub fn freeze(webview: &tauri::Webview) -> bool {
   let id = webview.label().to_string();
   if is_frozen(&id) {
     return true;
   }
-  // Collect first: garbage in the heap survives a freeze until something wakes the
-  // page again, so this is the one moment it is cheap to reclaim.
   let _ = crate::screenshot::call_timeout(
     webview,
     "HeapProfiler.collectGarbage",

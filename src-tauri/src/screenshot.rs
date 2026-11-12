@@ -1,9 +1,4 @@
-//! Page screenshots and the DevTools protocol helper behind them.
-//!
-//! ICoreWebView2::CapturePreview wants an IStream and a completion handler, and
-//! the bytes then have to be read back out of the stream. The DevTools protocol
-//! the webview already exposes does the same job with one callback, so every
-//! capture in the app goes through here.
+//! Page screenshots over the DevTools protocol.
 
 /// Runs one DevTools protocol method and returns its raw JSON answer.
 #[cfg(windows)]
@@ -11,8 +6,7 @@ pub fn call(webview: &tauri::Webview, method: &str, params: &str) -> Option<Stri
   call_timeout(webview, method, params, std::time::Duration::from_secs(8))
 }
 
-/// Same, with an explicit deadline: a probe that must not hold up its caller
-/// cannot afford to wait eight seconds for an answer that may never come.
+/// Runs a protocol method with an explicit deadline.
 #[cfg(windows)]
 pub fn call_timeout(
   webview: &tauri::Webview,
@@ -88,10 +82,6 @@ pub fn capture(_webview: &tauri::Webview) -> Option<Vec<u8>> {
 }
 
 /// Grabs the whole document, not just what is on screen.
-///
-/// The protocol needs the page's own height for this, and asking for its layout metrics
-/// first is the only reliable way to get it: the content size includes everything below
-/// the fold, while the visual viewport only ever describes the window.
 #[cfg(windows)]
 pub fn capture_full(webview: &tauri::Webview) -> Option<Vec<u8>> {
   let metrics = call(webview, "Page.getLayoutMetrics", "{}")?;
@@ -102,8 +92,6 @@ pub fn capture_full(webview: &tauri::Webview) -> Option<Vec<u8>> {
   if !(width.is_finite() && height.is_finite()) || width < 1.0 || height < 1.0 {
     return None;
   }
-  // A very long page would be a very large image; cap it so a runaway document cannot
-  // fill the disk or hang the capture.
   let height = height.min(16000.0);
   let params = format!(
     r#"{{"format":"png","captureBeyondViewport":true,"clip":{{"x":0,"y":0,"width":{width},"height":{height},"scale":1}}}}"#
@@ -164,7 +152,6 @@ mod tests {
 
   #[test]
   fn ignores_padding_and_noise() {
-    // "hi" with padding, plus a stray newline as a data field could carry.
     assert_eq!(decode_base64("aGk=\n").as_deref(), Some(&b"hi"[..]));
     assert_eq!(decode_base64(""), None);
   }
