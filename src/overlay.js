@@ -1,3 +1,4 @@
+// The overlay page: menus, panels, permission prompts and the tab hover card.
 const { invoke } = window.__TAURI__.core;
 import { setLanguage, t } from "./i18n.js";
 const { listen } = window.__TAURI__.event;
@@ -59,7 +60,6 @@ function applyTheme(theme) {
   s.setProperty("--tab-radius", `${theme.tab_radius}px`);
 }
 
-// Rust pushes every change here too, so preview and chrome stay in sync.
 window.__mixApplyTheme = applyTheme;
 
 function render(theme) {
@@ -171,7 +171,6 @@ async function bootAppMenu() {
       row("\u2193", "Downloads", "Ctrl+J", act(() => invoke("tab_new", { url: "http://tauri.localhost/pages/downloads.html" })));
       divider();
 
-      // Zoom strip: - 100% +
       const zoomRow = document.createElement("div");
       zoomRow.className = "row zoom-row";
       const zoomIcon = document.createElement("span");
@@ -415,7 +414,6 @@ async function bootAppMenu() {
   await render(params.get("page") || "root");
 }
 async function bootSuggest() {
-  // suggest closes on blur
   window.addEventListener("blur", () => invoke("overlay_close").catch(() => {}));
   window.addEventListener("keydown", (event) => {
     if (event.key === "Escape") invoke("overlay_close").catch(() => {});
@@ -466,8 +464,6 @@ async function bootSuggest() {
     }
   };
 
-  // The address bar owns the keyboard, so the highlighted row is painted from
-  // there; -1 clears the highlight.
   window.__mixSuggestActive = (index) => {
     const rows = [...menu.querySelectorAll(".row")];
     rows.forEach((row, at) => row.classList.toggle("active", at === index));
@@ -580,7 +576,6 @@ async function bootSearch(mode) {
   const search = async (query) => {
     const text = (query || "").trim().toLowerCase();
     if (mode === "tabs") {
-      // Every window, not just this one: a tab being open somewhere else is still open.
       const tabs = (await invoke("tab_search_all").catch(() => [])) || [];
       const windows = new Set(tabs.map((tab) => tab.window));
       paint(
@@ -594,8 +589,6 @@ async function bootSearch(mode) {
           .slice(0, 40)
           .map(({ tab }) => ({
             label: (tab.pinned ? "\ud83d\udccc " : "") + (tab.title || t("New tab")),
-            // Only name the window when there is more than one, so a single window looks
-            // exactly as it did before.
             hint: windows.size > 1 ? tab.url + "  ·  " + tab.window : tab.url,
             run: () => invoke("tab_focus_any", { window: tab.window, id: tab.id }).catch(() => {}),
           })),
@@ -726,14 +719,8 @@ async function bootDownloads() {
 
   const paint = (tasks) => {
     list.replaceChildren();
-    // One row per file: a retry, or a redirect that asked twice, used to leave several
-    // rows writing the same download.
-    // One row per download: a retry continues the same transfer, so the list should not
-    // show the failed attempt and the running one as two things.
     const seen = new Map();
     for (const task of tasks || []) {
-      // By file, not by url: a signed download link changes between attempts, so the same
-      // download arrives with a different url every time it is retried.
       const key = task.path || task.url;
       const rank = (entry) =>
         entry.state === "started" ? 3 : entry.state === "interrupted" ? 2 : 1;
@@ -761,10 +748,7 @@ async function bootDownloads() {
       meta.className = "download-meta";
       const parts = [t(task.state) || task.state];
       if (task.bytes) parts.push(size(task.bytes));
-      // Only a running download has a rate worth showing.
       if (task.state === "started" && task.speed) parts.push(size(task.speed) + "/s");
-      // A share of the total is what the size alone could never say: the engine knows the
-      // length the server announced, so the row can show how far along it is.
       if (task.total && task.state !== "finished") {
         parts.push(Math.min(100, Math.round((task.bytes / task.total) * 100)) + "%");
       }
@@ -805,8 +789,6 @@ async function bootDownloads() {
           invoke("overlay_close").catch(() => {});
         });
         row.append(open);
-        // The webview's own download cannot always be steered; a retry through the
-        // internal engine can.
         if (task.state === "failed" || task.state === "interrupted") {
           const retry = document.createElement("button");
           retry.className = "download-action";
@@ -821,8 +803,6 @@ async function bootDownloads() {
     }
   };
 
-  // Rows that claim to be running when their loop is gone become paused rows before the
-  // first paint, so the panel never shows a download stuck at nothing.
   await invoke("download_reconcile").catch(() => {});
   paint(await invoke("download_list").catch(() => []));
   listen("download:changed", (event) => paint(event.payload)).catch(() => {});
@@ -893,10 +873,6 @@ function fillThumb(frame, image, card, src) {
 async function bootThumb() {
   const id = params.get("id") || "";
   thumbFilled = false;
-  // The listener goes up before the card is even asked for. The picture for a
-  // background tab is taken on a worker and can finish before this page exists, and an
-  // event nobody was listening for is simply gone - which is why the frame stayed empty
-  // roughly whenever the capture was quick.
   const ready = listen("thumbs:ready", (event) => {
     const payload = event.payload || {};
     if (payload.id !== id) return;
@@ -919,9 +895,6 @@ async function bootThumb() {
     invoke("overlay_close").catch(() => {});
   });
 
-  // The frame is there either way: when the picture is still being taken for a
-  // background tab, the card opens at once with an empty frame and the photograph
-  // arrives as "thumbs:ready" instead of the hover showing nothing at all.
   const frame = document.createElement("div");
   frame.className = "thumb-frame";
   const image = document.createElement("img");
@@ -937,9 +910,6 @@ async function bootThumb() {
 
   if (data.image) fillThumb(frame, image, card, data.image);
 
-  // And if there is still no picture, ask again a few times. The event can be missed for
-  // reasons this page cannot see, but the picture itself lives in the backend either way,
-  // so a short poll settles it.
   if (!data.image) {
     (async () => {
       for (let attempt = 0; attempt < 8 && !thumbFilled; attempt += 1) {
@@ -948,8 +918,6 @@ async function bootThumb() {
         const again = await invoke("thumb_card", { id }).catch(() => null);
         if (again && again.image) fillThumb(frame, image, card, again.image);
       }
-      // Give up quietly: an empty frame with the tab's details is better than a card
-      // that never appears.
       if (!thumbFilled) frame.classList.remove("pending");
     })();
   }
@@ -1004,12 +972,6 @@ async function bootThumb() {
   line.append(badges);
   card.append(line);
 
-  // Memory. The page's own numbers come first, because they belong to this tab; the
-  // browser total is summed over its processes, and the average is labelled as one
-  // since WebView2 cannot say which renderer serves which tab.
-  // The numbers arrive on their own call and are appended when they do: reading them
-  // costs several devtools round trips, and waiting for those is what left the card as
-  // an empty panel.
   const notes = document.createElement("div");
   notes.className = "thumb-notes";
   card.append(notes);
@@ -1027,11 +989,9 @@ async function bootThumb() {
         notes.append(line);
       }
       const totalParts = [];
-      // "Browser", not "Total": every process the browser owns, on a card about one tab.
       if (stats.memory_total) {
         totalParts.push(t("Browser") + " " + megabytes(stats.memory_total));
       }
-      // With a single tab the "average" is the total again, so it is left out.
       if (stats.memory_average && stats.live_tabs > 1) {
         totalParts.push(
           t("Average") + " " + megabytes(stats.memory_average) + " / " + stats.live_tabs,
@@ -1046,8 +1006,6 @@ async function bootThumb() {
     })
     .catch(() => {});
 
-  // A background tab cannot be photographed without showing it, so say when the
-  // picture is a memory rather than a live view.
   if (data.image && data.image_age_secs !== null && data.image_age_secs > 8) {
     const note = document.createElement("div");
     note.className = "thumb-note";
@@ -1380,7 +1338,6 @@ async function bootMenu() {
     }
   };
 
-  // Only offer what applies to what was clicked.
   if (context.link) {
     item("\u2197", "Open link in new tab", "", () => invoke("tab_new", { url: context.link }));
     item("\u2398", "Copy link address", "", () => copy(context.link));
@@ -1428,7 +1385,6 @@ async function bootMenu() {
   });
   item("\u2691", "Inspect", "", () => invoke("shortcut", { action: "devtools" }));
 
-  // Dismiss when the pointer lands anywhere in the panel but not on a row.
   menu.addEventListener("pointerdown", (event) => {
     if (event.target === menu) invoke("overlay_close");
   });
@@ -1455,7 +1411,6 @@ async function bootPermission() {
   document.getElementById("permission-block").addEventListener("click", () => answer(false));
 }
 
-// Escape closes any overlay, whatever kind it is.
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
     invoke("overlay_close").catch(() => {});
@@ -1468,9 +1423,6 @@ async function applyLanguage() {
 }
 
 async function boot() {
-  // Every panel starts hidden and only the one this kind needs is revealed:
-  // a kind that forgot to hide the others used to paint the theme editor, which
-  // is what the tab hover card showed instead of its own content.
   menu.hidden = true;
   appMenu.hidden = true;
   themePanel.hidden = true;

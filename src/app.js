@@ -1,3 +1,4 @@
+// The chrome strip: tabs, address bar, toolbar, bookmarks and the key bridge the page forwards.
 const { invoke } = window.__TAURI__.core;
 import { setLanguage, t } from "./i18n.js";
 const { listen } = window.__TAURI__.event;
@@ -6,8 +7,6 @@ const root = document.documentElement;
 const urlInput = document.getElementById("url");
 const tabStrip = document.getElementById("tabs");
 
-// Anything that throws in this page takes a piece of the strip with it and leaves no
-// trace, so every failure is reported to the log where it can be read.
 function reportError(what, error) {
   invoke("ui_log", {
     message: "ui error " + what + ": " + (error && error.message ? error.message : error),
@@ -27,7 +26,6 @@ let settings = { show_bookmarks: false };
 let draggingBookmark = null;
 let selected = null;
 let hidePill = null;
-// Hover preview: the timer that delays the card and whether one is showing.
 let hoverThumb = null;
 let thumbOpen = false;
 const downloadPill = document.getElementById("download");
@@ -41,8 +39,6 @@ function renderDownloads(tasks) {
   }
   downloadPill.hidden = false;
   downloadPill.dataset.id = String(latest.id);
-  // A download that just started opens the panel by itself, the way other browsers announce
-  // one: the pill alone says how big it is but not what it is or what can be done with it.
   if (latest.state === "started" && latest.id !== announcedDownload) {
     announcedDownload = latest.id;
     const box = downloadPill.getBoundingClientRect();
@@ -55,7 +51,6 @@ function renderDownloads(tasks) {
   downloadPill.title = latest.path || latest.url;
   if (latest.state === "started") {
     const mb = (latest.bytes || 0) / (1024 * 1024);
-    // The rate is what tells you whether it is moving at all.
     const rate = latest.speed
       ? " " + (latest.speed / (1024 * 1024)).toFixed(1) + " MB/s"
       : "";
@@ -87,8 +82,6 @@ const LIGHT_THEME = {
   url: "#eef1f5",
 };
 
-// The last theme file applied, so switching back from the light palette can
-// restore it instead of leaving the light overrides behind.
 let activeTheme = null;
 
 function prefersLight() {
@@ -100,7 +93,6 @@ function applyThemeMode(mode) {
   const light = mode === "light" || (mode === "system" && prefersLight());
   if (!light) {
     root.style.colorScheme = "dark";
-    // Put the theme's own colours back; the light palette set them inline.
     if (activeTheme) applyTheme(activeTheme);
     return;
   }
@@ -138,7 +130,6 @@ function applyTheme(theme) {
   s.setProperty("--tab-radius", `${theme.tab_radius}px`);
 }
 
-// Rust calls this after every theme change, including live preview.
 window.__mixApplyTheme = applyTheme;
 
 /** The one group a tab belongs to, if any. */
@@ -146,9 +137,6 @@ function groupOf(id) {
   return (groups || []).find((group) => group.members.includes(id));
 }
 
-// The strip scrolls, but its scrollbar is hidden, so a row of tabs could run off the
-// right edge with no way to reach the end of it. Two arrows appear when there is more
-// than fits, and a wheel over the strip scrolls it sideways.
 const stripLeft = document.createElement("button");
 const stripRight = document.createElement("button");
 for (const [button, glyph, dir] of [
@@ -177,7 +165,6 @@ tabStrip.addEventListener(
   "wheel",
   (event) => {
     if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
-    // A vertical wheel over a horizontal strip should scroll the strip.
     if (tabStrip.scrollWidth <= tabStrip.clientWidth) return;
     event.preventDefault();
     tabStrip.scrollLeft += event.deltaY;
@@ -187,10 +174,6 @@ tabStrip.addEventListener(
 );
 window.addEventListener("resize", syncStripScroll);
 
-// Tab elements are reused, not rebuilt. Replacing them on every update is what broke
-// dragging and double clicks: the first mousedown selects the tab, the strip redraws
-// with new elements, and the drag or the second click lands on a node that is already
-// gone.
 const tabNodes = new Map();
 
 /** The tab as it is now: handlers outlive several updates. */
@@ -207,8 +190,6 @@ let groupMenuUntil = 0;
 
 /** Where a group chip is, in window coordinates for the overlay. */
 function openGroupMenu(group, x, y) {
-  // The panel is a separate webview with no "I am done" signal, so the strip keeps quiet
-  // for a few seconds after it opens instead of guessing when it closed.
   groupMenuOpen = true;
   groupMenuUntil = Date.now() + 8000;
   clearTimeout(hoverThumb);
@@ -217,9 +198,6 @@ function openGroupMenu(group, x, y) {
     thumbOpen = false;
     invoke("overlay_close").catch(() => {});
   }
-  // Its own panel rather than a div: the chrome webview is only as tall as the strip, so
-  // a menu drawn inside it cannot reach below the strip, and two panels layered over the
-  // same spot is the one arrangement the window handles cleanly.
   invoke("overlay_open_at", {
     kind: "group_menu&id=" + group.id,
     x: Math.round(x - 12),
@@ -267,7 +245,6 @@ function groupChip(group) {
   return el;
 }
 
-// Manual drag state: one press at a time, ended by the document.
 let press = null;
 
 function clearDropTargets() {
@@ -319,8 +296,6 @@ function onDragEnd(event) {
     .elementFromPoint(event.clientX, event.clientY)
     ?.closest(".tab, .group-chip");
   if (!under) {
-    // Released on empty strip: drop it where the pointer is rather than nowhere. Only
-    // inside the strip, so releasing over the page still cancels.
     const strip = tabStrip.getBoundingClientRect();
     const inside =
       event.clientX >= strip.left &&
@@ -341,7 +316,6 @@ function onDragEnd(event) {
     if (to !== current) invoke("tab_move", { id: held.id, to }).catch(() => {});
     return;
   }
-  // Dropping on a group chip joins that group; dropping on a tab moves the tab there.
   if (under.dataset.group) {
     invoke("group_add", { id: held.id, groupId: under.dataset.group }).catch(() => {});
     return;
@@ -394,9 +368,6 @@ function fillTab(el, tab) {
     invoke("tab_close", { id: tab.id });
   });
 
-  // Only a real image source, and only while it loads: an empty or half-encoded
-  // favicon used to leave the browser's broken-image glyph in the strip, which is
-  // uglier than no icon at all.
   const iconUrl = String(tab.icon || "");
   const looksReal =
     (iconUrl.startsWith("data:image/") && iconUrl.length > 64) ||
@@ -439,8 +410,6 @@ const HOVER_DELAY = 650;
  * produces just by arriving on a tab, so the card never came up at all.
  */
 function armHover(id, el) {
-  // A card opening under the group menu would take the keyboard away from the name
-  // field, and the menu is an overlay of its own, so the strip stays quiet meanwhile.
   if (groupMenuOpen) {
     if (Date.now() < groupMenuUntil) return;
     groupMenuOpen = false;
@@ -459,10 +428,6 @@ function armHover(id, el) {
 
 /** Wires the handlers a tab element keeps for its whole life. */
 function wireTab(el, id) {
-  // Not draggable: with the attribute on, the browser starts its own drag session on
-  // the first movement and swallows every mousemove and the mouseup with it, which is
-  // why the hand-rolled drag below never saw the release. The attribute stays off and
-  // a stray dragstart is refused outright.
   el.draggable = false;
   el.addEventListener("dragstart", (event) => event.preventDefault());
   el.addEventListener("mousedown", (event) => {
@@ -483,14 +448,8 @@ function wireTab(el, id) {
   el.addEventListener("contextmenu", (event) => {
     event.preventDefault();
     event.stopPropagation();
-    // The tab's own menu: pin, reload, group, copy, close. Right click used to toggle
-    // the pin, which hid every other thing you might want from a tab.
     invoke("tab_menu", { id, x: event.clientX, y: event.clientY }).catch(() => {});
   });
-  // Dragging is done by hand rather than with the html drag and drop api. That api
-  // needs the element that started the gesture to still be the element under the
-  // pointer, which a strip that redraws itself cannot promise, and it gave nothing back
-  // when it silently declined to start. A press, a move and a release are enough.
   el.addEventListener("mousedown", (event) => {
     if (event.button !== 0 || event.target.closest("button")) return;
     beginTabDrag(id, event.clientX, event.clientY);
@@ -552,8 +511,6 @@ function syncLoading() {
 }
 
 function renderTabs() {
-  // Strip order: a closed group is one chip and its members are left out; an open group
-  // keeps its tabs together; everything else stays in tab order.
   const order = [];
   const placed = new Set();
   for (const tab of tabs) {
@@ -625,7 +582,6 @@ function renderTabs() {
   syncStripScroll();
   syncLoading();
 
-  // Anything no longer in the strip: a closed member, or a tab that was closed.
   for (const [key, el] of tabNodes) {
     if (keep.has(key)) continue;
     if (key.startsWith("group:")) {
@@ -637,16 +593,12 @@ function renderTabs() {
       continue;
     }
     if (!tabs.some((tab) => tab.id === key)) {
-      // Fades out rather than vanishing: a closed tab, or the members of a group that
-      // was just collapsed, should read as going away.
       leaveStrip(el);
       tabNodes.delete(key);
     }
   }
 }
 
-// Whether the current tab shows translated text; the backend is the source of
-// truth so navigation cannot leave a stale "translated" state behind.
 let translateOn = false;
 
 async function runTranslate() {
@@ -672,7 +624,6 @@ async function toggleTranslate() {
   }
 
   translateOn = await runTranslate();
-  // Pages that render late have nothing to collect yet; one retry covers it.
   if (!translateOn) {
     await new Promise((resolve) => setTimeout(resolve, 700));
     translateOn = await runTranslate();
@@ -681,9 +632,6 @@ async function toggleTranslate() {
   renderToolbar(currentExtensions);
 }
 
-// Top level menus; each opens its own dropdown in an overlay window because the
-// strip is too short to hold a popup.
-// When the input is not an address, the address bar searches the web.
 const SEARCH_ENGINES = {
   baidu: "https://www.baidu.com/s?wd=",
   bing: "https://www.bing.com/search?q=",
@@ -707,7 +655,6 @@ function addressFor(text) {
   const direct = looksLikeAddress(text);
   if (direct) return direct;
   const query = (text || "").trim();
-  // A template with %s wins, so any engine can be added without new code.
   const template = (settings.custom_search || "").trim();
   if (template.includes("%s")) {
     return template.replace("%s", encodeURIComponent(query));
@@ -716,8 +663,6 @@ function addressFor(text) {
   return base + encodeURIComponent(query);
 }
 
-// Both search panels are overlay webviews: the chrome strip is only as tall as
-// the tabs and the address row, so a panel drawn here would be clipped.
 function openSearchPanel(kind) {
   const width = 560;
   const x = Math.max(8, Math.round((window.innerWidth - width) / 2));
@@ -743,7 +688,6 @@ const MENU_BAR = [
 ];
 
 function renderMenuBar() {
-  // The top menu bar is gone: the ≡ menu and Ctrl+Shift+P cover the same actions.
   const bar = document.getElementById("menubar");
   if (bar) bar.remove();
   return;
@@ -766,11 +710,8 @@ function renderMenuBar() {
   );
 }
 
-// Tab id -> { playing, muted }, pushed by the backend poller.
 const audioState = {};
 
-// The backend writes the png and answers with its path; only the file name is
-// worth showing.
 async function takeScreenshot() {
   try {
     const path = await invoke("tab_screenshot");
@@ -807,8 +748,6 @@ async function renderToolbar(extensions) {
   const inner = [];
   const outer = [];
 
-  // The saved order wins, so a button can be moved to either end; unknown ids
-  // from an older profile are simply skipped.
   const order = (settings.toolbar && settings.toolbar.length
     ? settings.toolbar
     : ["translate", "zoom", "bookmark", "extensions", "downloads"]);
@@ -827,7 +766,6 @@ async function renderToolbar(extensions) {
     } else if (id === "bookmark") {
       button.textContent = bookmarked ? "\u2605" : "\u2606";
     } else if (id === "zoom") {
-      // Chrome shows the percentage once the page is not at 100%.
       const level = await invoke("zoom_get").catch(() => 1);
       const pct = Math.round(level * 100);
       button.textContent = pct === 100 ? spec.glyph : `${pct}%`;
@@ -857,11 +795,9 @@ async function renderToolbar(extensions) {
     button.addEventListener("click", () =>
       invoke("overlay_open", { kind: `ext_info&name=${encodeURIComponent(ext.name)}` }),
     );
-    // Extension icons come before the puzzle menu, so the menu stays rightmost.
     outer.unshift(button);
   }
 
-  // Chrome order: every extension icon, then the puzzle, then downloads.
   const weight = (node) => {
     if (node.title === t(TOOLBAR_ITEMS.extensions.label)) return 1;
     if (node.title === t(TOOLBAR_ITEMS.downloads.label)) return 2;
@@ -936,9 +872,6 @@ function realIcon(url) {
 function syncAddressIcon(active) {
   const holder = document.getElementById("url-icon");
   if (!holder) return;
-  // Same rule as the strip: a half-encoded favicon used to leave the browser's
-  // broken-image glyph in the address bar, which looked like a bug rather than a site
-  // without an icon.
   if (active && realIcon(active.icon)) {
     holder.src = active.icon;
     holder.hidden = false;
@@ -948,7 +881,6 @@ function syncAddressIcon(active) {
   }
 }
 
-// Internal pages live on the asset host; show them the way a browser would.
 function prettyUrl(url) {
   const section = url.match(/pages\/([a-z]+)\.html#(.+)$/i);
   if (section) {
@@ -980,7 +912,6 @@ function setTabs(payload) {
   }
   const active = tabs.find((tab) => tab.id === selected);
   if (active) document.title = active.title || "Mix";
-  // Keep the incognito state visible in the chrome itself.
   document.body.classList.toggle("incognito", Boolean(active && active.incognito));
   syncAddressIcon(active);
   syncUrl();
@@ -988,7 +919,6 @@ function setTabs(payload) {
 
 const report = (message) => invoke("ui_log", { message }).catch(() => {});
 
-// Translation failures are reported by the backend; a silent no-op looks broken.
 let translateError = "";
 
 function showToast(text) {
@@ -997,7 +927,6 @@ function showToast(text) {
   toast.textContent = text;
   toast.hidden = false;
   clearTimeout(showToast.timer);
-  // A failure message deserves a longer look than a success flash.
   showToast.timer = setTimeout(() => {
     toast.hidden = true;
   }, 7000);
@@ -1009,12 +938,8 @@ window.__mixTranslateFailed = (message) => {
   renderToolbar(currentExtensions);
 };
 report("chrome boot v2");
-// A heartbeat, so a freeze can be told apart from a page that stopped reacting: if these
-// lines stop while the log's other lines continue, the page is stuck rather than the app.
 setInterval(() => report("chrome alive"), 60000);
 
-// Chrome draws its own menus; the WebView2 default menu does not belong on our UI.
-// Edits requested by the overlay menu; the field lives in this page.
 window.__mixUrlAction = (action) => {
   urlInput.focus();
   const selection = urlInput.value.slice(urlInput.selectionStart, urlInput.selectionEnd);
@@ -1063,7 +988,6 @@ function showContextMenu(x, y, rows) {
     }),
   );
   ctxMenu.hidden = false;
-  // Keep the menu inside the window.
   const width = ctxMenu.offsetWidth || 180;
   const height = ctxMenu.offsetHeight || 200;
   ctxMenu.style.left = Math.min(x, window.innerWidth - width - 6) + "px";
@@ -1127,7 +1051,6 @@ document.addEventListener("contextmenu", (event) => {
 
 document.addEventListener("mousedown", (event) => {
   if (!event.target.closest("#ctx-menu")) hideContextMenu();
-  // Anything that is not the field itself gives the keyboard back to the page.
   if (document.activeElement === urlInput && !event.target.closest("#url-wrap")) {
     urlInput.blur();
     invoke("focus_page").catch(() => {});
@@ -1136,8 +1059,6 @@ document.addEventListener("mousedown", (event) => {
 window.addEventListener("blur", hideContextMenu);
 window.addEventListener("resize", hideContextMenu);
 
-// Rust calls this after saving settings: the event bus does not reach child
-// webviews reliably, so the refresh is pushed in explicitly.
 window.__mixSettingsChanged = async () => {
   settings = await invoke("settings_get");
   renderToolbar(await invoke("ext_list"));
@@ -1150,7 +1071,6 @@ async function boot() {
   setLanguage(settings.language || "en");
   renderMenuBar();
 
-  // Listeners first: the backend may emit while this page is still starting.
   await listen("tabs:changed", (event) => {
     setTabs(event.payload);
     invoke("translate_state")
@@ -1184,7 +1104,6 @@ async function boot() {
     if (!tab) return;
     tab.loading = event.payload.loading;
     renderTabs();
-    // A spinner in a 14px icon is easy to miss; the bar and the stop button are not.
     if (tab.id === selected) syncLoading();
   });
   await listen("tab:icon", (event) => {
@@ -1211,9 +1130,7 @@ async function boot() {
   await listen("download:changed", (event) => renderDownloads(event.payload));
   setTabs(await invoke("tab_list"));
 
-  // Report the real strip height: DPI rounding otherwise leaves an empty band.
   applyThemeMode(settings.theme_mode || "dark");
-  // Only the "system" mode follows the os while the app is running.
   const scheme = window.matchMedia && window.matchMedia("(prefers-color-scheme: light)");
   if (scheme && scheme.addEventListener) {
     scheme.addEventListener("change", () => {
@@ -1221,7 +1138,6 @@ async function boot() {
     });
   }
 
-  // The bookmarks bar is accounted for separately, so report the strip without it.
   const fitStrip = () => {
     const bar = document.getElementById("bookmarks");
     const barHeight = bar && !bar.hidden ? bar.getBoundingClientRect().height : 0;
@@ -1247,7 +1163,6 @@ async function boot() {
   await listen("ui:focus-url", () => {
     urlInput.focus();
     urlInput.select();
-    // Focus events inside an unfocused webview are unreliable, so feed directly.
     if (typeof feedSuggest === "function") feedSuggest(urlInput.value);
   });
   const bar = document.getElementById("bookmarks");
@@ -1291,7 +1206,6 @@ async function boot() {
     invoke("window_control", { action: "max" });
   });
 
-  // Same map as the page side, so shortcuts work wherever the focus sits.
   window.addEventListener("keydown", (event) => {
     if (event.altKey && event.shiftKey && event.key.startsWith("Arrow")) {
       event.preventDefault();
@@ -1303,7 +1217,6 @@ async function boot() {
     else if (event.key === "F11") action = "fullscreen";
     else if (event.key === "F12") action = "devtools";
     else if (event.ctrlKey || event.metaKey) {
-      // Shift turns "t" into "T"; the map below is keyed on the letter.
       const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
       switch (key) {
         case "t": action = event.shiftKey ? "reopen_tab" : "new_tab"; break;
@@ -1333,21 +1246,15 @@ async function boot() {
     invoke("shortcut", { action });
   }, true);
 
-  // Address bar autocomplete: the dropdown is a separate overlay webview,
-  // because the chrome strip is only 68px tall and would clip it.
   var suggestOpen = false;
   var suggestItems = [];
   var suggestIndex = -1;
   var suggestQuery = "";
-  // The list comes back from the feed, so the arrow keys can walk it here while
-  // the overlay only paints the highlight.
   var takeSuggestions = (query) => (items) => {
     suggestItems = Array.isArray(items) ? items : [];
     suggestIndex = -1;
     suggestQuery = query;
   };
-  // An arrow key previews a url in the field; the next keystroke has to start
-  // from what was typed, not from the preview.
   var restoreQuery = () => {
     if (suggestIndex < 0) return;
     suggestIndex = -1;
@@ -1392,8 +1299,6 @@ async function boot() {
     invoke("overlay_close").catch(() => {});
   };
 
-  // The dropdown opens on typing, not on focus: an open dropdown is a separate
-  // webview that would swallow the click meant to move focus to the page.
   urlInput.addEventListener("keydown", (event) => {
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       event.preventDefault();
@@ -1407,9 +1312,6 @@ async function boot() {
   });
   urlInput.addEventListener("input", () => feedSuggest(urlInput.value));
 
-  // While the address bar owns the keyboard the page has the real focus, so
-  // typing arrives as events and is applied here, where the caret and the
-  // selection live.
   const urlInsert = (text) => {
     restoreQuery();
     const start = urlInput.selectionStart ?? urlInput.value.length;
@@ -1443,7 +1345,6 @@ async function boot() {
     } else if (key === "select-all") {
       urlInput.select();
     } else if (key === "delete-word") {
-      // Ctrl+Backspace: drop the word (or separator run) before the caret.
       const boundary = /[\s/.:?&=#@_-]/;
       let at = start;
       while (at > 0 && !boundary.test(urlInput.value[at - 1])) at -= 1;
@@ -1471,7 +1372,6 @@ async function boot() {
 
   window.__mixUrlInsert = urlInsert;
   window.__mixUrlKey = urlKey;
-  // Registered here so the handlers exist before the first keystroke can land.
   await listen("ui:url-insert", (event) => urlInsert(event.payload || ""));
   await listen("ui:url-key", (event) => urlKey(event.payload || ""));
   urlInput.addEventListener("blur", () => closeSuggest());
@@ -1501,8 +1401,6 @@ async function boot() {
   });
 
 
-  // The pill is where a download is announced, so clicking it shows what is downloading
-  // rather than jumping straight to the folder.
   downloadPill.addEventListener("click", () => {
     const box = downloadPill.getBoundingClientRect();
     invoke("overlay_open_at", {
@@ -1513,7 +1411,6 @@ async function boot() {
   });
 
   document.getElementById("theme-btn").addEventListener("click", () => invoke("overlay_toggle", { kind: "app_menu" }));
-  // Middle click closes a tab, like every other browser.
   document
     .getElementById("tabs")
     .addEventListener("auxclick", (event) => {
@@ -1523,8 +1420,6 @@ async function boot() {
     });
   document.getElementById("tab-new").addEventListener("click", () => invoke("tab_new", {}));
 
-  // Ctrl+click on the strip's screenshot button takes the whole page; the plain click
-  // keeps taking what is on screen.
   document.addEventListener(
     "click",
     (event) => {
@@ -1537,11 +1432,6 @@ async function boot() {
     true,
   );
 
-  // The address bar is not focused on purpose: it would open the suggestion
-  // dropdown over the page on every launch. Ctrl+L focuses it.
 }
 
-// Called, and loudly if it fails. This line was dropped once while editing, and the
-// result looked exactly like a browser whose strip had stopped working: the functions
-// were all there, nothing ran them. scripts/check-chrome.js now refuses that.
 boot().catch((error) => reportError("boot", error));
