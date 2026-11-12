@@ -107,6 +107,17 @@ pub fn ensure(app: &AppHandle, label: &str) {
     }
 }
 
+/// Tells the page which edge it is on, so the resize grip sits on the inner edge.
+pub fn tell_side(app: &AppHandle, label: &str, side: &str) {
+    let Some(view) = app.get_webview(&format!("{label}-side")) else {
+        return;
+    };
+    let value = if side == "right" { "right" } else { "left" };
+    let _ = view.eval(&format!(
+        "window.__mixSidebarSide && window.__mixSidebarSide(\"{value}\")"
+    ));
+}
+
 /// Shows, hides and places the sidebar to match the plan.
 pub fn apply(
     app: &AppHandle,

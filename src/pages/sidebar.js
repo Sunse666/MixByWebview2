@@ -114,6 +114,11 @@ function renderTabs(list) {
   }
 }
 
+window.__mixSidebarSide = (value) => {
+  side = value === "right" ? "right" : "left";
+  placeGrip();
+};
+
 window.__mixSidebarTabs = (list) => {
   tabSnapshot = list;
   if (current === "tabs") renderTabs(list);
@@ -140,8 +145,8 @@ function placeGrip() {
   grip.classList.toggle("left", side === "right");
 }
 
-function widthAt(event) {
-  const raw = drag.width + (event.screenX - drag.x) * drag.dir;
+function widthAt(state, event) {
+  const raw = state.width + (event.screenX - state.x) * state.dir;
   return Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, Math.round(raw)));
 }
 
@@ -154,38 +159,54 @@ function schedule(width) {
   });
 }
 
-grip.addEventListener("pointerdown", async (event) => {
+grip.addEventListener("pointerdown", (event) => {
   if (event.button !== 0) return;
-  const settings = await invoke("settings_get").catch(() => null);
-  if (!settings) return;
-  side = settings.sidebar === "right" ? "right" : "left";
-  placeGrip();
-  drag = {
-    x: event.screenX,
-    width: settings.sidebar_width || 260,
-    dir: side === "right" ? -1 : 1,
-  };
+  event.preventDefault();
   grip.setPointerCapture(event.pointerId);
   document.body.classList.add("resizing");
-  event.preventDefault();
+  drag = { x: event.screenX, width: 0, dir: 1, from: 0, moves: 0, ready: false };
+  const current = drag;
+  invoke("settings_get")
+    .then((settings) => {
+      if (!settings || drag !== current) return;
+      side = settings.sidebar === "right" ? "right" : "left";
+      placeGrip();
+      current.width = settings.sidebar_width || 260;
+      current.from = current.width;
+      current.dir = side === "right" ? -1 : 1;
+      current.ready = true;
+    })
+    .catch(() => {});
 });
 
 grip.addEventListener("pointermove", (event) => {
-  if (!drag) return;
-  schedule(widthAt(event));
+  if (!drag || !drag.ready) return;
+  drag.moves += 1;
+  schedule(widthAt(drag, event));
 });
 
 function endDrag(event) {
   if (!drag) return;
-  const width = widthAt(event);
+  const state = drag;
   drag = null;
   frame = 0;
   document.body.classList.remove("resizing");
-  invoke("sidebar_resize", { width, persist: true }).catch(() => {});
+  if (!state.ready) {
+    invoke("ui_log", { message: "sidebar resize: the grip let go before the settings arrived" }).catch(() => {});
+    return;
+  }
+  invoke("sidebar_resize", { width: widthAt(state, event), persist: true }).catch(() => {});
 }
 
 grip.addEventListener("pointerup", endDrag);
 grip.addEventListener("pointercancel", endDrag);
+grip.addEventListener("lostpointercapture", () => {
+  if (!drag) return;
+  invoke("ui_log", { message: "sidebar resize: the pointer was taken away (" + side + ")" }).catch(() => {});
+  drag = null;
+  frame = 0;
+  document.body.classList.remove("resizing");
+});
 
 async function boot() {
   const settings = await invoke("settings_get").catch(() => null);

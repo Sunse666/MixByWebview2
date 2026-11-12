@@ -79,6 +79,7 @@ pub async fn settings_set(
     patch: SettingsPatch,
 ) -> Result<Settings, AppError> {
     require_trusted(&webview)?;
+    let asked_side = patch.sidebar.is_some();
     let settings = apply_settings_patch(&state, patch)?;
     crate::tabs::apply_settings(&state.dirs, &settings);
     crate::tabs::broadcast_shortcuts(webview.app_handle());
@@ -87,6 +88,9 @@ pub async fn settings_set(
         .app_handle()
         .emit_to(label.clone(), "settings:changed", ());
     crate::sidebar::ensure(webview.app_handle(), &label);
+    if asked_side {
+        crate::sidebar::tell_side(webview.app_handle(), &label, &settings.sidebar);
+    }
     let _ = crate::window::relayout(webview.app_handle(), &label);
     Ok(settings)
 }
