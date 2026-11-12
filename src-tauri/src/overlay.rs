@@ -133,7 +133,24 @@ pub fn open_url(
         slots.insert(win.label().to_string(), label.clone());
     }
     crate::logging::info(&format!("overlay open {page}"));
+    mark_page(app, win.label(), true);
     Ok(())
+}
+
+/// Tells the page it is covered, so a click there closes the overlay. The overlay is a
+/// webview of its own: clicks in the page never reach it, and the page cannot see it.
+fn mark_page(app: &AppHandle, label: &str, open: bool) {
+    let Some(state) = app.try_state::<crate::ipc::AppState>() else {
+        return;
+    };
+    let selected = state
+        .try_read_core(label)
+        .and_then(|core| core.selected.clone());
+    if let Some(tab) = selected {
+        if let Some(webview) = app.get_webview(&tab) {
+            let _ = webview.eval(&format!("window.__mixOverlay = {open};"));
+        }
+    }
 }
 
 /// Converts a logical position to physical pixels.
@@ -195,6 +212,7 @@ pub fn open_at(
         slots.insert(win.label().to_string(), label.clone());
     }
     crate::logging::info(&format!("overlay open {kind} at {x:.0},{y:.0}"));
+    mark_page(app, win.label(), true);
     Ok(())
 }
 
@@ -250,6 +268,7 @@ pub fn close(app: &AppHandle, window_label: &str) {
         if let Some(webview) = app.get_webview(&target) {
             let _ = webview.set_focus();
         }
+        mark_page(app, window_label, false);
         let cancelled = crate::permissions::cancel_window(app, window_label);
         if cancelled > 0 {
             crate::logging::info(&format!("{cancelled} permission prompt(s) dismissed"));

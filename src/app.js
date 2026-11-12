@@ -1408,6 +1408,19 @@ async function boot() {
   });
 
   document.getElementById("theme-btn").addEventListener("click", () => invoke("overlay_toggle", { kind: "app_menu" }));
+
+  // A press in the strip that is not a control dismisses an open overlay. The page half
+  // of this lives in the injected script; the overlay is its own webview, so clicks in
+  // the toolbar, the tab strip and the address bar never reach it.
+  document.addEventListener(
+    "pointerdown",
+    (event) => {
+      const target = event.target;
+      if (target && target.closest && target.closest("button, input, textarea, select, a")) return;
+      invoke("overlay_close").catch(() => {});
+    },
+    true,
+  );
   document
     .getElementById("tabs")
     .addEventListener("auxclick", (event) => {

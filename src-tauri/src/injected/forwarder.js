@@ -507,6 +507,12 @@
     }
     send(action);
   }, true);
+
+  window.addEventListener("pointerdown", function () {
+    if (!window.__mixOverlay) return;
+    window.__mixOverlay = false;
+    send("close_overlay");
+  }, true);
 })();
 
 (function () {
