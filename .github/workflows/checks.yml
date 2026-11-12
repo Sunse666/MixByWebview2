@@ -1,0 +1,21 @@
+# Static checks that need no window.
+name: checks
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  static:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Command lists match main.rs
+        run: node scripts/gen-commands.js --check
+      - name: Internal pages, chrome boot, hardcoded text
+        run: node scripts/check-pages.js
+      - name: i18n coverage
+        run: node scripts/check-i18n.js

@@ -3,8 +3,9 @@
 // only, which is exactly the bug the dictionary exists to prevent.
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const root = new URL("../src", import.meta.url).pathname.replace(/^\//, "");
+const root = fileURLToPath(new URL("../src", import.meta.url));
 const CJK = /[\u4e00-\u9fff]/;
 
 function walk(dir) {

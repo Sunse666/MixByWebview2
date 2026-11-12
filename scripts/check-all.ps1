@@ -1,10 +1,4 @@
-# Everything that can be checked without opening a window.
-#
-# Run this before packaging: a page that fails to build, a string that skipped the
-# dictionary, or a chrome that no longer boots are all silent failures otherwise.
-#
-# Exit codes are checked explicitly, so a native command writing to stderr is not treated
-# as a failure by PowerShell itself.
+# Runs every check that needs no window: cargo test, internal pages, i18n, command lists.
 $repo = Split-Path -Parent $PSScriptRoot
 $failed = @()
 
@@ -20,6 +14,8 @@ foreach ($script in @("check-pages.js", "check-i18n.js")) {
   & node "scripts/$script"
   if ($LASTEXITCODE -ne 0) { $failed += $script }
 }
+& node "scripts/gen-commands.js" --check
+if ($LASTEXITCODE -ne 0) { $failed += "gen-commands" }
 Pop-Location
 
 if ($failed.Count -gt 0) {
