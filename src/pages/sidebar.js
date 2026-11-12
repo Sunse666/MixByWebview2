@@ -247,6 +247,16 @@ function renderButtons() {
   }
 }
 
+document.addEventListener(
+  "pointerdown",
+  () => {
+    if (!window.__mixOverlay) return;
+    window.__mixOverlay = false;
+    invoke("overlay_close").catch(() => {});
+  },
+  true,
+);
+
 window.__mixSidebarViews = (list) => {
   views = knownViews(list);
   renderButtons();

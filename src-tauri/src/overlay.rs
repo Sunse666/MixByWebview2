@@ -151,6 +151,10 @@ fn mark_page(app: &AppHandle, label: &str, open: bool) {
             let _ = webview.eval(&format!("window.__mixOverlay = {open};"));
         }
     }
+    // The sidebar is a webview of its own as well, and has to close it too.
+    if let Some(side) = app.get_webview(&format!("{label}-side")) {
+        let _ = side.eval(&format!("window.__mixOverlay = {open};"));
+    }
 }
 
 /// Converts a logical position to physical pixels.

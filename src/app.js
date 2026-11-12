@@ -1416,7 +1416,9 @@ async function boot() {
     "pointerdown",
     (event) => {
       const target = event.target;
-      if (target && target.closest && target.closest("button, input, textarea, select, a")) return;
+      // A button is left alone: it may open or toggle an overlay of its own, and closing
+      // it here would be undone by the click that follows. Anything else dismisses.
+      if (target && target.closest && target.closest("button")) return;
       invoke("overlay_close").catch(() => {});
     },
     true,

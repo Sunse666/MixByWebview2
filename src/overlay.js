@@ -1,5 +1,8 @@
 // The overlay page: menus, panels, permission prompts and the tab hover card.
 const { invoke } = window.__TAURI__.core;
+
+/// Leaving the overlay, whatever the reason, closes it: the pointer went somewhere else.
+window.addEventListener("blur", () => invoke("overlay_close").catch(() => {}));
 import { setLanguage, t } from "./i18n.js";
 const { listen } = window.__TAURI__.event;
 
