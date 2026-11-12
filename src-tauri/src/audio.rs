@@ -1,6 +1,6 @@
 //! Per tab audio state and muting, read from WebView2.
 
-use std::sync::Mutex;
+use parking_lot::Mutex;
 use std::time::Duration;
 use tauri::{Emitter, Manager};
 
@@ -107,7 +107,7 @@ pub fn watch(app: tauri::AppHandle) {
         continue;
       };
       let changed = {
-        let mut last = LAST.lock().unwrap_or_else(|e| e.into_inner());
+        let mut last = LAST.lock();
         let map = last.get_or_insert_with(std::collections::HashMap::new);
         map.insert(id.clone(), audio) != Some(audio)
       };
@@ -119,7 +119,7 @@ pub fn watch(app: tauri::AppHandle) {
         );
       }
     }
-    let mut last = LAST.lock().unwrap_or_else(|e| e.into_inner());
+    let mut last = LAST.lock();
     if let Some(map) = last.as_mut() {
       if map.len() > 200 {
         map.retain(|id, _| app.get_webview(id).is_some());

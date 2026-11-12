@@ -1,7 +1,7 @@
 //! Tab preview pictures for the hover card.
 
 use std::collections::HashMap;
-use std::sync::Mutex;
+use parking_lot::Mutex;
 use tauri::Manager;
 
 /// A picture older than this is not worth showing any more.
@@ -14,8 +14,8 @@ struct Thumb {
 
 static THUMBS: Mutex<Option<HashMap<String, Thumb>>> = Mutex::new(None);
 
-fn store() -> std::sync::MutexGuard<'static, Option<HashMap<String, Thumb>>> {
-  THUMBS.lock().unwrap_or_else(|e| e.into_inner())
+fn store() -> parking_lot::MutexGuard<'static, Option<HashMap<String, Thumb>>> {
+  THUMBS.lock()
 }
 
 /// Grabs what the webview is showing right now.

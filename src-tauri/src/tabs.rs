@@ -8,24 +8,23 @@ use crate::paths::AppDirs;
 use std::sync::OnceLock;
 
 /// Action -> combo overrides for the forwarder that runs in every page.
-static SHORTCUTS: std::sync::RwLock<Option<std::collections::BTreeMap<String, String>>> =
-    std::sync::RwLock::new(None);
+static SHORTCUTS: parking_lot::RwLock<Option<std::collections::BTreeMap<String, String>>> =
+    parking_lot::RwLock::new(None);
 
 /// Replaces the override map.
 pub fn set_shortcuts(map: std::collections::BTreeMap<String, String>) {
-    *SHORTCUTS.write().unwrap_or_else(|e| e.into_inner()) = Some(map);
+    *SHORTCUTS.write() = Some(map);
 }
 
 fn shortcut_map() -> std::collections::BTreeMap<String, String> {
     SHORTCUTS
         .read()
-        .unwrap_or_else(|e| e.into_inner())
         .clone()
         .unwrap_or_default()
 }
 
 /// Right button gestures.
-static GESTURES: std::sync::RwLock<Option<GestureSetup>> = std::sync::RwLock::new(None);
+static GESTURES: parking_lot::RwLock<Option<GestureSetup>> = parking_lot::RwLock::new(None);
 
 /// Everything the injected engine needs, pre-serialised for the page.
 #[derive(Default, Clone)]
@@ -38,28 +37,26 @@ pub struct GestureSetup {
 }
 
 pub fn set_gestures(setup: GestureSetup) {
-    *GESTURES.write().unwrap_or_else(|e| e.into_inner()) = Some(setup);
+    *GESTURES.write() = Some(setup);
 }
 
 fn gesture_setup() -> GestureSetup {
     GESTURES
         .read()
-        .unwrap_or_else(|e| e.into_inner())
         .clone()
         .unwrap_or_default()
 }
 
 /// Contents of UserData/custom.css, applied to every page.
-static CUSTOM_CSS: std::sync::RwLock<Option<String>> = std::sync::RwLock::new(None);
+static CUSTOM_CSS: parking_lot::RwLock<Option<String>> = parking_lot::RwLock::new(None);
 
 pub fn set_custom_css(css: String) {
-    *CUSTOM_CSS.write().unwrap_or_else(|e| e.into_inner()) = Some(css);
+    *CUSTOM_CSS.write() = Some(css);
 }
 
 fn custom_css() -> String {
     CUSTOM_CSS
         .read()
-        .unwrap_or_else(|e| e.into_inner())
         .clone()
         .unwrap_or_default()
 }

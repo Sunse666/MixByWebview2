@@ -1,7 +1,8 @@
 use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::path::Path;
-use std::sync::{Mutex, OnceLock};
+use parking_lot::Mutex;
+use std::sync::OnceLock;
 use std::time::Instant;
 
 /// Elapsed time since the process started.
@@ -41,11 +42,10 @@ fn write(level: &str, message: &str) {
     let stamp = elapsed_ms();
     eprintln!("[{level} {stamp}ms] {message}");
     let Some(sink) = SINK.get() else { return };
-    if let Ok(mut guard) = sink.lock() {
-        if let Some(file) = guard.as_mut() {
-            let _ = writeln!(file, "{level} {stamp}ms {message}");
-            let _ = file.flush();
-        }
+    let mut guard = sink.lock();
+    if let Some(file) = guard.as_mut() {
+        let _ = writeln!(file, "{level} {stamp}ms {message}");
+        let _ = file.flush();
     }
 }
 

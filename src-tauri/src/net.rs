@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::net::{TcpStream, ToSocketAddrs};
-use std::sync::Mutex;
+use parking_lot::Mutex;
 use std::time::{Duration, Instant};
 
 const TIMEOUT: Duration = Duration::from_millis(1500);
@@ -22,7 +22,7 @@ impl Reachability {
         };
         let key = format!("{host}:{port}");
         {
-            let seen = self.seen.lock().unwrap_or_else(|e| e.into_inner());
+            let seen = self.seen.lock();
             if let Some((ok, at)) = seen.get(&key) {
                 if at.elapsed() < TTL {
                     return *ok;
@@ -38,7 +38,7 @@ impl Reachability {
             crate::logging::warn(&format!("reachability probe timed out for {key}"));
             return true;
         };
-        let mut seen = self.seen.lock().unwrap_or_else(|e| e.into_inner());
+        let mut seen = self.seen.lock();
         seen.insert(key, (ok, Instant::now()));
         ok
     }
@@ -46,7 +46,7 @@ impl Reachability {
     #[cfg(test)]
     pub fn remember(&self, url: &str, ok: bool) {
         if let Some((host, port)) = host_and_port(url) {
-            let mut seen = self.seen.lock().unwrap_or_else(|e| e.into_inner());
+            let mut seen = self.seen.lock();
             seen.insert(format!("{host}:{port}"), (ok, Instant::now()));
         }
     }

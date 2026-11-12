@@ -1,12 +1,12 @@
 //! Freezing the tabs that are not on screen.
 
 use std::collections::HashSet;
-use std::sync::Mutex;
+use parking_lot::Mutex;
 
 static FROZEN: Mutex<Option<HashSet<String>>> = Mutex::new(None);
 
-fn store() -> std::sync::MutexGuard<'static, Option<HashSet<String>>> {
-  FROZEN.lock().unwrap_or_else(|e| e.into_inner())
+fn store() -> parking_lot::MutexGuard<'static, Option<HashSet<String>>> {
+  FROZEN.lock()
 }
 
 pub fn is_frozen(id: &str) -> bool {

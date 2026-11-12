@@ -3,7 +3,8 @@
 use std::collections::HashMap;
 use std::io::Write;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, OnceLock};
+use parking_lot::Mutex;
+use std::sync::{Arc, OnceLock};
 
 
 
@@ -30,7 +31,8 @@ fn claimed() -> &'static Mutex<std::collections::HashSet<String>> {
 /// Takes ownership of a file for one transfer.
 pub fn claim(path: &std::path::Path) -> bool {
     let key = path.to_string_lossy().to_string();
-    claimed().lock().map(|mut set| set.insert(key)).unwrap_or(false)
+    let mut set = claimed().lock();
+    set.insert(key)
 }
 
 /// Gives the file back when its transfer is over, so the next attempt can take it.
@@ -40,9 +42,7 @@ pub fn unclaim(path: &std::path::Path) {
 
 fn release(path: &std::path::Path) {
     let key = path.to_string_lossy().to_string();
-    if let Ok(mut set) = claimed().lock() {
-        set.remove(&key);
-    }
+    claimed().lock().remove(&key);
 }
 
 fn jobs() -> &'static Mutex<HashMap<u64, Job>> {
@@ -57,9 +57,7 @@ pub fn start(app: tauri::AppHandle, id: u64, url: String, path: std::path::PathB
     let cancelled = Arc::new(AtomicBool::new(false));
 
     {
-        let Ok(map) = jobs().lock() else {
-            return;
-        };
+        let map = jobs().lock();
         if let Some(job) = map.get(&id) {
             if job.active.load(Ordering::Relaxed) {
                 job.paused.store(false, Ordering::Relaxed);
@@ -71,9 +69,7 @@ pub fn start(app: tauri::AppHandle, id: u64, url: String, path: std::path::PathB
 
     let active = Arc::new(AtomicBool::new(true));
     {
-        let Ok(mut map) = jobs().lock() else {
-            return;
-        };
+        let mut map = jobs().lock();
         if let Some(job) = map.get_mut(&id) {
             job.paused = paused.clone();
             job.cancelled = cancelled.clone();
@@ -190,18 +186,14 @@ pub fn start(app: tauri::AppHandle, id: u64, url: String, path: std::path::PathB
             return;
         }
     });
-    if let Ok(mut map) = jobs().lock() {
-        if let Some(job) = map.get_mut(&id) {
-            job.handle = Some(handle);
-        }
+    if let Some(job) = jobs().lock().get_mut(&id) {
+        job.handle = Some(handle);
     }
 }
 
 /// Stops the loop but keeps the bytes, so it can be resumed.
 pub fn pause(id: u64) -> bool {
-    let Ok(mut map) = jobs().lock() else {
-        return false;
-    };
+    let mut map = jobs().lock();
     match map.get_mut(&id) {
         Some(job) => {
             job.paused.store(true, Ordering::Relaxed);
@@ -218,9 +210,7 @@ pub fn pause(id: u64) -> bool {
 /// Asks the loop to carry on from what is on disk.
 pub fn resume(app: tauri::AppHandle, id: u64) -> bool {
     let (url, path) = {
-        let Ok(map) = jobs().lock() else {
-            return false;
-        };
+        let map = jobs().lock();
         match map.get(&id) {
             Some(job) => (job.url.clone(), job.path.clone()),
             None => return false,
@@ -233,9 +223,7 @@ pub fn resume(app: tauri::AppHandle, id: u64) -> bool {
 
 /// Drops the transfer and the partial file with it.
 pub fn cancel(id: u64) -> bool {
-    let Ok(map) = jobs().lock() else {
-        return false;
-    };
+    let map = jobs().lock();
     match map.get(&id) {
         Some(job) => {
             job.cancelled.store(true, Ordering::Relaxed);
@@ -249,6 +237,7 @@ pub fn cancel(id: u64) -> bool {
 pub fn busy(id: u64) -> bool {
     jobs()
         .lock()
-        .map(|map| map.get(&id).map(|job| job.active.load(Ordering::Relaxed)).unwrap_or(false))
+        .get(&id)
+        .map(|job| job.active.load(Ordering::Relaxed))
         .unwrap_or(false)
 }

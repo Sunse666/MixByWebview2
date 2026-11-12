@@ -1,7 +1,7 @@
 use crate::ipc::AppState;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Mutex;
+use parking_lot::Mutex;
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Manager};
 
@@ -39,7 +39,7 @@ pub fn remembered(app: &AppHandle, key: &str) -> Option<bool> {
         .permissions
         .decisions
         .lock()
-        .unwrap_or_else(|e| e.into_inner());
+        ;
     decisions.get(key).copied()
 }
 
@@ -49,7 +49,7 @@ pub fn remember(app: &AppHandle, key: &str, allow: bool) {
         .permissions
         .decisions
         .lock()
-        .unwrap_or_else(|e| e.into_inner());
+        ;
     decisions.insert(key.to_string(), allow);
 }
 
@@ -60,7 +60,7 @@ pub fn open_prompt(app: &AppHandle, window: &str, key: &str) -> u64 {
         .permissions
         .pending
         .lock()
-        .unwrap_or_else(|e| e.into_inner());
+        ;
     pending.retain(|_, prompt| prompt.at.elapsed() < PROMPT_TTL);
     pending.insert(
         id,
@@ -81,7 +81,7 @@ pub fn answer(app: &AppHandle, id: u64, allow: bool) -> bool {
         .permissions
         .pending
         .lock()
-        .unwrap_or_else(|e| e.into_inner());
+        ;
     match pending.get_mut(&id) {
         Some(prompt) => {
             prompt.answer = Some(allow);
@@ -99,7 +99,7 @@ pub fn poll(app: &AppHandle, id: u64) -> Option<bool> {
             .permissions
             .pending
             .lock()
-            .unwrap_or_else(|e| e.into_inner());
+            ;
         match pending.get(&id) {
             None => return Some(false),
             Some(prompt) => match prompt.answer {
@@ -114,7 +114,7 @@ pub fn poll(app: &AppHandle, id: u64) -> Option<bool> {
         .permissions
         .pending
         .lock()
-        .unwrap_or_else(|e| e.into_inner())
+        
         .remove(&id);
     Some(answer)
 }
@@ -126,7 +126,7 @@ pub fn cancel_window(app: &AppHandle, window: &str) -> usize {
         .permissions
         .pending
         .lock()
-        .unwrap_or_else(|e| e.into_inner());
+        ;
     let mut cancelled = 0;
     for prompt in pending.values_mut() {
         if prompt.window == window && prompt.answer.is_none() {
