@@ -10,9 +10,7 @@ const APP_MENU: (f64, f64) = (320.0, 566.0);
 const DEFAULT: (f64, f64) = (420.0, 320.0);
 
 
-/// Overlay chrome. Transparency is only requested on platforms where a
-/// transparent child webview actually composites; on Windows it produces
-/// ghosting and black boxes, so the panel paints an opaque background instead.
+/// Builds the overlay webview with its background and focus behaviour.
 fn overlay_builder(app: &AppHandle, label: &str, page: &str) -> WebviewBuilder<tauri::Wry> {
     let _ = page;
     let opts = {
@@ -25,11 +23,7 @@ fn overlay_builder(app: &AppHandle, label: &str, page: &str) -> WebviewBuilder<t
         parse_color(&theme.colors.chrome)
     };
 
-    // The dropdown must never take focus away from the address bar, and the tab
-    // hover card is opened by a mouse move, not by a click.
     let focused = !page.starts_with("overlay.html#suggest") && !page.starts_with("overlay.html#thumb");
-    // Same extension setting as the pages: every controller in an environment has
-    // to agree on it, or WebView2 refuses to create this one.
     let builder = WebviewBuilder::new(label, WebviewUrl::App(page.into()))
         .background_color(color)
         .devtools(true)
@@ -62,15 +56,12 @@ pub(crate) fn parse_color(hex: &str) -> tauri::window::Color {
     tauri::window::Color(r, g, b, 255)
 }
 
-/// The overlay is recreated on every open so it stays above tabs created later:
-/// child webviews stack in creation order and there is no bring-to-front call.
+/// Opens the overlay panel, recreating it each time.
 pub fn open(app: &AppHandle, win: &tauri::Window, kind: &str) -> Result<(), String> {
     let (win_w, win_h) = logical_size(win).map_err(|e| e.to_string())?;
 
     // The page can ride along in the hash ("app_menu&page=extensions").
     let base = kind.split('&').next().unwrap_or(kind);
-    // Settings panels size to the section they show, so Startup is not a
-    // full height empty box.
     let section = kind
         .split('&')
         .skip(1)
@@ -84,29 +75,21 @@ pub fn open(app: &AppHandle, win: &tauri::Window, kind: &str) -> Result<(), Stri
 
     let (ow, oh) = match base {
         "settings" => settings_size,
-        // Chrome's translate bubble is a thin strip under the address bar.
         "translate" => (380.0, 46.0),
         "app_menu" => APP_MENU,
-        // Generic page menu: five rows and two dividers.
         "context_menu" => (250.0, 184.0),
         "url_menu" => (190.0, 150.0),
-        // Menu bar dropdown; the exact height comes from the caller.
         "menubar_menu" => (232.0, 300.0),
         "chrome_menu" => (190.0, 110.0),
-        // The find bar rides under the address row, right aligned.
         "find" => (380.0, 44.0),
-        // Tab hover card: the preview plus a caption line.
         "thumb" => (372.0, 232.0),
         _ => DEFAULT,
     };
-    // Never taller than the space under the chrome strip, but a small panel
-    // keeps its own height even in a short window.
     let chrome_h = crate::ipc::chrome_height(app);
     let room = (win_h - chrome_h - 12.0).max(oh.min(180.0));
     let oh = oh.min(room);
 
     let (x, y) = if base == "app_menu" || base == "find" {
-        // Right aligned under the menu button, like a desktop app menu.
         ((win_w - ow - 8.0).max(0.0), chrome_h + 6.0)
     } else {
         (((win_w - ow) / 2.0).max(0.0), chrome_h + 6.0)
@@ -154,8 +137,7 @@ pub fn open_url(
     Ok(())
 }
 
-/// Positions are computed in logical units but the window reports physical
-/// pixels; converting here once keeps the two from drifting under DPI scaling.
+/// Converts a logical position to physical pixels.
 fn place(
     win: &tauri::Window,
     builder: WebviewBuilder<tauri::Wry>,
@@ -192,8 +174,6 @@ pub fn open_at(
         state.opts.clone()
     };
 
-    // A fresh label each time: closing and reopening the same label races with
-    // the runtime, which still owns the previous webview for a moment.
     let label = format!("overlay-{}", NEXT_ID.fetch_add(1, Ordering::Relaxed));
     let page = format!("overlay.html#{kind}");
     let builder = overlay_builder(app, &label, &page);
@@ -204,13 +184,6 @@ pub fn open_at(
     if !kind.starts_with("suggest") && !kind.starts_with("thumb") {
         let _ = webview.set_focus();
     }
-    // A card is looked at, not typed into. Creating a child webview hands it the
-    // keyboard - WebView2 focuses a new controller - which took focus away from the
-    // strip and from the group menu's name field. The strip gets it back, now and once
-    // more after the controller has settled.
-    // Only once, and on this thread: set_focus goes through the runtime's main-thread
-    // dispatcher and blocks until it is served, so asking for it again from a worker
-    // thread risks waiting on a main thread that is itself waiting.
     if kind.starts_with("thumb") {
         let chrome_label = format!("{}-chrome", win.label());
         if let Some(chrome) = app.get_webview(&chrome_label) {
@@ -226,10 +199,7 @@ pub fn open_at(
     Ok(())
 }
 
-/// Where the keyboard goes when an overlay closes. A webview exposes no focus
-/// getter, so the kind decides: menus, settings and the translate bubble belong
-/// to the chrome strip, while the context menu, the find bar and the permission
-/// prompt belong to the page that was being used.
+/// Where the keyboard goes when an overlay closes.
 fn belongs_to_page(kind: &str) -> bool {
     let base = kind.split('&').next().unwrap_or(kind);
     matches!(base, "context_menu" | "find" | "permission")
@@ -254,18 +224,12 @@ pub fn close(app: &AppHandle, window_label: &str) {
     if let Some(label) = label {
         if let Some(webview) = app.get_webview(&label) {
             let _ = webview.close();
-            // A child webview close can be refused while it is navigating or
-            // busy; hiding it is the fallback that keeps it off the screen
-            // instead of leaving a panel frozen over the page.
             if let Some(leftover) = app.get_webview(&label) {
                 let _ = leftover.hide();
                 crate::logging::info(&format!("overlay hid ({label}) after close was refused"));
             }
             crate::logging::info(&format!("overlay closed ({label})"));
         }
-        // Put the keyboard back where it was before the overlay opened. A page
-        // context menu returns to the page, the app menu to the chrome strip,
-        // and the suggest dropdown to whatever already had focus.
         let from_page = {
             let state = app.state::<crate::ipc::AppState>();
             let flag = state
@@ -288,14 +252,10 @@ pub fn close(app: &AppHandle, window_label: &str) {
         if let Some(webview) = app.get_webview(&target) {
             let _ = webview.set_focus();
         }
-        // A prompt that is closed without an answer must not leave the page
-        // polling: count it as denied.
         let cancelled = crate::permissions::cancel_window(app, window_label);
         if cancelled > 0 {
             crate::logging::info(&format!("{cancelled} permission prompt(s) dismissed"));
         }        // Whatever was changed behind the panel shows up now - unless the panel
-        // was the tab hover card, which is opened and closed on every mouse move
-        // across the strip and has nothing to do with settings.
         let was_thumb = {
             let state = app.state::<crate::ipc::AppState>();
             let mut thumbs = state
