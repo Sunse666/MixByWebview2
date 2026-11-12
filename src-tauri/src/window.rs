@@ -26,8 +26,7 @@ pub fn set_bounds(webview: &Webview, x: f64, y: f64, w: f64, h: f64) -> tauri::R
 
 pub const PRIMARY: &str = "w1";
 
-/// The MIX_* hooks exist for tests and manual probing. They are compiled out of
-/// a release build, so a stray environment variable cannot drive one.
+/// Debug hooks, gated on MIX_DEBUG.
 #[cfg(debug_assertions)]
 fn debug_hooks() -> bool {
     std::env::var("MIX_DEBUG").is_ok_and(|value| value != "0")
@@ -35,8 +34,7 @@ fn debug_hooks() -> bool {
 
 
 
-/// Rebuilds the tab groups a session recorded. Members are indexes into the tabs the
-/// window was opened with, which are still in that order at this point.
+/// Rebuilds the tab groups a session recorded.
 fn apply_groups(app: &AppHandle, label: &str, groups: &[crate::session::SessionGroup]) {
     if groups.is_empty() {
         return;
@@ -74,7 +72,6 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
         )
     };
 
-    // A url on the command line wins: that is what a default browser receives.
     let shell_urls = initial_urls();
     if !shell_urls.is_empty() {
         let tabs: Vec<(String, f64, bool)> =
@@ -94,8 +91,6 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
         None
     };
 
-    // Also the check the baseline script uses: a session that failed to load
-    // would otherwise be measured as a single tab without any complaint.
     match &restored {
         Some(session) => crate::logging::info(&format!(
             "session restore: {} window(s), {} tab(s)",
@@ -138,9 +133,6 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
         debug_gesture_test(app.handle());
     }
     crate::tray::install(&app.handle().clone())?;
-    // Debug helper: MIX_OPEN_ON_START=settings opens that overlay shortly after
-    // startup. Opening it inside setup deadlocks the page: the main thread is
-    // still creating webviews, so its invoke never resolves.
     #[cfg(debug_assertions)]
     if debug_hooks() {
         if let Ok(kind) = std::env::var("MIX_OPEN_ON_START") {
@@ -172,8 +164,6 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
         });
     }
 
-    // Debug helper: MIX_FULLSCREEN=1 reports a fullscreen page, so the strip hiding
-    // can be checked without a video that asks for it.
     #[cfg(debug_assertions)]
     if debug_hooks() && std::env::var("MIX_FULLSCREEN").is_ok() {
         let handle = app.handle().clone();
@@ -189,8 +179,6 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
         });
     }
 
-    // Debug helper: MIX_NEW_WINDOW=1 opens a second window after startup so the
-    // multi window path can be checked without a click.
     #[cfg(debug_assertions)]
     if debug_hooks() && std::env::var("MIX_NEW_WINDOW").is_ok() {
         let handle = app.handle().clone();
@@ -209,7 +197,6 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
         });
     }
 
-    // Support hook: MIX_TRANSLATE=1 runs the translator on the current page.
     #[cfg(debug_assertions)]
     if debug_hooks() && std::env::var("MIX_TRANSLATE").is_ok() {
         let handle = app.handle().clone();
@@ -237,13 +224,10 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
         });
     }
 
-    // The translator needs a token and a cookie; fetch them before they are needed.
     tauri::async_runtime::spawn(async {
         crate::translate::warm().await;
     });
 
-    // Support hook: MIX_DOM_PUSH=1 appends a paragraph later, so the observer that
-    // picks up dynamic content can be exercised without a real feed.
     #[cfg(debug_assertions)]
     if debug_hooks() && std::env::var("MIX_DOM_PUSH").is_ok() {
         let handle = app.handle().clone();
@@ -265,8 +249,6 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
         });
     }
 
-    // Support hook: MIX_TOGGLE_EXT=1 hides the first extension after startup, so
-    // the live settings path can be checked without a click.
     #[cfg(debug_assertions)]
     if debug_hooks() && std::env::var("MIX_TOGGLE_EXT").is_ok() {
         let handle = app.handle().clone();
@@ -302,8 +284,6 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
         });
     }
 
-    // Support hook: MIX_SAVE_URL=<url> saves that file, so the download path
-    // can be checked without a right click.
     #[cfg(debug_assertions)]
     if debug_hooks() {
         if let Ok(url) = std::env::var("MIX_SAVE_URL") {
@@ -323,8 +303,6 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
         }
     }
 
-    // Support hook: MIX_NAV=1 navigates the first tab to a dead host, so the
-    // "unreachable" path can be checked without typing.
     #[cfg(debug_assertions)]
     if debug_hooks() && std::env::var("MIX_NAV").is_ok() {
         let handle = app.handle().clone();
@@ -347,7 +325,6 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
         });
     }
 
-    // Support hook: MIX_ERROR_PAGE=1 shows the error page so it can be reviewed.
     #[cfg(debug_assertions)]
     if debug_hooks() && std::env::var("MIX_ERROR_PAGE").is_ok() {
         let handle = app.handle().clone();
@@ -366,8 +343,6 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
         });
     }
 
-    // Support hook: MIX_DEVTOOLS=1 runs the devtools shortcut, so a broken F12
-    // can be told apart from a broken key path.
     #[cfg(debug_assertions)]
     if debug_hooks() && std::env::var("MIX_DEVTOOLS").is_ok() {
         let handle = app.handle().clone();
@@ -394,9 +369,6 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
         crate::logging::elapsed_ms()
     ));
 
-    // One memory breakdown a few seconds in, when the first pages have settled. It is the
-    // only place the per-process detail is written down, and once is enough - repeating it
-    // on every hover card made the log unreadable.
     {
         let handle = app.handle().clone();
         tauri::async_runtime::spawn_blocking(move || {
@@ -407,9 +379,7 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
     Ok(())
 }
 
-/// Creates a window with its chrome strip and one webview per url.
-/// A url handed over on the command line, e.g. when the app is the default
-/// browser and the shell runs "mix.exe https://example.com".
+/// Urls handed over on the command line.
 pub fn initial_urls() -> Vec<String> {
     std::env::args()
         .skip(1)
@@ -417,6 +387,7 @@ pub fn initial_urls() -> Vec<String> {
         .collect()
 }
 
+/// Creates a window with its chrome strip and one webview per url.
 pub fn open_window(
     app: &tauri::AppHandle,
     label: &str,
@@ -427,8 +398,6 @@ pub fn open_window(
     let state = app.state::<AppState>();
     state.add_window(label);
     let opts = state.opts.clone();
-    // The window background is what shows between hiding the outgoing tab and
-    // showing the incoming one; leaving it white made every switch flash.
     let window_color = crate::overlay::parse_color(&state.theme.read().colors.bg);
     drop(state);
 
@@ -438,14 +407,12 @@ pub fn open_window(
         .inner_size(1100.0, 760.0)
         .min_inner_size(500.0, 600.0)
         .decorations(false)
-        // Rounded corners need a transparent window outside Windows 11.
         .transparent(cfg!(any(target_os = "macos", target_os = "linux")))
         .visible(false)
         .build()?;
 
     crate::platform::install_resize_borders(&win);
 
-    // Geometry from the last run, kept in session.json so it travels with the folder.
     if let Some(geometry) = geometry {
         let _ = win.set_position(tauri::PhysicalPosition::new(geometry.x, geometry.y));
         let _ = win.set_size(tauri::PhysicalSize::new(
@@ -486,7 +453,6 @@ pub fn open_window(
             })
             .collect();
         core.selected = Some(crate::ipc::tab_label(label, selected + 1));
-        // Recency starts in strip order with the selected tab first.
         core.mru = core.tabs.iter().map(|tab| tab.id.clone()).collect();
         if let Some(id) = core.selected.clone() {
             core.mru.retain(|entry| entry != &id);
@@ -494,9 +460,6 @@ pub fn open_window(
         }
     }
 
-    // Extensions on the strip as well, because WebView2 refuses to add a controller
-    // to an environment whose extension setting differs - and sharing one environment
-    // is what saves the second browser and gpu process.
     let chrome_builder = |dir: &Option<std::path::PathBuf>, with_extensions: bool| {
         let builder = WebviewBuilder::new(
             format!("{label}-chrome"),
@@ -526,8 +489,6 @@ pub fn open_window(
         LogicalSize::new(width, chrome_h),
     );
     if let Err(err) = built {
-        // Fall back to the separate ui profile: two environments cost more memory,
-        // but a strip that refuses to be created costs the whole window.
         crate::logging::warn(&format!(
             "chrome webview refused the shared profile ({err}); using the ui profile"
         ));
@@ -538,8 +499,6 @@ pub fn open_window(
         )?;
     }
 
-    // The strip renders at 1:1 inside a DPI scaled box; zoom is what makes the
-    // two agree, otherwise a band of empty panel colour is left at the bottom.
     if let Some(chrome) = app.get_webview(&format!("{label}-chrome")) {
         let scale = win.scale_factor().unwrap_or(1.0);
         if (scale - 1.0).abs() > f64::EPSILON {
@@ -555,8 +514,6 @@ pub fn open_window(
         crate::tabs::apply_default_zoom(&app.clone(), &id);
     }
 
-    // The sidebar, if it was on last time. Created here, at window setup, rather than
-    // lazily during a resize: a child webview cannot be added from inside a dispatch.
     crate::sidebar::ensure(app, label);
 
     let handle = app.clone();
@@ -567,7 +524,6 @@ pub fn open_window(
                 crate::logging::warn(&format!("relayout failed: {err}"));
             }
         }
-        // The primary window hides to the tray; extra windows just close.
         WindowEvent::CloseRequested { api, .. } => {
             crate::ipc::save_sessions(&handle);
             if owner == PRIMARY {
@@ -594,13 +550,11 @@ pub fn open_window(
 
     win.show()?;
     win.set_focus()?;
-    // Persist right away so a window opened now survives a kill or a crash.
     crate::ipc::save_sessions(app);
     Ok(win)
 }
 
-/// Tauri exposes no navigation event, so the address bar is kept honest by
-/// polling the selected webviews (only the ones that are attached).
+/// Keeps the address bar in step by polling the selected webviews.
 pub fn start_url_watch(app: AppHandle, label: String) {
     std::thread::spawn(move || {
         let mut last: HashMap<String, String> = HashMap::new();
@@ -610,7 +564,6 @@ pub fn start_url_watch(app: AppHandle, label: String) {
                 return;
             }
 
-            // The bundled pages live on whatever scheme this runtime picked.
             if let Some(state) = app.try_state::<AppState>() {
                 if state.app_base.read().is_empty() {
                     if let Some(chrome) = app.get_webview(&format!("{label}-chrome")) {
@@ -642,7 +595,6 @@ pub fn start_url_watch(app: AppHandle, label: String) {
                 };
                 let current = url.to_string();
                 if current.starts_with("chrome-error://") {
-                    // WebView2's own error page: replace it with ours.
                     if let Some(state) = app.try_state::<AppState>() {
                         let failed = state
                             .pending
@@ -687,7 +639,6 @@ fn publish_url(app: &AppHandle, id: &str, url: &str) {
             .map(|tab| tab.title.clone())
             .unwrap_or_default()
     };
-    // A private tab keeps its pages out of history; the strip still shows the url.
     if !incognito {
         crate::ipc::record_visit(app, url, &title);
     }
@@ -715,7 +666,6 @@ pub fn relayout(app: &AppHandle, label: &str) -> Result<(), tauri::Error> {
         return Ok(());
     };
     let (width, height) = logical_size(&win)?;
-    // A fullscreen page owns the whole window, strip included.
     let fullscreen = app
         .try_state::<AppState>()
         .is_some_and(|state| state.fullscreen.read().contains(label));
@@ -727,7 +677,6 @@ pub fn relayout(app: &AppHandle, label: &str) -> Result<(), tauri::Error> {
     let tab_height = (height - chrome_h).max(1.0);
 
     if let Some(chrome) = app.get_webview(&format!("{label}-chrome")) {
-        // A zero height webview keeps its last frame; hide it instead.
         if fullscreen {
             let _ = chrome.hide();
         } else {
@@ -736,8 +685,6 @@ pub fn relayout(app: &AppHandle, label: &str) -> Result<(), tauri::Error> {
         set_bounds(&chrome, 0.0, 0.0, width, chrome_h)?;
     }
 
-    // The sidebar takes a column from the pages, not from the strip: the tab strip and
-    // the address bar stay full width, the way the browsers this imitates do it.
     let plan = crate::sidebar::plan(app, width, fullscreen);
     let (page_x, page_w) = plan.page(width);
 
@@ -760,8 +707,7 @@ pub fn relayout(app: &AppHandle, label: &str) -> Result<(), tauri::Error> {
     Ok(())
 }
 
-/// Debug hook: toggles one extension and logs the outcome, so the COM path can
-/// be checked without clicking. Inert unless MIX_DEBUG is set.
+/// Debug hook: toggles one extension and logs the outcome.
 #[cfg(debug_assertions)]
 fn debug_ext_toggle(app: &tauri::AppHandle) {
     if !debug_hooks() {
@@ -790,8 +736,7 @@ fn debug_ext_toggle(app: &tauri::AppHandle) {
     });
 }
 
-/// Debug hook: runs a synthetic left gesture in the active tab and logs which
-/// action reached the backend. Inert unless MIX_DEBUG is set.
+/// Debug hook: runs a synthetic left gesture in the active tab.
 #[cfg(debug_assertions)]
 fn debug_gesture_test(app: &tauri::AppHandle) {
     if !debug_hooks() {
