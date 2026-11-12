@@ -1,4 +1,3 @@
-  // Clicking anywhere in the page closes an open overlay (menu or context menu).
   let __mixDismiss = false;
   window.addEventListener("pointerdown", (event) => {
     if (event.button !== 0 || __mixDismiss) return;
@@ -8,7 +7,6 @@
   }, true);
 
 (function () {
-  // Report the page favicon once the document is parsed.
   var sendIcon = function () {
     try {
       var link = document.querySelector('link[rel~="icon"]');
@@ -26,16 +24,14 @@
   setTimeout(sendIcon, 1500);
 })();
 
-// In-place page translation: the page owns the DOM, Rust owns the network.
+// In-place page translation.
 (function () {
   var nodes = [];
-  // Nodes already handled, so later passes only pick up new text.
   var done = new WeakSet();
   var observer = null;
   var running = false;
   var timer = null;
 
-  // Same origin frames share the document tree with us; cross origin ones throw.
   var documents = function () {
     var list = [document];
     var frames = document.querySelectorAll("iframe, frame");
@@ -143,7 +139,6 @@
       });
   };
 
-  // New content (infinite scroll, SPA updates) is picked up after it settles.
   var watch = function () {
     if (observer) return;
     var notify = function () {
@@ -180,7 +175,7 @@
   window.__mixTranslate = { collect: collect, apply: apply, restore: restore };
 })();
 
-// Video players ask the document for fullscreen; the strip has to follow.
+// Fullscreen video.
 (function () {
   var report = function (on) {
     window.__TAURI_INTERNALS__.invoke("page_fullscreen", { on: on }).catch(function () {});
@@ -190,13 +185,12 @@
     report(Boolean(document.fullscreenElement));
   });
 
-  // Safari style prefix, still used by some players.
   document.addEventListener("webkitfullscreenchange", function () {
     report(Boolean(document.webkitFullscreenElement));
   });
 })();
 
-// WebView2 renders its own error page; detect it so we can show ours instead.
+// WebView2's own error page.
 (function () {
   var check = function () {
     try {
@@ -213,7 +207,7 @@
   });
 })();
 
-// Scroll position is remembered per tab so switching back does not jump to top.
+// Scroll position memory.
 (function () {
   var timer = null;
   window.addEventListener("scroll", function () {
@@ -225,8 +219,7 @@
   }, { passive: true });
 })();
 
-// While the address bar owns the keyboard, keys are forwarded to it. This does
-// not depend on which webview has OS focus.
+// Keys forwarded while the address bar owns the keyboard.
 (function () {
   var forward = function (kind, value) {
     var payload = kind === "type" ? { text: value } : { key: value };
@@ -234,9 +227,6 @@
     window.__TAURI_INTERNALS__.invoke(command, payload).catch(function () {});
   };
 
-  // An input method only composes inside an editable element, and in url mode the
-  // page holds the keyboard but has none. A hidden field collects the
-  // composition and its final text is forwarded as one insertion.
   var sink = null;
   var ensureSink = function () {
     if (sink) return sink;
@@ -271,8 +261,6 @@
     }
   }, true);
 
-  // Editing keys the address bar has to act on itself: the browser default that
-  // would have done it belongs to the page, which currently has the keyboard.
   var EDIT_KEYS = {
     ArrowLeft: "left",
     ArrowRight: "right",
@@ -285,12 +273,7 @@
 
   window.addEventListener("keydown", function (event) {
     if (!window.__mixUrlMode) return;
-    // A composition owns its keystrokes: forwarding the space that picks a
-    // candidate, or the backspace that edits one, would break the input method.
     if (event.isComposing || event.keyCode === 229) return;
-    // preventDefault stops the character, stopPropagation stops the page's own
-    // single-key shortcuts (GitHub's t, YouTube's k) from firing while the
-    // address bar is being typed into.
     var stop = function () {
       event.preventDefault();
       event.stopPropagation();
@@ -376,14 +359,12 @@
       var hit = overrides[comboOf(event)];
       if (hit) return hit;
     }
-    // Escape closes whatever the shell put on top of the page.
     if (event.key === "Escape") return "close_overlay";
     if (event.key === "F5") return "reload";
     if (event.key === "F11") return "fullscreen";
     if (event.key === "F12") return "devtools";
     var ctrl = event.ctrlKey || event.metaKey;
     if (!ctrl) return null;
-    // Shift turns "t" into "T"; the switch is keyed on the lower-case letter.
     var key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
     switch (key) {
       case "t": return event.shiftKey ? "reopen_tab" : "new_tab";
@@ -396,7 +377,6 @@
       case "-": return "zoom_out";
       case "0": return "zoom_reset";
       case "p": return event.shiftKey ? "palette" : "print";
-      // Plain Ctrl+A must stay select-all, so only the shifted form is ours.
       case "a": return event.shiftKey ? "tab_search" : null;
       case "g": return event.shiftKey ? "group_tab" : null;
       case "f": return "find";
@@ -412,7 +392,6 @@
     window.__TAURI_INTERNALS__.invoke("context_menu", { request: payload }).catch(function () {});
   };
 
-  // Suppress the native menu and let the shell draw its own.
   window.addEventListener("contextmenu", function (event) {
     if (window.__mixGesturePending) {
       window.__mixGesturePending = false;
@@ -435,8 +414,6 @@
     });
   }, true);
 
-  // Any click in the page closes an open menu, but only for a short window
-  // after one was requested, so ordinary clicks stay IPC free.
   var menuShownAt = 0;
   window.addEventListener("mousedown", function () {
     if (Date.now() - menuShownAt > 8000) return;
@@ -444,10 +421,6 @@
     report({ dismiss: true });
   }, true);
 
-  // Sensitive APIs ask the shell first; the prompt is ours, not a browser dialog.
-  // The command answers at once - either with a remembered decision or with a
-  // prompt id - and the answer is collected here so no ipc thread is held while
-  // the user decides.
   var pollPermission = function (invoke, id) {
     return new Promise(function (resolve) {
       var tries = 0;
@@ -528,8 +501,6 @@
     }
     var action = actionFor(event);
     if (!action) return;
-    // Escape is passed through on purpose: it is reported so an open panel can
-    // close, but the page still gets it for its own dialogs and players.
     if (action !== 'close_overlay') {
       event.preventDefault();
       event.stopPropagation();
@@ -625,7 +596,6 @@
     window.__mixGesturePending = true;
     var action = MAP[pattern];
     if (!action || action === "none") return;
-    // Scrolling stays in the page: no round trip needed.
     if (action === "scroll_top") {
       window.scrollTo({ top: 0, behavior: "smooth" });
       return;
@@ -687,7 +657,6 @@
 
   function linkOf(node) {
     if (!node || !node.closest) return null;
-    // Many sites wrap cards in an <a> without href and navigate from JS.
     var anchor = node.closest('a');
     if (anchor) {
       var href = anchor.href || anchor.getAttribute('data-href') || anchor.getAttribute('href') || '';
@@ -730,9 +699,6 @@
     badge = null;
   }
 
-  // Exactly one source: a link, an image, or the selected text.
-  /// Shadow DOM retargets events to the host, so the real link only shows up
-  /// in composedPath().
   function sourceFromEvent(event) {
     var path = [];
     try {
@@ -747,7 +713,6 @@
     return sourceAtPoint(event.clientX, event.clientY, event.target);
   }
 
-  /// Sites often stack a container above the cards; the stack still holds them.
   function sourceAtPoint(x, y, fallbackTarget) {
     var stack = [];
     try {
@@ -767,7 +732,6 @@
       if (link.href) {
         return { url: link.href, text: '', linkText: label };
       }
-      // No address on the element: treat the label as the drag source.
       if (label) {
         return { url: '', text: label, linkText: label };
       }
@@ -781,8 +745,6 @@
       return { url: '', text: selected, linkText: '' };
     }
 
-    // Sites that build cards from divs offer no address, but they do look
-    // clickable; the visible text is still worth dragging.
     if (quiet) return null;
     var node = target;
     for (var depth = 0; depth < 6 && node && node.nodeType === 1; depth += 1) {
@@ -821,14 +783,9 @@
       element: event.target,
       armedAt: Date.now(),
     };
-    // Nothing is intercepted here. A plain click has to reach the page: taking
-    // the pointer and cancelling the default on press stopped the site's own
-    // click handler from ever running, so a card that opened a tab on click
-    // only flashed the drag badge instead.
   }, true);
 
   window.addEventListener('dragstart', function (event) {
-    // Native drag would cancel the pointer stream.
     if (drag) {
       event.preventDefault();
       event.stopPropagation();
@@ -842,8 +799,6 @@
     if (!drag.moved) {
       if (Math.abs(dx) < STEP && Math.abs(dy) < STEP) return;
       drag.moved = true;
-      // The gesture is a drag from here on: keep the pointer stream so the page
-      // does not start a native drag, and stop text selection under the cursor.
       try {
         if (drag.element && drag.element.setPointerCapture) {
           drag.element.setPointerCapture(drag.pointer);
@@ -870,7 +825,6 @@
       }
     } catch (error) {}
     if (!item.moved) return;
-    // One action per drag, even if several events arrive.
     var now = Date.now();
     if (now - lastAction < 400) return;
     lastAction = now;
@@ -938,15 +892,12 @@
       else if (text) invoke('drag_action', { kind: 'search', text: text });
       return;
     }
-    // "open": a link or image opens, text searches.
     if (url) invoke('drag_action', { kind: 'open', url: url });
     else if (text) invoke('drag_action', { kind: 'search', text: text });
   }
 
   window.addEventListener('pointerup', finish, true);
 
-  // Some WebView2 builds drop pointer events for native drags; the mouse pair
-  // is a cheap safety net and shares the same state.
   window.addEventListener('mouseup', function (event) {
     if (!drag) return;
     finish(event);
