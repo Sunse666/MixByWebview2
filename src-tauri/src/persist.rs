@@ -1,6 +1,4 @@
-//! Writes the history file when nothing has changed for a moment, instead of
-//! once per visit: a page load produces a visit, a title and an icon within a
-//! second, and each of those used to rewrite the whole file.
+//! Writes the history file after a quiet period instead of once per visit.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
@@ -15,9 +13,7 @@ pub fn touch_history() {
     DIRTY.store(true, Ordering::Release);
 }
 
-/// Writes history at most once per quiet period, on its own thread so nothing
-/// on the ui path waits for the disk. Quitting flushes through the same
-/// function, so a normal exit loses nothing.
+/// Writes history at most once per quiet period, on its own thread.
 pub fn spawn_history_flusher(app: tauri::AppHandle) {
     std::thread::spawn(move || loop {
         std::thread::sleep(QUIET);

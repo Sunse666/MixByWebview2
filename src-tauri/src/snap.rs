@@ -2,8 +2,7 @@ use std::time::{Duration, Instant};
 
 use tauri::{AppHandle, Manager, PhysicalPosition, PhysicalSize};
 
-/// Cells of the screen layout. Every dock action cycles through the cells that
-/// belong to its direction, so one key never needs a second binding.
+/// Cells of the screen layout.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Cell {
     Full,
@@ -54,7 +53,6 @@ pub fn cycle(app: &AppHandle, direction: Direction) -> Result<(), String> {
         snap.last_at = Some(Instant::now());
 
         if snap.last.is_none() || was_maximized {
-            // First dock: remember where the window was so Down can put it back.
             snap.restore = bounds(&win);
         }
 
@@ -114,8 +112,7 @@ pub fn cycle(app: &AppHandle, direction: Direction) -> Result<(), String> {
     Ok(())
 }
 
-/// Position is the outer corner but size is the inner one: set_size changes the
-/// client area, so storing the outer size would grow the window on every restore.
+/// Position is the outer corner, size is the inner one.
 fn bounds(win: &tauri::Window) -> Option<(i32, i32, u32, u32)> {
     let position = win.outer_position().ok()?;
     let size = win.inner_size().ok()?;
@@ -180,8 +177,7 @@ mod tests {
         assert_eq!(next_cell(Some(Cell::BottomHalf), Direction::Down), None);
     }
 }
-/// Global hotkeys are the primary trigger. If the platform refuses them (Wayland,
-/// or another app already owns the combo) the window keys still work.
+/// Global hotkeys are the primary trigger; window keys still work.
 pub fn install_hotkeys(app: &AppHandle) -> bool {
     use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 

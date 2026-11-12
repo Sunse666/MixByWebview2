@@ -1,13 +1,12 @@
 use std::path::{Path, PathBuf};
 
-/// All writable state lives in <app root>/UserData. Extensions and userscripts
-/// are user-managed drop folders next to the binary (see DEV-PLAN 3.8).
+/// All writable state lives in <app root>/UserData.
 #[derive(Debug, Clone)]
 pub struct AppDirs {
     pub root: PathBuf,
     pub user_data: PathBuf,
     pub profile: PathBuf,
-    /// The strip and the overlays: a second WebView2 environment, see WebviewOpts.
+    /// The strip and the overlays: a second WebView2 environment.
     pub profile_ui: PathBuf,
     pub logs: PathBuf,
     pub downloads: PathBuf,
@@ -131,7 +130,6 @@ fn app_root() -> PathBuf {
         .map(Path::to_path_buf)
         .unwrap_or_else(|| PathBuf::from("."));
 
-    // A .app bundle is not writable, its parent is.
     #[cfg(target_os = "macos")]
     if let Some(bundle) = dir.parent().filter(|p| p.extension().is_some_and(|e| e == "app")) {
         if let Some(parent) = bundle.parent() {
@@ -159,9 +157,7 @@ fn fallback_data_dir() -> PathBuf {
     }
     std::env::temp_dir().join("mix")
 }
-/// Writes through a sibling temporary file and renames it into place, so a
-/// crash or a full disk leaves the previous file intact instead of a truncated
-/// one. Every state file goes through here.
+/// Writes through a sibling temporary file and renames it into place.
 pub fn write_atomic(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
     let dir = path.parent().unwrap_or_else(|| Path::new("."));
     std::fs::create_dir_all(dir)?;
@@ -173,7 +169,6 @@ pub fn write_atomic(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
     {
         let mut file = std::fs::File::create(&tmp)?;
         std::io::Write::write_all(&mut file, bytes)?;
-        // The rename is what makes the write visible; the flush only orders it.
         let _ = file.sync_all();
     }
     std::fs::rename(&tmp, path)

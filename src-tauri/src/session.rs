@@ -3,8 +3,7 @@ use std::path::Path;
 
 pub const SCHEMA: u32 = 3;
 
-/// Only URLs are stored: the webview back/forward stack cannot be restored,
-/// so the UI shows a disabled back button instead of pretending otherwise.
+/// Only urls are stored; the back/forward stack is not restored.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct WindowGeometry {
@@ -68,8 +67,7 @@ pub struct WindowSession {
     pub selected: usize,
     /// Kept here instead of a plugin so it stays inside the portable folder.
     pub window: Option<WindowGeometry>,
-    /// Tab groups, with members as indexes into "tabs" so they survive the ids being
-    /// handed out again on the next start.
+    /// Tab groups, with members as indexes into "tabs".
     #[serde(default)]
     pub groups: Vec<SessionGroup>,
 }

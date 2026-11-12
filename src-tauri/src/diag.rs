@@ -1,8 +1,7 @@
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-/// Everything that goes into a support bundle. Kept as plain strings so the
-/// writer can be unit tested without a running app.
+/// Everything that goes into a support bundle.
 pub struct Bundle<'a> {
     pub version: &'a str,
     pub git: &'a str,
@@ -155,8 +154,7 @@ mod tests {
     }
 }
 
-/// Gathers the current state and writes a bundle. Shared by the command and the
-/// debug hook so both go through the same path.
+/// Gathers the current state and writes a bundle.
 pub fn export(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     use tauri::Manager;
 
@@ -173,7 +171,6 @@ pub fn export(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     let theme = read(&dirs.theme_file);
     let session = read(&dirs.session_file);
 
-    // serde_json handles escaping: a formatted string would break on Windows paths.
     let paths = serde_json::json!({
         "root": dirs.root.display().to_string(),
         "user_data": dirs.user_data.display().to_string(),

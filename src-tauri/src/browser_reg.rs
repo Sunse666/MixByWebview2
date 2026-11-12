@@ -1,5 +1,4 @@
-//! Registers Mix as a candidate default browser. Everything lands under HKCU so
-//! no elevation is needed, and Windows still lets the user pick.
+//! Registers Mix as a candidate default browser.
 
 use crate::ipc::AppError;
 
@@ -24,8 +23,7 @@ fn write(root: &str, key: &str, value: Option<&str>) -> Result<(), AppError> {
     }
 }
 
-/// Writes the associations Windows looks at, then points the user at the
-/// "Default apps" page, because silently stealing handlers is not acceptable.
+/// Writes the associations Windows looks at, then opens the default apps page.
 pub fn register() -> Result<String, AppError> {
     let exe = std::env::current_exe().map_err(|err| AppError::new("registry", err.to_string()))?;
     let exe = exe.display().to_string();

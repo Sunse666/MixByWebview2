@@ -4,8 +4,7 @@ use std::path::Path;
 use std::sync::{Mutex, OnceLock};
 use std::time::Instant;
 
-/// Elapsed time since the process started, printed on every line so support
-/// bundles and startup measurements do not need guesswork.
+/// Elapsed time since the process started.
 static START: OnceLock<Instant> = OnceLock::new();
 
 pub fn elapsed_ms() -> u128 {

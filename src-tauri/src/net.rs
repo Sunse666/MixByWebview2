@@ -5,13 +5,10 @@ use std::time::{Duration, Instant};
 
 const TIMEOUT: Duration = Duration::from_millis(1500);
 const TTL: Duration = Duration::from_secs(300);
-/// A probe that has not answered within this budget counts as reachable: the
-/// webview then decides for itself, and a hung dns lookup cannot hold a
-/// navigation command hostage.
+/// Budget a probe may take before the answer counts as reachable.
 const BUDGET: Duration = Duration::from_millis(2000);
 
-/// WebView2 draws its own page when a host cannot be reached, and wry gives no
-/// navigation-failed hook. Probing first means the user sees our page instead.
+/// Probes a host before navigating, so an unreachable one shows our page.
 #[derive(Default)]
 pub struct Reachability {
     seen: Mutex<HashMap<String, (bool, Instant)>>,
@@ -21,7 +18,6 @@ impl Reachability {
     /// Cached answer, or a fresh probe. Only http(s) urls are probeable.
     pub fn check(&self, url: &str) -> bool {
         let Some((host, port)) = host_and_port(url) else {
-            // Not a network address: let the webview deal with it.
             return true;
         };
         let key = format!("{host}:{port}");
@@ -34,8 +30,6 @@ impl Reachability {
             }
         }
 
-        // getaddrinfo has no timeout of its own, so the probe gets a thread and
-        // this side waits only as long as the budget allows.
         let (sender, receiver) = std::sync::mpsc::channel();
         std::thread::spawn(move || {
             let _ = sender.send(probe(&host, port));
@@ -117,7 +111,6 @@ mod tests {
 
     #[test]
     fn a_local_port_without_a_listener_is_unreachable() {
-        // Port 1 is reserved and closed on every platform we ship on.
         assert!(!probe("127.0.0.1", 1));
     }
 }
