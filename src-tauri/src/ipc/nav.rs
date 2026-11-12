@@ -99,7 +99,22 @@ pub(crate) fn set_zoom(app: &AppHandle, label: &str, level: f64) -> Result<(), A
     }
 
     crate::logging::info(&format!("zoom -> {level:.1} for {url}"));
+    tell_panel(app, label, level);
     Ok(())
+}
+
+/// Keeps an open zoom panel in step with a zoom changed from the wheel or the keyboard.
+fn tell_panel(app: &AppHandle, label: &str, level: f64) {
+    let overlay = {
+        let state = app.state::<crate::ipc::AppState>();
+        let slots = state.windows.overlay.read();
+        slots.get(label).cloned()
+    };
+    if let Some(overlay) = overlay {
+        if let Some(view) = app.get_webview(&overlay) {
+            let _ = view.eval(&format!("window.__mixZoom && window.__mixZoom({level});"));
+        }
+    }
 }
 
 #[tauri::command]

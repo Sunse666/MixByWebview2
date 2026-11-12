@@ -1046,6 +1046,8 @@ async function bootZoom() {
     level.textContent = Math.round(value * 100) + "%";
   };
   paint(zoom);
+  // The wheel and the keyboard change the zoom too, so the panel takes the new value.
+  window.__mixZoom = (value) => paint(value);
 
   minus.addEventListener("click", async () => paint(await invoke("zoom_step", { delta: -0.1 })));
   plus.addEventListener("click", async () => paint(await invoke("zoom_step", { delta: 0.1 })));
