@@ -12,9 +12,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 
 const BASE_EDGE: f32 = 5.0;
 
-/// A borderless window has no resize frame, so answer WM_NCHITTEST ourselves and
-/// let Windows do the resizing. Works for all eight directions and for the
-/// bottom/left/right edges that the chrome strip cannot reach.
+/// Answers WM_NCHITTEST so a borderless window can be resized.
 pub fn install(window: &Window) {
     let Ok(handle) = window.window_handle() else {
         return;
@@ -101,8 +99,6 @@ unsafe fn edge_code(hwnd: HWND, lparam: LPARAM) -> Option<u32> {
 fn child_hwnd(webview: &tauri::Webview) -> Option<HWND> {
     use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2Controller;
 
-    // with_webview wants a 'static Send closure, so the handle travels back through
-    // a channel as a plain number.
     let (sender, receiver) = std::sync::mpsc::channel::<isize>();
     let _ = webview.with_webview(move |platform| unsafe {
         let controller = platform.controller();
@@ -120,8 +116,7 @@ fn child_hwnd(webview: &tauri::Webview) -> Option<HWND> {
     }
 }
 
-/// Places one webview directly under another: SetWindowPos puts a window below the
-/// one passed as hWndInsertAfter, which is exactly the order the preview wants.
+/// Places one webview directly under another.
 pub fn place_below(webview: &tauri::Webview, above: &tauri::Webview) {
     let Some(above) = child_hwnd(above) else { return };
     let Some(hwnd) = child_hwnd(webview) else { return };
