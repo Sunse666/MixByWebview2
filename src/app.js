@@ -777,10 +777,10 @@ async function renderToolbar(extensions) {
     } else if (id === "bookmark") {
       button.textContent = bookmarked ? "\u2605" : "\u2606";
     } else if (id === "zoom") {
+      // The button keeps its icon: the level belongs in the panel and the tooltip.
       const level = await invoke("zoom_get").catch(() => 1);
-      const pct = Math.round(level * 100);
-      button.textContent = pct === 100 ? spec.glyph : `${pct}%`;
-      button.title = `${t("Zoom")} ${pct}%`;
+      button.textContent = spec.glyph;
+      button.title = `${t("Zoom")} ${Math.round(level * 100)}%`;
     } else if (id === "mute") {
       const now = audioState[selected] || { playing: false, muted: false };
       button.textContent = now.muted ? "\u{1F507}" : now.playing ? "\u{1F50A}" : "\u{1F508}";
