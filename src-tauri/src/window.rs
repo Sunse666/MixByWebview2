@@ -61,6 +61,59 @@ fn apply_groups(app: &AppHandle, label: &str, groups: &[crate::session::SessionG
         });
     }
 }
+/// What a popped-out window was told to open: the tab, its offset, and the geometry of
+/// the window it came from.
+struct InstanceRequest {
+    url: String,
+    scroll: f64,
+    pinned: bool,
+    geometry: Option<crate::session::WindowGeometry>,
+}
+
+fn arg_value(args: &[String], name: &str) -> Option<String> {
+    args.iter()
+        .position(|arg| arg == name)
+        .and_then(|index| args.get(index + 1))
+        .cloned()
+}
+
+fn instance_request() -> Option<InstanceRequest> {
+    if !crate::paths::instance_mode() {
+        return None;
+    }
+    let args: Vec<String> = std::env::args().collect();
+    let url = args
+        .iter()
+        .find(|arg| arg.starts_with("http://") || arg.starts_with("https://"))?
+        .clone();
+    let scroll = arg_value(&args, "--scroll")
+        .and_then(|value| value.parse::<f64>().ok())
+        .unwrap_or(0.0);
+    let pinned = args.iter().any(|arg| arg == "--pinned");
+    let geometry = arg_value(&args, "--bounds").and_then(|value| {
+        let parts: Vec<i64> = value
+            .split(',')
+            .filter_map(|part| part.trim().parse::<i64>().ok())
+            .collect();
+        if parts.len() != 4 {
+            return None;
+        }
+        Some(crate::session::WindowGeometry {
+            x: parts[0] as i32,
+            y: parts[1] as i32,
+            width: parts[2].max(400) as u32,
+            height: parts[3].max(300) as u32,
+            maximized: false,
+        })
+    });
+    Some(InstanceRequest {
+        url,
+        scroll,
+        pinned,
+        geometry,
+    })
+}
+
 /// The tray and the global hotkeys belong to one process: the first window that starts.
 /// A window dragged out of it runs on its own and leaves these alone.
 fn install_owner_ui(app: &tauri::AppHandle) -> tauri::Result<()> {
@@ -82,6 +135,23 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
             state.dirs.session_file.clone(),
         )
     };
+
+    // A window that was dragged out of another one is told what to open, how big to be
+    // and where to sit, so it takes over the tab the way it looked in the old window.
+    if let Some(request) = instance_request() {
+        open_window(
+            app.handle(),
+            PRIMARY,
+            vec![(request.url, request.scroll, request.pinned)],
+            0,
+            request.geometry,
+        )?;
+        crate::downloads::start_progress_watch(app.handle().clone());
+        crate::persist::spawn_history_flusher(app.handle().clone());
+        crate::audio::watch(app.handle().clone());
+        install_owner_ui(app.handle())?;
+        return Ok(());
+    }
 
     let shell_urls = initial_urls();
     if !shell_urls.is_empty() {

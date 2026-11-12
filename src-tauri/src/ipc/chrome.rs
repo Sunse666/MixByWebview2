@@ -376,12 +376,32 @@ pub async fn window_new(app: AppHandle, state: State<'_, AppState>) -> Result<St
     Ok(label)
 }
 
-/// Starts another copy of the app on this url. Each copy has its own webview profile.
-fn spawn_instance(url: &str) -> bool {
+/// Starts another copy of the app on this url, carrying the tab's offset and the size
+/// and place of the window it came from.
+fn spawn_instance(
+    url: &str,
+    scroll: f64,
+    pinned: bool,
+    geometry: &crate::session::WindowGeometry,
+) -> bool {
     let Ok(exe) = std::env::current_exe() else {
         return false;
     };
-    match std::process::Command::new(exe).arg("--instance").arg(url).spawn() {
+    let mut command = std::process::Command::new(exe);
+    command
+        .arg("--instance")
+        .arg(url)
+        .arg("--scroll")
+        .arg(scroll.to_string())
+        .arg("--bounds")
+        .arg(format!(
+            "{},{},{},{}",
+            geometry.x, geometry.y, geometry.width, geometry.height
+        ));
+    if pinned {
+        command.arg("--pinned");
+    }
+    match command.spawn() {
         Ok(_) => true,
         Err(err) => {
             crate::logging::warn(&format!("cannot start a second process: {err}"));
@@ -407,21 +427,21 @@ pub async fn tab_pop_out(
             None => return Ok(()),
         }
     };
+    let scale = window.scale_factor().unwrap_or(1.0);
+    let size = window.inner_size().unwrap_or(tauri::PhysicalSize::new(1100, 760));
+    let geometry = crate::session::WindowGeometry {
+        x: (x * scale) as i32 - 80,
+        y: (y * scale) as i32 - 16,
+        width: size.width,
+        height: size.height,
+        maximized: false,
+    };
     // The dragged tab becomes a window of its own, run as its own process: the same
     // thing as starting mix.exe again, which is what "drag it out" means to a user.
-    if spawn_instance(&url) {
+    if spawn_instance(&url, scroll, pinned, &geometry) {
         crate::logging::info(&format!("tab {id} opened in its own process"));
     } else {
         let label = free_window_label(&state);
-        let scale = window.scale_factor().unwrap_or(1.0);
-        let size = window.inner_size().unwrap_or(tauri::PhysicalSize::new(1100, 760));
-        let geometry = crate::session::WindowGeometry {
-            x: (x * scale) as i32 - 80,
-            y: (y * scale) as i32 - 16,
-            width: size.width,
-            height: size.height,
-            maximized: false,
-        };
         crate::window::open_window(&app, &label, vec![(url, scroll, pinned)], 0, Some(geometry))?;
         crate::logging::info(&format!("tab {id} popped out into {label}"));
     }
