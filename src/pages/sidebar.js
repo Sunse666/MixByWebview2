@@ -14,13 +14,25 @@ const LABELS = { bookmarks: "Bookmarks", downloads: "Downloads", history: "Histo
 let current = "bookmarks";
 let tabSnapshot = null;
 
+/// Only a real image source is worth an img tag: a site without an icon reports an
+/// empty data url, which would paint the browser's broken-image glyph instead.
+function realIcon(value) {
+  const text = String(value || "").trim();
+  return (
+    (text.startsWith("data:image/") && text.length > 64) ||
+    text.startsWith("http://") ||
+    text.startsWith("https://")
+  );
+}
+
 function row(label, host, icon, run) {
   const line = document.createElement("div");
   line.className = "row";
-  if (icon) {
+  if (realIcon(icon)) {
     const image = document.createElement("img");
     image.src = icon;
     image.alt = "";
+    image.addEventListener("error", () => image.remove());
     line.append(image);
   }
   const text = document.createElement("span");
