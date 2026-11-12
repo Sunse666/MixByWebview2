@@ -573,7 +573,6 @@ pub(crate) fn emit_tabs(app: &AppHandle, label: &str) {
         snapshot(&core, label)
     };
     let json = serde_json::to_string(&list).unwrap_or_else(|_| "{}".into());
-    crate::logging::info(&format!("tabs:changed -> {label} n={}", list.tabs.len()));
     let _ = app.emit_to(label, "tabs:changed", list);
     if let Some(side) = app.get_webview(&format!("{label}-side")) {
         let _ = side.eval(&format!(

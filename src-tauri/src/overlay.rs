@@ -136,27 +136,6 @@ pub fn open_under(
     let x = (center - ow / 2.0)
         .min((win_w - ow - 8.0).max(0.0))
         .max(8.0);
-    let chrome = app.get_webview(&format!("{}-chrome", win.label()));
-    let chrome_rect = chrome.and_then(|view| {
-        let pos = view.position().ok()?;
-        let size = view.size().ok()?;
-        Some(format!(
-            "{:.0},{:.0} {:.0}x{:.0}",
-            pos.x as f64 / scale,
-            pos.y as f64 / scale,
-            size.width as f64 / scale,
-            size.height as f64 / scale
-        ))
-    });
-    let inner = win.inner_size().map(|s| (s.width, s.height)).unwrap_or((0, 0));
-    let outer = win.outer_size().map(|s| (s.width, s.height)).unwrap_or((0, 0));
-    crate::logging::info(&format!(
-        "overlay under: anchor={center:.0} y={y:.0} panel={ow:.0}x{oh:.0} at {x:.0} window={win_w:.0} inner={:?} outer={:?} scale={:.2} chrome={:?}",
-        inner,
-        outer,
-        win.scale_factor().unwrap_or(0.0),
-        chrome_rect
-    ));
     open_at(app, win, kind, x, y, ow, oh)
 }
 
