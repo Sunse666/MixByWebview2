@@ -9,8 +9,9 @@ const invoke = withFeedback(window.__TAURI__.core.invoke);
 const tabs = document.getElementById("tabs");
 const body = document.getElementById("body");
 
-const VIEWS = ["bookmarks", "downloads", "history", "tabs"];
+const ALL_VIEWS = ["bookmarks", "downloads", "history", "tabs"];
 const LABELS = { bookmarks: "Bookmarks", downloads: "Downloads", history: "History", tabs: "Tabs" };
+let views = ALL_VIEWS.slice();
 let current = "bookmarks";
 let tabSnapshot = null;
 
@@ -221,14 +222,15 @@ grip.addEventListener("lostpointercapture", () => {
   document.body.classList.remove("resizing");
 });
 
-async function boot() {
-  const settings = await invoke("settings_get").catch(() => null);
-  side = settings && settings.sidebar === "right" ? "right" : "left";
-  placeGrip();
-  setLanguage((settings && settings.language) || "en");
-  setFeedbackText(t("Saved"), t("Could not save:"));
+/// Keeps only the panels this build has, in their standard order.
+function knownViews(list) {
+  const kept = ALL_VIEWS.filter((id) => Array.isArray(list) && list.includes(id));
+  return kept.length ? kept : ALL_VIEWS.slice();
+}
 
-  for (const view of VIEWS) {
+function renderButtons() {
+  tabs.replaceChildren();
+  for (const view of views) {
     const button = document.createElement("button");
     button.className = "side-tab";
     button.dataset.view = view;
@@ -239,6 +241,24 @@ async function boot() {
     });
     tabs.append(button);
   }
+  if (!views.includes(current)) current = views[0];
+}
+
+window.__mixSidebarViews = (list) => {
+  views = knownViews(list);
+  renderButtons();
+  paint();
+};
+
+async function boot() {
+  const settings = await invoke("settings_get").catch(() => null);
+  side = settings && settings.sidebar === "right" ? "right" : "left";
+  placeGrip();
+  setLanguage((settings && settings.language) || "en");
+  setFeedbackText(t("Saved"), t("Could not save:"));
+
+  views = knownViews(settings && settings.sidebar_views);
+  renderButtons();
   await listen("bookmarks:changed", () => paint()).catch(() => {});
   await listen("download:changed", () => paint()).catch(() => {});
   await paint();

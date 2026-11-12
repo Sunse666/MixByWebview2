@@ -187,6 +187,34 @@ export function buildAppearance({ settings, invoke }) {
     }).catch(() => {});
   });
 
+  const viewBoxes = [];
+  const viewsWrap = document.createElement("div");
+  viewsWrap.className = "row-inline";
+  const chosen = Array.isArray(settings.sidebar_views) && settings.sidebar_views.length
+    ? settings.sidebar_views
+    : ["bookmarks", "downloads", "history", "tabs"];
+  for (const [id, label] of [
+    ["bookmarks", "Bookmarks"],
+    ["downloads", "Downloads"],
+    ["history", "History"],
+    ["tabs", "Tabs"],
+  ]) {
+    const tag = document.createElement("label");
+    tag.className = "toggle";
+    const box = document.createElement("input");
+    box.type = "checkbox";
+    box.checked = chosen.includes(id);
+    box.addEventListener("change", async () => {
+      const on = viewBoxes.filter((entry) => entry.box.checked).map((entry) => entry.id);
+      await invoke("settings_set", { patch: { sidebar_views: on } }).catch(() => {});
+    });
+    const text = document.createElement("span");
+    text.textContent = t(label);
+    tag.append(box, text);
+    viewsWrap.append(tag);
+    viewBoxes.push({ id, box });
+  }
+
   themeCard.append(
     themeText,
     row("Mode", "Dark or light palette for the interface", modeSelect),
@@ -201,6 +229,7 @@ export function buildAppearance({ settings, invoke }) {
         return wrap;
       })(),
     ),
+    row(t("Sidebar panels"), t("Which panels the sidebar offers"), viewsWrap),
     themeRow,
     zoomRow,
     row(t("Standard font"), t("Empty keeps the site font, applies to new pages"), fontInput),

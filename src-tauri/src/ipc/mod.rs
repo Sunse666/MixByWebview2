@@ -284,6 +284,7 @@ pub struct SettingsPatch {
     pub proxy_server: Option<String>,
     pub sidebar: Option<String>,
     pub sidebar_width: Option<f64>,
+    pub sidebar_views: Option<Vec<String>>,
     pub toolbar: Option<Vec<String>>,
     pub translate_to: Option<String>,
     pub new_tab_page: Option<bool>,

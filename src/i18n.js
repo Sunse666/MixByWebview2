@@ -243,6 +243,8 @@ const DICT = {
     "Mode": "模式",
     "Dark or light palette for the interface": "界面配色：深色或浅色",
     "New tab": "新标签页",
+    "Sidebar panels": "侧边栏面板",
+    "Which panels the sidebar offers": "侧边栏提供哪些面板",
     "Incognito": "无痕",
     "Loading": "加载中",
     "Suspended": "已挂起",

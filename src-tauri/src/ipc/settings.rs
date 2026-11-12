@@ -80,6 +80,7 @@ pub async fn settings_set(
 ) -> Result<Settings, AppError> {
     require_trusted(&webview)?;
     let asked_side = patch.sidebar.is_some();
+    let asked_views = patch.sidebar_views.is_some();
     let settings = apply_settings_patch(&state, patch)?;
     crate::tabs::apply_settings(&state.dirs, &settings);
     crate::tabs::broadcast_shortcuts(webview.app_handle());
@@ -90,6 +91,9 @@ pub async fn settings_set(
     crate::sidebar::ensure(webview.app_handle(), &label);
     if asked_side {
         crate::sidebar::tell_side(webview.app_handle(), &label, &settings.sidebar);
+    }
+    if asked_views {
+        crate::sidebar::tell_views(webview.app_handle(), &label, &settings.sidebar_views);
     }
     let _ = crate::window::relayout(webview.app_handle(), &label);
     Ok(settings)
@@ -146,6 +150,19 @@ pub(crate) fn apply_settings_patch(
         }
         if let Some(value) = patch.sidebar_width {
             guard.sidebar_width = value.clamp(180.0, 640.0);
+        }
+        if let Some(value) = patch.sidebar_views {
+            // Only the panels this build knows, in their standard order, and never none.
+            let known = crate::state::default_sidebar_views();
+            let mut kept: Vec<String> = known
+                .iter()
+                .filter(|id| value.iter().any(|asked| asked == *id))
+                .cloned()
+                .collect();
+            if kept.is_empty() {
+                kept = known;
+            }
+            guard.sidebar_views = kept;
         }
         if let Some(value) = patch.keep_alive_hosts {
             guard.keep_alive_hosts = value.trim().to_string();

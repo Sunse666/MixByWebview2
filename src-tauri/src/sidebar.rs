@@ -118,6 +118,18 @@ pub fn tell_side(app: &AppHandle, label: &str, side: &str) {
     ));
 }
 
+/// Tells the sidebar page which panels to offer, so a change in the settings page shows
+/// up without reopening the sidebar.
+pub fn tell_views(app: &AppHandle, label: &str, views: &[String]) {
+    let Some(view) = app.get_webview(&format!("{label}-side")) else {
+        return;
+    };
+    let json = serde_json::to_string(views).unwrap_or_else(|_| "[]".into());
+    let _ = view.eval(&format!(
+        "window.__mixSidebarViews && window.__mixSidebarViews({json})"
+    ));
+}
+
 /// Shows, hides and places the sidebar to match the plan.
 pub fn apply(
     app: &AppHandle,

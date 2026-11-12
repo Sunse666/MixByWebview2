@@ -8,6 +8,17 @@ fn default_proxy_mode() -> String {
     "system".to_string()
 }
 
+/// The sidebar panels, in the order they are offered. The list is the setting: a panel
+/// that is not in it has no button and is not shown.
+pub fn default_sidebar_views() -> Vec<String> {
+    vec![
+        "bookmarks".to_string(),
+        "downloads".to_string(),
+        "history".to_string(),
+        "tabs".to_string(),
+    ]
+}
+
 fn default_sidebar() -> String {
     "off".to_string()
 }
@@ -37,6 +48,9 @@ pub struct Settings {
     /// Sidebar width in logical pixels.
     #[serde(default = "default_sidebar_width")]
     pub sidebar_width: f64,
+    /// Sidebar panels to offer; see default_sidebar_views.
+    #[serde(default = "default_sidebar_views")]
+    pub sidebar_views: Vec<String>,
     /// Toolbar buttons the user kept, in display order.
     pub toolbar: Vec<String>,
     /// Extensions the user hid from the toolbar, by name.
@@ -144,6 +158,7 @@ impl Default for Settings {
         proxy_server: String::new(),
         sidebar: default_sidebar(),
         sidebar_width: default_sidebar_width(),
+        sidebar_views: default_sidebar_views(),
         toolbar: vec![
             "translate".into(),
             "zoom".into(),
