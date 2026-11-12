@@ -99,11 +99,11 @@ pub struct Ui {
 /// which hosts answered a reachability probe.
 pub struct Nav {
     /// Origin of the bundled pages.
-    pub app_base: parking_lot::RwLock<String>,
+    pub app_base: String,
     /// Tab id -> the url it is currently loading.
-    pub pending: parking_lot::RwLock<std::collections::HashMap<String, String>>,
+    pub pending: std::collections::HashMap<String, String>,
     /// Tab id -> the url whose error page is already showing.
-    pub error_shown: parking_lot::RwLock<std::collections::HashMap<String, String>>,
+    pub error_shown: std::collections::HashMap<String, String>,
     /// Reachability cache shared with the probe thread.
     pub reachability: std::sync::Arc<crate::net::Reachability>,
 }
@@ -124,7 +124,7 @@ pub struct AppState {
     pub snap: parking_lot::Mutex<crate::snap::SnapState>,
     pub opts: crate::tabs::WebviewOpts,
     pub extensions: Vec<ExtInfo>,
-    pub nav: Nav,
+    pub nav: parking_lot::RwLock<Nav>,
     pub scripts: Vec<crate::userscripts::ScriptInfo>,
 }
 
@@ -162,12 +162,12 @@ impl AppState {
                 translated_tabs: std::collections::HashSet::new(),
                 find_hit: true,
             }),
-            nav: Nav {
-                app_base: parking_lot::RwLock::new(String::new()),
-                pending: parking_lot::RwLock::new(std::collections::HashMap::new()),
-                error_shown: parking_lot::RwLock::new(std::collections::HashMap::new()),
+            nav: parking_lot::RwLock::new(Nav {
+                app_base: String::new(),
+                pending: std::collections::HashMap::new(),
+                error_shown: std::collections::HashMap::new(),
                 reachability: std::sync::Arc::new(crate::net::Reachability::default()),
-            },
+            }),
             scripts,
             dirs,
             cores: parking_lot::RwLock::new(cores),
@@ -641,14 +641,14 @@ async fn cycle_tab(app: &AppHandle, window: &tauri::Window, delta: isize) {
 pub fn show_error_page(app: &AppHandle, id: &str, failed_url: &str) -> Option<String> {
     let state = app.try_state::<AppState>()?;
     {
-        let mut shown = state.nav.error_shown.write();
-        if shown.get(id).map(String::as_str) == Some(failed_url) {
+        let mut nav = state.nav.write();
+        if nav.error_shown.get(id).map(String::as_str) == Some(failed_url) {
             return None;
         }
-        shown.insert(id.to_string(), failed_url.to_string());
+        nav.error_shown.insert(id.to_string(), failed_url.to_string());
     }
 
-    let base = state.nav.app_base.read().clone();
+    let base = state.nav.read().app_base.clone();
     if base.is_empty() {
         return None;
     }

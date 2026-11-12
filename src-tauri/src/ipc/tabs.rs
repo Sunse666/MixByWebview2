@@ -460,7 +460,7 @@ pub async fn tab_mute(
 #[tauri::command]
 pub async fn tab_navigate(app: AppHandle, window: tauri::Window, state: State<'_, AppState>, url: String) -> Result<(), AppError> {
     if url.starts_with("http") && !trusted_url(&url) {
-        let reach = state.nav.reachability.clone();
+        let reach = state.nav.read().reachability.clone();
         let probe_url = url.clone();
         let reachable = tauri::async_runtime::spawn_blocking(move || reach.check(&probe_url))
             .await

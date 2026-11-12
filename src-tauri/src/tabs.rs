@@ -375,8 +375,7 @@ pub fn create(
             move |url| {
                 if let Some(state) = app.try_state::<crate::ipc::AppState>() {
                     state
-                        .nav.pending
-                        .write()
+                        .nav.write().pending
                         
                         .insert(tab_id.clone(), url.to_string());
                 }
