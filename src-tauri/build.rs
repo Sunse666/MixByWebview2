@@ -134,6 +134,7 @@ fn main() {
         "snap",
         "settings_get",
         "settings_set",
+        "sidebar_resize",
         "autostart_get",
         "autostart_set",
         "permission_request",

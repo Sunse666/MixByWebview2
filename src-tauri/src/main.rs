@@ -216,6 +216,7 @@ fn main() {
             ipc::snap,
             ipc::settings_get,
             ipc::settings_set,
+            ipc::sidebar_resize,
             ipc::autostart_get,
             ipc::autostart_set,
             ipc::permission_request,

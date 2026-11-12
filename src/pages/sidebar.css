@@ -13,6 +13,28 @@ body {
   font: 12px/1.5 "Segoe UI", system-ui, sans-serif;
   border-right: 1px solid var(--border, #2e3131);
 }
+.grip {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  width: 5px;
+  z-index: 3;
+  cursor: col-resize;
+}
+.grip.right {
+  right: 0;
+}
+.grip.left {
+  left: 0;
+}
+.grip:hover,
+body.resizing .grip {
+  background: var(--accent, #4c8dff);
+  opacity: 0.55;
+}
+body.resizing {
+  user-select: none;
+}
 .side-tabs {
   display: flex;
   flex: 0 0 auto;

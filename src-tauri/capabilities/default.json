@@ -117,6 +117,7 @@
     "allow-snap",
     "allow-settings-get",
     "allow-settings-set",
+    "allow-sidebar-resize",
     "allow-autostart-get",
     "allow-autostart-set",
     "allow-permission-request",

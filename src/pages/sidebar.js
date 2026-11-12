@@ -97,8 +97,70 @@ function hostOf(url) {
   }
 }
 
+const grip = document.getElementById("grip");
+const MIN_WIDTH = 180;
+const MAX_WIDTH = 640;
+let side = "left";
+let drag = null;
+let frame = 0;
+let pending = 0;
+
+function placeGrip() {
+  grip.classList.toggle("right", side !== "right");
+  grip.classList.toggle("left", side === "right");
+}
+
+function widthAt(event) {
+  const raw = drag.width + (event.screenX - drag.x) * drag.dir;
+  return Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, Math.round(raw)));
+}
+
+function schedule(width) {
+  pending = width;
+  if (frame) return;
+  frame = requestAnimationFrame(() => {
+    frame = 0;
+    invoke("sidebar_resize", { width: pending, persist: false }).catch(() => {});
+  });
+}
+
+grip.addEventListener("pointerdown", async (event) => {
+  if (event.button !== 0) return;
+  const settings = await invoke("settings_get").catch(() => null);
+  if (!settings) return;
+  side = settings.sidebar === "right" ? "right" : "left";
+  placeGrip();
+  drag = {
+    x: event.screenX,
+    width: settings.sidebar_width || 260,
+    dir: side === "right" ? -1 : 1,
+  };
+  grip.setPointerCapture(event.pointerId);
+  document.body.classList.add("resizing");
+  event.preventDefault();
+});
+
+grip.addEventListener("pointermove", (event) => {
+  if (!drag) return;
+  schedule(widthAt(event));
+});
+
+function endDrag(event) {
+  if (!drag) return;
+  const width = widthAt(event);
+  drag = null;
+  frame = 0;
+  document.body.classList.remove("resizing");
+  invoke("sidebar_resize", { width, persist: true }).catch(() => {});
+}
+
+grip.addEventListener("pointerup", endDrag);
+grip.addEventListener("pointercancel", endDrag);
+
 async function boot() {
   const settings = await invoke("settings_get").catch(() => null);
+  side = settings && settings.sidebar === "right" ? "right" : "left";
+  placeGrip();
   setLanguage((settings && settings.language) || "en");
   setFeedbackText(t("Saved"), t("Could not save:"));
 

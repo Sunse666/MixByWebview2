@@ -91,6 +91,27 @@ pub async fn settings_set(
     Ok(settings)
 }
 
+/// Live width of the sidebar while it is being dragged. Only the final call persists,
+/// so a drag does not rewrite settings.json on every frame.
+#[tauri::command]
+pub async fn sidebar_resize(
+    webview: tauri::Webview,
+    state: State<'_, AppState>,
+    width: f64,
+    persist: bool,
+) -> Result<f64, AppError> {
+    require_trusted(&webview)?;
+    let clamped = width.clamp(180.0, 640.0);
+    state.settings.write().sidebar_width = clamped;
+    let label = webview.window().label().to_string();
+    let _ = crate::window::relayout(webview.app_handle(), &label);
+    if persist {
+        let snapshot = state.settings.read().clone();
+        snapshot.save(&state.dirs.settings_file)?;
+    }
+    Ok(clamped)
+}
+
 /// Mutates and writes the settings.
 pub(crate) fn apply_settings_patch(
     state: &AppState,
