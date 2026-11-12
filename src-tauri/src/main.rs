@@ -1,7 +1,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-// assets: frontend files are embedded at compile time, so editing src/*.js
-// only takes effect after the crate is rebuilt.
 mod audio;
 mod browser_reg;
 mod diag;
@@ -48,11 +46,9 @@ fn main() {
     ));
 
     tauri::Builder::default()
-        // Registered first so a second launch is caught before anything else starts.
         .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
             crate::logging::info("second instance forwarded to the running window");
             crate::window::show_or_focus(app);
-            // The shell hands over a url when Mix is the default browser.
             let url = args
                 .iter()
                 .find(|arg| arg.starts_with("http://") || arg.starts_with("https://"))
@@ -77,11 +73,6 @@ fn main() {
         .setup(move |app| {
             let mut settings = state::Settings::load(&dirs.settings_file);
             let theme = theme::Theme::load(&dirs.theme_file);
-            // Left over from the page's reset button, which is gone now that an
-            // extension can be switched back on by loading its folder again. A flag
-            // set by that button is still honoured once, here, because this is the
-            // only safe moment to touch the profile's extension state: before any
-            // webview exists and has the file open.
             if settings.reset_extensions {
                 match ext_live::forget_disabled_state(&dirs.profile) {
                     Ok(true) => logging::info("extension state cleared; extensions load again"),
@@ -93,9 +84,6 @@ fn main() {
                     logging::warn(&format!("cannot save settings after extension reset: {err}"));
                 }
             }
-            // The proxy is decided once: WebView2 compares environment options between
-            // controllers, so a value that could change mid-run would make the next
-            // webview refuse to attach rather than change the route.
             let proxy_args = match settings.proxy_mode.as_str() {
                 "off" => Some("--no-proxy-server".to_string()),
                 "manual" if !settings.proxy_server.is_empty() => {
@@ -109,8 +97,6 @@ fn main() {
             crate::tabs::set_proxy_args(proxy_args);
             let ext_infos = extensions::scan(&dirs, &settings.disabled_extensions);
             let scripts = userscripts::scan(&dirs.scripts);
-            // One call fills every init script and the stylesheet; settings_set
-            // calls the same function again when something changes.
             crate::tabs::apply_settings(&dirs, &settings);
             app.manage(ipc::AppState::new(
                 dirs.clone(),
