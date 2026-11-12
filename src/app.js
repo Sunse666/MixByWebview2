@@ -721,10 +721,10 @@ const TOOLBAR_ITEMS = {
     where: "inside",
     run: (button) => {
       const box = button.getBoundingClientRect();
-      // The right edge of the control is what the panel lines up with.
+      // The panel centers on the control it belongs to.
       return invoke("overlay_toggle", {
         kind: "zoom",
-        x: Math.round(box.right),
+        x: Math.round(box.left + box.width / 2),
         y: Math.round(box.bottom + 4),
       });
     },

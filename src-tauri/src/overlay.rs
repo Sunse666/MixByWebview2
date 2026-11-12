@@ -67,7 +67,9 @@ fn panel_size(base: &str, settings_size: (f64, f64)) -> (f64, f64) {
         "url_menu" => (190.0, 150.0),
         "chrome_menu" => (190.0, 110.0),
         "find" => (380.0, 44.0),
-        "zoom" => (150.0, 44.0),
+        // The row is 26 + 6 + 54 + 6 + 26 wide and 26 tall inside its own 8px padding,
+        // which sits inside the menu's 6px padding and 1px border.
+        "zoom" => (168.0, 58.0),
         "thumb" => (372.0, 232.0),
         _ => DEFAULT,
     }
@@ -109,19 +111,18 @@ pub fn open(app: &AppHandle, win: &tauri::Window, kind: &str) -> Result<(), Stri
     open_at(app, win, kind, x, y, ow, oh)
 }
 
-/// Opens a panel under a control: the right edge of the panel lines up with the right
-/// edge of the control, which is where a menu hangs from a button on the right side.
+/// Opens a panel centered on a control, the way a browser shows a bubble under a button.
 pub fn open_under(
     app: &AppHandle,
     win: &tauri::Window,
     kind: &str,
-    right: f64,
+    center: f64,
     y: f64,
 ) -> Result<(), String> {
     let (win_w, _) = logical_size(win).map_err(|e| e.to_string())?;
     let base = kind.split('&').next().unwrap_or(kind);
     let (ow, oh) = panel_size(base, SETTINGS);
-    let x = (right - ow)
+    let x = (center - ow / 2.0)
         .min((win_w - ow - 8.0).max(0.0))
         .max(8.0);
     open_at(app, win, kind, x, y, ow, oh)
