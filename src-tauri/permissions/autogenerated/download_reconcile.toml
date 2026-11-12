@@ -7,5 +7,5 @@ commands.allow = ["download_reconcile"]
 
 [[permission]]
 identifier = "deny-download-reconcile"
-description = "Disables the download_reconcile command without any pre-configured scope."
+description = "Denies the download_reconcile command without any pre-configured scope."
 commands.deny = ["download_reconcile"]

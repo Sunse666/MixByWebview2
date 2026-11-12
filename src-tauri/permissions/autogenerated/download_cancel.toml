@@ -7,5 +7,5 @@ commands.allow = ["download_cancel"]
 
 [[permission]]
 identifier = "deny-download-cancel"
-description = "Disables the download_cancel command without any pre-configured scope."
+description = "Denies the download_cancel command without any pre-configured scope."
 commands.deny = ["download_cancel"]
