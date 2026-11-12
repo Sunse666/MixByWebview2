@@ -110,23 +110,26 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
         None => crate::logging::info("session restore: nothing to restore"),
     }
 
-    match restored {
+    // One window per launch: every other window is its own process now, so a restart
+    // brings back the window it started from instead of rebuilding a wall of them.
+    let primary = restored.filter(|session| !session.windows.is_empty());
+    match primary {
         Some(session) => {
-            for (index, window) in session.windows.iter().enumerate() {
-                let label = if index == 0 {
-                    PRIMARY.to_string()
-                } else {
-                    format!("w{}", index + 1)
-                };
-                let selected = window.selected.min(window.tabs.len().saturating_sub(1));
-                let tabs: Vec<(String, f64, bool)> = window
-                    .tabs
-                    .iter()
-                    .map(|tab| (tab.url().to_string(), tab.scroll(), tab.pinned()))
-                    .collect();
-                open_window(app.handle(), &label, tabs, selected, window.window.clone())?;
-                apply_groups(app.handle(), &label, &window.groups);
+            if session.windows.len() > 1 {
+                crate::logging::info(&format!(
+                    "session restore: keeping the main window, dropping {}",
+                    session.windows.len() - 1
+                ));
             }
+            let keep = &session.windows[0];
+            let selected = keep.selected.min(keep.tabs.len().saturating_sub(1));
+            let tabs: Vec<(String, f64, bool)> = keep
+                .tabs
+                .iter()
+                .map(|tab| (tab.url().to_string(), tab.scroll(), tab.pinned()))
+                .collect();
+            open_window(app.handle(), PRIMARY, tabs, selected, keep.window.clone())?;
+            apply_groups(app.handle(), PRIMARY, &keep.groups);
         }
         None => {
             open_window(app.handle(), PRIMARY, vec![(start_url, 0.0, false)], 0, None)?;
