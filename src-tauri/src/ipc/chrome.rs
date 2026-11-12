@@ -1,5 +1,4 @@
-//! Window chrome, overlays, context menus, permissions and fullscreen: the
-//! parts that position webviews or ask the user something.
+//! Window chrome, overlays, context menus, permissions and fullscreen.
 
 use super::*;
 
@@ -48,8 +47,7 @@ pub async fn window_resize(_app: AppHandle, direction: String, window: tauri::Wi
     Ok(())
 }
 
-/// The chrome strip is only as tall as the toolbar, so a menu drawn inside it
-/// would be clipped; it gets its own overlay like the page menu.
+/// Opens the toolbar menu over the chrome strip.
 #[tauri::command]
 pub async fn chrome_menu(
     app: AppHandle,
@@ -65,9 +63,7 @@ pub async fn chrome_menu(
     };
     let (menu_w, menu_h) = match label {
         "url_menu" => (190.0, 150.0),
-        // Six entries and a divider.
         "tab_menu" => (200.0, 224.0),
-        // A short list of downloads, the way a browser shows them from its toolbar.
         "downloads" => (360.0, 320.0),
         _ => (190.0, 110.0),
     };
@@ -102,10 +98,8 @@ pub async fn context_menu(
         *slot = context.clone();
     }
 
-    // Page coordinates are relative to the tab webview, which starts below chrome.
     let win = window_of(&window);
     let (width, height) = crate::window::logical_size(&win)?;
-    // Height follows the entries that actually apply, so the panel has no dead space.
     let mut rows = 5.0; // back, forward, reload, print, inspect
     let mut groups = 2.0;
     if context.link.is_some() { rows += 2.0; groups += 1.0; }
@@ -206,8 +200,6 @@ pub async fn permission_request(
     .map_err(|err| AppError::new("overlay", err))?;
 
     crate::logging::info(&format!("permission prompt {key}"));
-    // Nothing waits here: the page polls, so this command returns at once and no
-    // runtime thread is held while the user makes up their mind.
     Ok(PermissionAsk {
         allow: None,
         id: Some(id),
@@ -267,7 +259,6 @@ pub async fn overlay_open_at(
     x: f64,
     y: f64,
 ) -> Result<(), AppError> {
-    // Height per group, so a short menu does not open a tall empty panel.
     let menu_h = match kind.split("group=").nth(1).unwrap_or("file") {
         "file" => 322.0,
         "edit" => 128.0,
@@ -277,13 +268,8 @@ pub async fn overlay_open_at(
         "tools" => 254.0,
         _ => 96.0,
     };
-    // The palettes are wide search panels, not menus: the chrome strip is only
-    // as tall as the tabs and address row, so they cannot live in it.
     let palette = kind == "palette" || kind == "tab_search";
     let downloads = kind.starts_with("downloads");
-    // The group menu has a text field and a row of colours, and it has to be able to
-    // hang below the strip - which a panel drawn inside the chrome webview cannot do,
-    // because that webview is only as tall as the strip.
     let group_menu = kind.starts_with("group_menu");
     let (width, height) = if palette {
         (560.0, 420.0)
@@ -298,8 +284,7 @@ pub async fn overlay_open_at(
     Ok(())
 }
 
-/// Fullscreen video only fills the page webview; the strip has to get out of the
-/// way, otherwise the player keeps the window frame around it.
+/// Hides the strip while a page is in fullscreen.
 #[tauri::command]
 pub async fn page_fullscreen(
     app: AppHandle,
@@ -320,9 +305,7 @@ pub async fn page_fullscreen(
     Ok(())
 }
 
-/// Gives the keyboard to the page once the address bar is done.
-/// The chrome strip reports how tall it actually is, so the page never
-/// starts inside an empty band caused by DPI rounding.
+/// Reports the height the chrome strip actually rendered at.
 #[tauri::command]
 pub async fn chrome_fit(
     app: AppHandle,
@@ -330,10 +313,6 @@ pub async fn chrome_fit(
     state: State<'_, AppState>,
     height: f64,
 ) -> Result<(), AppError> {
-    // Kept as a diagnostic only. The address row has flex: 1, so the page can
-    // never report more than the height it was laid out with: adopting it (and
-    // relaying out, which fires another resize) shrinks the strip a little on
-    // every pass, which is exactly what happens once a stale value gets in.
     let reported = height.clamp(0.0, 400.0);
     state.settings.write().chrome_height = reported;
     let expected = chrome_height(&app);
@@ -344,14 +323,13 @@ pub async fn chrome_fit(
     }
     Ok(())
 }
+/// Gives the keyboard to the page once the address bar is done.
 #[tauri::command]
 pub async fn focus_page(
     app: AppHandle,
     window: tauri::Window,
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
-    // The keyboard is going back to the page, so whatever floated above it is
-    // finished: a menu that stayed open here used to sit over the page forever.
     crate::overlay::close(&app, window.label());
     let id = selected_label(&state, &window);
     if let Some(webview) = app.get_webview(&id) {

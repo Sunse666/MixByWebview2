@@ -1,6 +1,4 @@
-//! Shared state and helpers for the ipc layer. The commands themselves live in
-//! one module per area and are re-exported here, so crate::ipc::<command> keeps
-//! working and main.rs does not have to know the layout.
+//! Shared state for the ipc layer; the commands live in one module per area.
 
 mod chrome;
 mod keys;
@@ -31,8 +29,7 @@ use std::sync::RwLock;
 use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_runtime::ResizeDirection;
 
-/// A set of tabs shown as one, the way Edge does it: collapsed, only the group
-/// occupies a slot in the strip and the members are hidden until it is opened.
+/// Tabs shown as one group, collapsed to a single slot in the strip.
 #[derive(Clone, Debug, Serialize)]
 pub struct TabGroup {
     pub id: String,
@@ -67,15 +64,11 @@ pub struct AppState {
     pub menu_context: RwLock<MenuContext>,
     /// Overlay webview label per window, so each window has its own menu.
     pub overlay: RwLock<std::collections::HashMap<String, String>>,
-    /// Window label -> whether its overlay belongs to the page rather than the
-    /// chrome strip, so closing it can hand the keyboard back to the right one.
+    /// Whether each window's overlay came from a page rather than the chrome strip.
     pub overlay_from_page: RwLock<std::collections::HashMap<String, bool>>,
-    /// Windows whose overlay is the tab hover card: closing that one must not
-    /// push a settings refresh at the chrome strip.
+    /// Windows whose overlay is the tab hover card.
     pub overlay_thumb: RwLock<std::collections::HashSet<String>>,
-    /// When each tab was last the page on screen, in seconds. A preview only wakes a tab
-    /// that has been out of sight for a while: its stored picture is recent enough, and
-    /// every wake-up is a chance to hide the wrong page.
+    /// Last time each tab was on screen, in seconds.
     pub shown_at: RwLock<std::collections::HashMap<String, u64>>,
     pub permissions: crate::permissions::PermissionStore,
     pub snap: std::sync::Mutex<crate::snap::SnapState>,
@@ -84,29 +77,25 @@ pub struct AppState {
     pub history: RwLock<Vec<Visit>>,
     /// host -> favicon url, shared by history, bookmarks and the new tab page.
     pub favicons: RwLock<crate::favicons::Favicons>,
-    /// Window label -> what is typed in that window's address bar; two windows
-    /// must not share a suggestion query.
+    /// What is typed in each window's address bar, by window label.
     pub suggest_text: parking_lot::RwLock<std::collections::HashMap<String, String>>,
     pub suggest_width: parking_lot::RwLock<f64>,
-    /// Recently closed tabs per window, newest last, so Ctrl+Shift+T brings
-    /// back one of this window's tabs and never one closed in another.
+    /// Recently closed tabs per window, oldest first.
     pub closed_tabs: RwLock<std::collections::HashMap<String, Vec<(String, String)>>>,
     pub zoom: parking_lot::RwLock<crate::zoom::ZoomStore>,
-    /// Windows whose address bar currently owns the keyboard; the entry carries
-    /// an empty string and exists only as a flag.
+    /// Windows whose address bar currently has the keyboard.
     pub url_edit: RwLock<std::collections::HashMap<String, String>>,
-    /// Tab id -> the url it is currently trying to load.
-    /// Origin of the bundled pages, e.g. http://tauri.localhost/
+    /// Origin of the bundled pages.
     pub app_base: parking_lot::RwLock<String>,
+    /// Tab id -> the url it is currently loading.
     pub pending: RwLock<std::collections::HashMap<String, String>>,
-    /// Cached "can we reach this host" answers, so navigation is not slowed down.
-    /// Shared through an Arc so the probe can run on a blocking thread.
+    /// Reachability cache shared with the probe thread.
     pub reachability: std::sync::Arc<crate::net::Reachability>,
-    /// Result of the last in-page translation, polled by the bubble.
+    /// Result of the last in-page translation.
     pub translate_result: parking_lot::RwLock<(usize, Option<String>)>,
-    /// Tabs whose text is currently replaced by the translator.
+    /// Tabs whose text the translator replaced.
     pub translated_tabs: parking_lot::RwLock<std::collections::HashSet<String>>,
-    /// Windows whose page is showing a fullscreen element; the chrome hides.
+    /// Windows showing a fullscreen page.
     pub fullscreen: parking_lot::RwLock<std::collections::HashSet<String>>,
     /// Whether the last in-page search matched anything.
     pub find_hit: parking_lot::RwLock<bool>,
@@ -127,8 +116,6 @@ impl AppState {
         let mut opts = crate::tabs::WebviewOpts::for_dirs(&dirs, &extensions);
         let scripts = userscripts.iter().map(|script| script.info()).collect();
         let scripts_js = crate::userscripts::loader_js(&userscripts);
-        // The loader travels with every tab webview; keeping it in the options means
-        // tab creation does not have to reach back into state for it.
         opts.userscripts = scripts_js.clone();
         let downloads = crate::downloads::load_history(&dirs);
         let history = crate::library::load_visits(&dirs.history_file);
@@ -161,8 +148,6 @@ impl AppState {
             settings: parking_lot::RwLock::new(settings),
             baseline: parking_lot::RwLock::new(theme.clone()),
             theme: parking_lot::RwLock::new(theme),
-            // The list survives a restart; anything that was running comes back as
-            // interrupted, because a transfer cannot outlive the process but its file can.
             downloads: RwLock::new(downloads),
             menu_context: RwLock::new(MenuContext::default()),
             overlay: RwLock::new(std::collections::HashMap::new()),
@@ -185,8 +170,7 @@ impl AppState {
         self.cores.write().remove(label);
     }
 
-    /// Tab state of one window. Panics only if a window exists without a core,
-    /// which would be a bug in open/close bookkeeping.
+    /// Tab state of one window.
     pub fn try_read_core(&self, label: &str) -> Option<parking_lot::MappedRwLockReadGuard<'_, Core>> {
         parking_lot::RwLockReadGuard::try_map(self.cores.read(), |map| map.get(label)).ok()
     }
@@ -271,7 +255,7 @@ pub struct MenuContext {
     pub image: Option<String>,
     pub selection: Option<String>,
     pub editable: bool,
-    /// The tab a menu was opened for, when it is the tab's own menu.
+    /// The tab a menu was opened for.
     pub tab: Option<String>,
 }
 
@@ -292,7 +276,7 @@ pub struct AppError {
     pub message: String,
 }
 
-/// Percent encodes a query the way a search box would.
+/// Percent-encodes a search query.
 pub(crate) fn encode_query(text: &str) -> String {
     let mut out = String::new();
     for byte in text.as_bytes() {
@@ -307,7 +291,7 @@ pub(crate) fn encode_query(text: &str) -> String {
     out
 }
 
-/// Keys arrive in different spellings; store one form: "ctrl+shift+t".
+/// Stores key combos in one spelling: "ctrl+shift+t".
 fn normalize_combo(raw: &str) -> String {
     let mut parts: Vec<String> = raw
         .split('+')
@@ -357,9 +341,7 @@ impl From<serde_json::Error> for AppError {
     }
 }
 
-/// Pages the app serves itself: the chrome strip, the overlay panels and the
-/// bundled html pages. Remote sites never match, which is what keeps privileged
-/// commands away from page content even if a capability is widened by mistake.
+/// Pages the app serves itself; remote sites never match.
 pub(crate) fn trusted_url(url: &str) -> bool {
     let trimmed = url.trim();
     if trimmed.starts_with("about:blank") || trimmed.starts_with("about:srcdoc") {
@@ -368,8 +350,6 @@ pub(crate) fn trusted_url(url: &str) -> bool {
     let Some((scheme, rest)) = trimmed.split_once("://") else {
         return false;
     };
-    // macOS and Linux serve the bundle through a custom scheme; Windows uses
-    // http://tauri.localhost through the asset protocol.
     let scheme = scheme.to_ascii_lowercase();
     if matches!(scheme.as_str(), "tauri" | "asset" | "ipc") {
         return true;
@@ -383,7 +363,7 @@ pub(crate) fn trusted_url(url: &str) -> bool {
     matches!(host.as_str(), "tauri.localhost" | "ipc.localhost")
 }
 
-/// The caller's own address decides whether it may run a privileged command.
+/// Whether the caller's own address may run a privileged command.
 pub(crate) fn trusted(webview: &tauri::Webview) -> bool {
     webview
         .url()
@@ -395,8 +375,7 @@ fn untrusted() -> AppError {
     AppError::new("untrusted", "only app pages may run this command")
 }
 
-/// Rejects a caller that is not an app page. Used by every command that can
-/// destroy data, spawn a webview or reach the clipboard.
+/// Rejects a caller that is not an app page.
 pub(crate) fn require_trusted(webview: &tauri::Webview) -> Result<(), AppError> {
     if trusted(webview) {
         Ok(())
@@ -417,17 +396,12 @@ pub fn focused_window(app: &AppHandle) -> Option<tauri::Window> {
         .or_else(|| app.get_window("w1"))
 }
 
-/// The menu bar sits between the tab strip and the address field.
 
 /// Height of the chrome strip: the base plus the optional bookmarks row.
 pub fn chrome_height(app: &AppHandle) -> f64 {
     match app.try_state::<AppState>() {
         Some(state) => {
             let show_bookmarks = state.settings.read().show_bookmarks;
-            // The strip is laid out from the constant, not from what the page
-            // measures: the address row flexes to fill, so a measurement can only
-            // echo back whatever height it was given and would lock in any wrong
-            // value instead of correcting it.
             crate::window::CHROME_H + if show_bookmarks { 30.0 } else { 0.0 }
         }
         None => crate::window::CHROME_H,
@@ -528,7 +502,7 @@ fn window_geometry(app: &AppHandle, label: &str) -> Option<crate::session::Windo
     })
 }
 
-/// Writes every window (tabs, selected index, geometry) to session.json.
+/// Writes every window to session.json.
 pub(crate) fn save_sessions(app: &AppHandle) {
     let state = app.state::<AppState>();
 
@@ -552,7 +526,6 @@ pub(crate) fn save_sessions(app: &AppHandle) {
             .as_ref()
             .and_then(|id| core.tabs.iter().position(|tab| &tab.id == id))
             .unwrap_or(0);
-        // Members are stored as indexes into the saved tabs, which skip incognito ones.
         let kept: Vec<&Tab> = core.tabs.iter().filter(|tab| !tab.incognito).collect();
         let groups: Vec<crate::session::SessionGroup> = core
             .groups
@@ -629,7 +602,7 @@ async fn cycle_tab(app: &AppHandle, window: &tauri::Window, delta: isize) {
     }
 }
 
-/// Swaps WebView2's own error page for ours; returns the url it replaced.
+/// Replaces WebView2's error page with ours; returns the url it replaced.
 pub fn show_error_page(app: &AppHandle, id: &str, failed_url: &str) -> Option<String> {
     let state = app.try_state::<AppState>()?;
     {
@@ -659,8 +632,6 @@ mod trusted_caller_tests {
 
     #[test]
     fn app_pages_are_trusted() {
-        // Windows serves the bundle through the asset protocol, macOS and Linux
-        // through a custom scheme.
         assert!(trusted_url("http://tauri.localhost/index.html"));
         assert!(trusted_url("http://tauri.localhost/pages/settings.html"));
         assert!(trusted_url("https://tauri.localhost/overlay.html#app_menu"));

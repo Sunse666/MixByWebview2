@@ -86,8 +86,6 @@ pub(crate) fn set_zoom(app: &AppHandle, label: &str, level: f64) -> Result<(), A
         webview.set_zoom(level)?;
     }
 
-    // The level belongs to the site, not the tab, so it survives both. A private
-    // tab must not leave that record behind, so it only applies the level.
     if incognito {
         return Ok(());
     }
@@ -138,14 +136,11 @@ pub struct Suggestion {
     pub kind: String,
 }
 
-/// History first, then bookmarks, deduped by url and ranked by how well the
-/// text matches the start of the url or the title.
+/// History, then bookmarks, deduped by url and ranked by match quality.
 fn collect_suggestions(state: &AppState, text: &str, limit: usize) -> Vec<Suggestion> {
     let needle = text.trim().to_lowercase();
     let mut found: Vec<Suggestion> = Vec::new();
 
-    // Borrowed, not cloned, and deduped through a set: this runs on every
-    // keystroke in the address bar, and history can hold thousands of entries.
     let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
     {
         let history = state.history.read().unwrap_or_else(|e| e.into_inner());
@@ -186,8 +181,6 @@ fn collect_suggestions(state: &AppState, text: &str, limit: usize) -> Vec<Sugges
                 None
             })
             .collect();
-        // History is stored newest first and the sort is stable, so recency
-        // survives inside each rank.
         ranked.sort_by_key(|(rank, _)| *rank);
         ranked.truncate(limit);
         return ranked.into_iter().map(|(_, item)| item).collect();
@@ -239,13 +232,10 @@ pub async fn suggest_feed(
         .suggest_text
         .write()
         .insert(window.label().to_string(), text.clone());
-    // The chrome page keeps the list so the arrow keys can walk it without
-    // asking again, which is what makes the dropdown usable from the keyboard.
     Ok(push_suggestions(&app, window.label(), &state))
 }
 
-/// Highlights one row of the open dropdown; -1 clears it. The address bar keeps
-/// the keyboard, so the selection has to be painted from here.
+/// Highlights one row of the open dropdown; -1 clears it.
 #[tauri::command]
 pub async fn suggest_active(
     app: AppHandle,
@@ -307,7 +297,6 @@ fn push_suggestions(app: &AppHandle, window_label: &str, state: &AppState) -> Ve
 
     let json = serde_json::to_string(&items).unwrap_or_else(|_| "[]".into());
     let rows = count as f64;
-    // 34px per row plus 6px padding top and bottom; no scrollbar wanted.
     let height = if rows == 0.0 { 40.0 } else { rows * 34.0 + 14.0 };
     let width = *state.suggest_width.read();
     let _ = webview.set_size(tauri::LogicalSize::new(width, height));
@@ -315,8 +304,7 @@ fn push_suggestions(app: &AppHandle, window_label: &str, state: &AppState) -> Ve
     items
 }
 
-/// Pages forward typed characters here while the address bar owns the keyboard,
-/// which avoids depending on webview focus.
+/// Pages forward typed characters here while the address bar owns the keyboard.
 #[tauri::command]
 pub async fn url_type(
     app: AppHandle,
@@ -324,8 +312,6 @@ pub async fn url_type(
     state: State<'_, AppState>,
     text: String,
 ) -> Result<(), AppError> {
-    // Url mode only; otherwise the page is typing into itself and the keystroke
-    // has already been handled there.
     if !state
         .url_edit
         .read()
@@ -334,9 +320,6 @@ pub async fn url_type(
     {
         return Ok(());
     }
-    // The chrome page owns the text and the caret: forwarding the raw keystroke
-    // keeps selection, arrows and delete working, which a buffer in here could
-    // not do.
     let _ = app.emit_to(window.label(), "ui:url-insert", text);
     Ok(())
 }
@@ -357,7 +340,6 @@ pub async fn url_key(
             exit_url_edit(&app, window.label());
             let _ = app.emit_to(window.label(), "url:cancel", ());
         }
-        // Editing keys are applied by the chrome page, which owns the caret.
         other => {
             let _ = app.emit_to(window.label(), "ui:url-key", other.to_string());
         }
@@ -378,8 +360,6 @@ pub(crate) fn set_url_edit(app: &AppHandle, window: &tauri::Window, on: bool) {
         Some(core) => core.tabs.iter().map(|tab| tab.id.clone()).collect(),
         None => Vec::new(),
     };
-    // The page needs to know when the mode flips: it parks an input method sink
-    // while the address bar owns the keyboard.
     let script = if on {
         "window.__mixUrlMode = true; window.dispatchEvent(new Event('mix-url-mode'))"
     } else {
@@ -414,8 +394,7 @@ fn exit_url_edit(app: &AppHandle, window_label: &str) {
     }
 }
 
-/// Drives the browser's own find through the page: there is no API to open the
-/// WebView2 find bar, so we keep our own box and call window.find.
+/// Drives the browser's own find through the page.
 #[tauri::command]
 pub async fn find_in_page(
     app: AppHandle,
@@ -429,7 +408,6 @@ pub async fn find_in_page(
     let Some(webview) = app.get_webview(&id) else {
         return Ok(());
     };
-    // JSON encoded so quotes or backslashes in the query cannot break the script.
     let query = serde_json::to_string(&text).unwrap_or_else(|_| "\"\"".into());
     let back = forward.map(|value| !value).unwrap_or(false);
     let again = restart.unwrap_or(false);
@@ -462,9 +440,6 @@ pub async fn url_action(
     action: String,
 ) -> Result<(), AppError> {
     require_trusted(&webview)?;
-    // The action travels to the chrome page through eval, so the set is closed
-    // and the value is encoded; interpolating it would let page script run in
-    // the privileged chrome context.
     if !matches!(action.as_str(), "cut" | "copy" | "paste" | "select-all") {
         return Err(AppError::new("bad_action", action));
     }

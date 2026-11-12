@@ -1,5 +1,4 @@
-//! Settings, theme and autostart. settings_set is the one mutating entry
-//! point; everything else here reads or re-applies.
+//! Settings, theme and autostart.
 
 use super::*;
 
@@ -82,26 +81,18 @@ pub async fn settings_set(
 ) -> Result<Settings, AppError> {
     require_trusted(&webview)?;
     let settings = apply_settings_patch(&state, patch)?;
-    // The init scripts are baked per webview, so refresh what can be refreshed:
-    // shortcut overrides apply to open pages, the rest to pages opened later.
     crate::tabs::apply_settings(&state.dirs, &settings);
     crate::tabs::broadcast_shortcuts(webview.app_handle());
-    // The chrome strip draws the toolbar and the menu bar from these settings,
-    // and it is a different webview: it has to be told to redraw.
     let label = webview.window().label().to_string();
     let _ = webview
         .app_handle()
         .emit_to(label.clone(), "settings:changed", ());
-    // The sidebar changes the page geometry, and only a relayout applies that. Turning
-    // it on also needs the webview itself, created here rather than in relayout, which
-    // runs from the window's resize handler.
     crate::sidebar::ensure(webview.app_handle(), &label);
     let _ = crate::window::relayout(webview.app_handle(), &label);
     Ok(settings)
 }
 
-/// Mutates and writes settings; shared with the support hooks, which have no
-/// caller webview to check.
+/// Mutates and writes the settings.
 pub(crate) fn apply_settings_patch(
     state: &AppState,
     patch: SettingsPatch,
@@ -269,7 +260,6 @@ pub(crate) fn apply_settings_patch(
             }
         }
         if let Some(value) = patch.toolbar {
-            // Only ids we know how to draw survive a hand edited settings file.
             let known = [
                 "downloads",
                 "translate",

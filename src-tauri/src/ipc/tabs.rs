@@ -1,5 +1,4 @@
-//! Tab lifecycle: creating, closing, selecting, ordering and the per-tab
-//! state the strip reads.
+//! Tab lifecycle: creating, closing, selecting, ordering and the per-tab state the strip reads.
 
 use super::*;
 
@@ -46,11 +45,7 @@ pub async fn tab_select(app: AppHandle, window: tauri::Window, state: State<'_, 
     if !exists {
         return Err(AppError::new("no_tab", id));
     }
-    // A menu belongs to the tab it was opened on; switching closes it.
     crate::overlay::close(&app, window.label());
-    // Take the outgoing tab's picture now, while it is still on screen: once it is
-    // hidden there is nothing left to capture. Only when it has none, so at most
-    // one grab happens per switch and switching stays instant in normal use.
     if state.settings.read().tab_hover_preview {
         let previous = state.read_core(window.label()).selected.clone();
         if let Some(previous) = previous.filter(|label| label != &id) {
@@ -90,13 +85,11 @@ pub async fn tab_new(
     window: tauri::Window, state: State<'_, AppState>,
     url: Option<String>,
     incognito: Option<bool>,
-    // When true the new tab is created behind the current one.
     background: Option<bool>,
 ) -> Result<String, AppError> {
     let (id, target, selection_before) = {
         let mut core = state.write_core(window.label());
         core.next_tab_id += 1;
-        // Labels carry the window so per-window lookups keep working.
     let id = tab_label(window.label(), core.next_tab_id);
         let target = match url {
         Some(input) => {
@@ -145,7 +138,6 @@ pub async fn tab_new(
     crate::tabs::apply_default_zoom(&app, &id);
 
     if background.unwrap_or(false) {
-        // Created behind the current tab: put the selection back where it was.
         {
             let mut core = state.write_core(window.label());
             core.selected = selection_before;
@@ -165,7 +157,7 @@ pub async fn tab_new(
     save_sessions(&app);
     Ok(id)
 }
-/// Pins a tab to the left strip, or releases it.
+/// Pins a tab to the strip, or releases it.
 #[tauri::command]
 pub async fn tab_pin(
     app: AppHandle,
@@ -179,8 +171,6 @@ pub async fn tab_pin(
         if let Some(tab) = core.tabs.iter_mut().find(|tab| tab.id == id) {
             tab.pinned = pinned;
         }
-        // Pinned tabs sit on the left, like every other browser; the strip is
-        // drawn from this order, so it has to be applied here.
         let mut pinned_tabs: Vec<Tab> = Vec::new();
         let mut loose: Vec<Tab> = Vec::new();
         for tab in core.tabs.drain(..) {
@@ -222,8 +212,6 @@ pub async fn tab_close(app: AppHandle, window: tauri::Window, state: State<'_, A
         let closed_at = core.tabs.iter().position(|tab| tab.id == id);
         core.tabs.retain(|tab| tab.id != id);
         core.mru.retain(|entry| entry != &id);
-        // A group is a set of open tabs: once the last member closes, the group goes
-        // with it rather than staying behind as an empty chip.
         for group in core.groups.iter_mut() {
             group.members.retain(|member| member != &id);
         }
@@ -231,7 +219,6 @@ pub async fn tab_close(app: AppHandle, window: tauri::Window, state: State<'_, A
         if core.selected.as_deref() == Some(id.as_str()) {
             let go_left = state.settings.read().tab_close_goes_left;
             core.selected = match closed_at {
-                // Step to the neighbour on the chosen side, staying in range.
                 Some(index) if go_left => core
                     .tabs
                     .get(index.saturating_sub(1))
@@ -244,7 +231,6 @@ pub async fn tab_close(app: AppHandle, window: tauri::Window, state: State<'_, A
         (core.tabs.len(), state.settings.read().start_url.clone())
     };
 
-    // Closing the last tab shows a fresh one instead of quitting.
     if remaining == 0 {
         let _ = tab_new(app, window.clone(), state, Some(next_url), None, None).await;
         return Ok(());
@@ -268,7 +254,6 @@ pub async fn tab_screenshot(
     let Some(webview) = app.get_webview(&id) else {
         return Err(AppError::new("no_tab", "there is no tab to capture"));
     };
-    // The whole document when asked for, otherwise what is on screen.
     let shot = if full.unwrap_or(false) {
         crate::screenshot::capture_full(&webview)
     } else {
@@ -285,18 +270,15 @@ pub async fn tab_screenshot(
     Ok(target.display().to_string())
 }
 
-/// The tab hover card. It carries the page's title, address and icon, all of
-/// which the tab already knows: a screenshot of a background tab cannot be taken
-/// on WebView2 - a hidden webview is not composited, and the protocol answers with
-/// whatever surface sits in that place.
+/// Payload for the tab hover card.
 #[derive(Serialize)]
 pub struct ThumbCard {
     title: String,
     url: String,
     icon: Option<String>,
-    /// Full-size png as a data url; the card scales it down.
+    /// Full-size png as a data url.
     image: Option<String>,
-    /// How old the picture is. Everything else in this payload is live.
+    /// Age of the picture, in seconds.
     image_age_secs: Option<u64>,
     loading: bool,
     playing: bool,
@@ -306,15 +288,15 @@ pub struct ThumbCard {
     incognito: bool,
     /// Working set of every process the browser owns, in bytes.
     memory_total: Option<u64>,
-    /// Total divided by the live tabs of this window: an average, labelled as one.
+    /// Working set divided by the live tabs of this window.
     memory_average: Option<u64>,
     /// The page's own javascript heap, in bytes.
     memory_tab: Option<u64>,
-    /// DOM counters, which do belong to this tab alone.
+    /// DOM counters for this tab.
     nodes: u64,
     listeners: u64,
     documents: u64,
-    /// Live tabs of this window, the divisor behind the average.
+    /// Live tabs of this window.
     live_tabs: u64,
 }
 
@@ -326,11 +308,7 @@ pub async fn thumb_show(
     id: String,
     x: f64,
 ) -> Result<bool, AppError> {
-    // The visible tab can be photographed right now, which is what the card is
-    // for. Every other tab answers from a picture taken while it was visible.
     let visible = _state.read_core(window.label()).selected.as_deref() == Some(id.as_str());
-    // Every hover refreshes the picture; a second of slack stops a jittery
-    // pointer from capturing the same frame twice.
     if visible && crate::thumbs::needs(&id, 1) {
         if let Some(webview) = app.get_webview(&id) {
             if let Some(png) = crate::thumbs::capture(&webview) {
@@ -338,16 +316,6 @@ pub async fn thumb_show(
             }
         }
     }
-    // A hidden tab does not paint, so its stored picture is the frame from when it
-    // was last visited. With live previews on, the tab is shown for a moment
-    // underneath the current one, photographed, and hidden again: the only way to
-    // get a fresh frame. The page does notice the visibility change, which is why
-    // this is a setting of its own.
-    // A frozen page cannot be photographed, so a live preview wakes it first.
-    // Live previews run in the background now: the capture wakes the page, waits for it
-    // to paint and photographs it, which is a couple of hundred milliseconds - far too
-    // long to hold a hover card behind. The card opens with the picture it already has
-    // and the fresh one is there for the next hover.
     if !visible && _state.settings.read().live_thumbs {
         crate::thumbs::capture_later(app.clone(), id.clone(), window.label().to_string());
     }
@@ -379,15 +347,9 @@ pub async fn thumb_card(
         .iter()
         .find(|tab| tab.id == id)
         .ok_or_else(|| AppError::new("no_tab", id.clone()))?;
-    // Everything except the picture is read live, so the card still says what the
-    // tab is doing right now even when the picture is from when it was last seen.
     let audio = _app
         .get_webview(&id)
         .and_then(|webview| crate::audio::state(&webview));
-    // The numbers are a separate call on purpose. Reading them means several devtools
-    // round trips per process and per page, and on a hidden or frozen tab they can take
-    // seconds or time out - which left the card as an empty grey panel while it waited.
-    // The card is drawn from this call alone; thumb_stats fills the numbers in after.
     let live = core.tabs.iter().filter(|tab| tab.alive).count().max(1) as u64;
     Ok(ThumbCard {
         title: tab.title.clone(),
@@ -424,9 +386,6 @@ pub struct ThumbStats {
 }
 
 /// The numbers on the hover card, read separately from the card itself.
-///
-/// This runs on a worker because it costs several devtools round trips - one per browser
-/// process, plus the page's own counters - and any of them can stall on a hidden tab.
 #[tauri::command]
 pub async fn thumb_stats(
     app: AppHandle,
@@ -464,8 +423,7 @@ pub async fn thumb_stats(
     })
 }
 
-/// Mutes or unmutes the selected tab; with no argument it flips. The mute
-/// button in the toolbar drives this.
+/// Mutes or unmutes the selected tab; with no argument it flips.
 #[tauri::command]
 pub async fn tab_mute(
     app: AppHandle,
@@ -501,9 +459,6 @@ pub async fn tab_mute(
 
 #[tauri::command]
 pub async fn tab_navigate(app: AppHandle, window: tauri::Window, state: State<'_, AppState>, url: String) -> Result<(), AppError> {
-    // A dead host would land on WebView2's own error page, which we cannot
-    // replace, so answer it ourselves before navigating. The probe resolves dns
-    // and therefore runs on a blocking thread, never on this command's future.
     if url.starts_with("http") && !trusted_url(&url) {
         let reach = state.reachability.clone();
         let probe_url = url.clone();
@@ -540,8 +495,6 @@ pub async fn tab_navigate(app: AppHandle, window: tauri::Window, state: State<'_
     }
     if let Some(webview) = app.get_webview(&label) {
         webview.navigate(target)?;
-        // Without this the first click after a menu action only activates the
-        // webview; the click never reaches the page.
         let _ = webview.set_focus();
     }
     Ok(())
@@ -558,7 +511,6 @@ pub async fn tab_nav(
         return Ok(());
     };
     match action.as_str() {
-        // Tauri exposes no history API, so drive it from the page.
         "back" => webview.eval("history.back()")?,
         "forward" => webview.eval("history.forward()")?,
         "reload" => webview.reload()?,
@@ -653,14 +605,9 @@ pub async fn tab_icon(
                 .map(|tab| (tab.url.clone(), tab.incognito))
         })
         .unwrap_or_default();
-    // The app's own pages have no site icon: the address the page reports is
-    // /favicon.ico on tauri.localhost, which only ever 404s, and storing that as the
-    // tab's icon is what left the browser's broken-image glyph in the strip and in the
-    // address bar. Nothing to show is the honest answer.
     if trusted_url(&page_url) {
         return Ok(());
     }
-    // A private tab leaves no trace in history or in the shared icon cache.
     if !page_url.is_empty() && !incognito && !trusted_url(&page_url) {
         attach_icon(&app, &page_url, &icon);
         let host = crate::favicons::host_of(&page_url);
@@ -684,8 +631,6 @@ pub async fn tab_icon(
                     .save(&state.dirs.favicons_file);
             }
         }
-        // Outside the branch: the map may already know this host but the file
-        // cache can still be missing (fresh profile, deleted folder).
         cache_icon(&app, &host, &icon);
     }
 
@@ -727,7 +672,6 @@ fn schedule_freeze(app: AppHandle, id: String) {
     const DELAY: std::time::Duration = std::time::Duration::from_secs(8);
     tauri::async_runtime::spawn_blocking(move || {
         std::thread::sleep(DELAY);
-        // Anything can have happened in those seconds: check before acting.
         let Some(state) = app.try_state::<AppState>() else {
             return;
         };
@@ -745,7 +689,6 @@ fn schedule_freeze(app: AppHandle, id: String) {
         let Some(webview) = app.get_webview(&id) else {
             return;
         };
-        // A tab that is playing sound is still in use; freezing it would cut the audio.
         let playing = crate::audio::state(&webview)
             .map(|audio| audio.playing)
             .unwrap_or(false);
@@ -789,14 +732,12 @@ pub async fn group_add(
                 fresh
             }
         };
-        // A tab belongs to one group at most.
         for group in core.groups.iter_mut() {
             group.members.retain(|member| member != &id);
         }
         if let Some(group) = core.groups.iter_mut().find(|group| group.id == target) {
             group.members.push(id.clone());
         }
-        // Members sit next to each other, so the group reads as one block in the strip.
         let members: Vec<String> = core
             .groups
             .iter()
@@ -826,7 +767,7 @@ pub async fn group_add(
     Ok(target)
 }
 
-/// Opens or closes a group: closed, its tabs give up their slots in the strip.
+/// Opens or closes a tab group.
 #[tauri::command]
 pub async fn group_toggle(
     app: AppHandle,
@@ -844,8 +785,6 @@ pub async fn group_toggle(
         group.collapsed = !group.collapsed;
         group.collapsed
     };
-    // The tab on screen cannot stay behind a group that just closed: move to a tab that
-    // is still in the strip.
     if collapsed {
         let hide_selected = {
             let core = state.read_core(window.label());
@@ -952,9 +891,6 @@ pub(crate) fn is_grouped(core: &Core, id: &str) -> bool {
 }
 
 /// Every tab in every window, for the tab search.
-///
-/// The search answered from the calling window alone, so a tab that was clearly open
-/// could not be found because it lived one window over.
 #[tauri::command]
 pub async fn tab_search_all(
     state: State<'_, AppState>,
@@ -1020,12 +956,8 @@ pub(crate) fn sync_visibility(app: &AppHandle, label: &str) {
     for (id, selected) in pairs {
         if let Some(webview) = app.get_webview(&id) {
             if selected.as_deref() == Some(id.as_str()) {
-                // A frozen page has to wake before it is shown, or it comes up as a
-                // blank frame until something else touches it.
                 crate::freeze::thaw(&webview);
                 let _ = webview.show();
-                // Remembered so a preview knows not to wake a tab that was just on
-                // screen: waking one is the operation that can hide the wrong page.
                 if let Some(state) = app.try_state::<AppState>() {
                     state
                         .shown_at
@@ -1036,12 +968,6 @@ pub(crate) fn sync_visibility(app: &AppHandle, label: &str) {
             } else {
                 let _ = webview.hide();
                 if freeze_background {
-                    // Freezing waits a few seconds before it happens. Freezing in the
-                    // same breath as hiding meant switching back within a second or two
-                    // showed a page whose surface had already been dropped - a black
-                    // frame - which is exactly the moment someone is switching tabs.
-                    // A tab that stays hidden long enough is worth the memory; a tab you
-                    // are flicking between is not.
                     schedule_freeze(app.clone(), id.clone());
                 }
             }

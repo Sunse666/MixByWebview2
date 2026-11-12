@@ -1,5 +1,4 @@
-//! The keyboard dispatcher: one place where a shortcut action name turns into
-//! something happening.
+//! Shortcut action dispatch.
 
 use super::*;
 
@@ -36,8 +35,6 @@ pub async fn shortcut(app: AppHandle, window: tauri::Window, state: State<'_, Ap
         "next_tab" => cycle_tab(&app, &window, 1).await,
         "prev_tab" => cycle_tab(&app, &window, -1).await,
         "focus_url" => {
-            // Focus the chrome webview, and arm the page side key bridge so typing
-            // works even when WebView2 keeps the keyboard on the page.
             let _ = window.set_focus();
             if let Some(chrome) = app.get_webview(&format!("{}-chrome", window.label())) {
                 let _ = chrome.set_focus();
@@ -69,8 +66,6 @@ pub async fn shortcut(app: AppHandle, window: tauri::Window, state: State<'_, Ap
                 crate::logging::warn(&format!("cannot open downloads: {err}"));
             }
         }
-        // Not gated on debug: F12 must work in the packaged build too.
-        // Gesture and palette actions that reuse existing commands.
         "stop" => {
             let target = selected_label(&state, &window);
             if let Some(webview) = app.get_webview(&target) {
@@ -170,8 +165,6 @@ pub async fn shortcut(app: AppHandle, window: tauri::Window, state: State<'_, Ap
             }
         }
         "group_tab" => {
-            // One key for the whole gesture: a tab in a group leaves it, a tab outside
-            // gets a group of its own.
             let selected = selected_label(&state, &window);
             let grouped = {
                 let core = state.read_core(window.label());
@@ -187,14 +180,12 @@ pub async fn shortcut(app: AppHandle, window: tauri::Window, state: State<'_, Ap
             crate::overlay::close(&app, window.label());
         }
         "tab_search" => {
-            // The list lives in the chrome page, so it needs the keyboard.
             if let Some(chrome) = app.get_webview(&format!("{}-chrome", window.label())) {
                 let _ = chrome.set_focus();
                 let _ = app.emit_to(window.label(), "ui:tab-search", ());
             }
         }
         "palette" => {
-            // The palette lives in the chrome page, so it needs the keyboard.
             if let Some(chrome) = app.get_webview(&format!("{}-chrome", window.label())) {
                 let _ = chrome.set_focus();
                 let _ = app.emit_to(window.label(), "ui:palette", ());

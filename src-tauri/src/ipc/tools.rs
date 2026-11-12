@@ -1,5 +1,4 @@
-//! Downloads, backups, userscripts, clipboard, diagnostics and the other
-//! shell-level commands.
+//! Downloads, backups, userscripts, clipboard and the other shell-level commands.
 
 use super::*;
 
@@ -8,7 +7,6 @@ pub async fn download_list(_window: tauri::Window, state: State<'_, AppState>) -
     Ok(state.downloads.read().unwrap_or_else(|e| e.into_inner()).clone())
 }
 
-/// Opens the file a download produced.
 /// Drops finished entries from the list; files on disk stay.
 #[tauri::command]
 pub async fn download_clear(webview: tauri::Webview, state: State<'_, AppState>) -> Result<(), AppError> {
@@ -18,6 +16,7 @@ pub async fn download_clear(webview: tauri::Webview, state: State<'_, AppState>)
     Ok(())
 }
 
+/// Opens the file a download produced.
 #[tauri::command]
 pub async fn download_open(
     _window: tauri::Window,
@@ -34,8 +33,6 @@ pub async fn download_open(
     let Some(path) = path else {
         return Err(AppError::new("bad_download", "unknown download"));
     };
-    // Open the file itself with whatever Windows associates with it. Revealing the folder
-    // is a different action, and it is what this used to do.
     shell_open(std::path::Path::new(&path))
 }
 
@@ -63,8 +60,6 @@ pub async fn download_reveal(
 pub(crate) fn shell_open(path: &std::path::Path) -> Result<(), AppError> {
     #[cfg(windows)]
     {
-        // Through cmd so the shell association is used and spaces in the path are safe;
-        // the empty argument is the window title start expects.
         std::process::Command::new("cmd")
             .args(["/C", "start", "", &path.to_string_lossy()])
             .spawn()
@@ -121,7 +116,6 @@ pub async fn backup_export(webview: tauri::Webview, state: State<'_, AppState>) 
     let options = zip::write::SimpleFileOptions::default()
         .compression_method(zip::CompressionMethod::Deflated);
 
-    // Only data, never the WebView2 profile: it is huge and machine specific.
     let skip = ["profile", "profile-ui", "logs", "diag", "extensions", "downloads"];
     let mut count = 0;
     let mut stack = vec![state.dirs.user_data.clone()];
@@ -202,8 +196,7 @@ pub async fn backup_import(webview: tauri::Webview, state: State<'_, AppState>) 
     Ok(format!("{restored} files"))
 }
 
-/// Makes Mix a candidate default browser, then opens the Windows picker: the
-/// app must never take handlers away from the user silently.
+/// Makes Mix a candidate default browser, then opens the Windows picker.
 #[tauri::command]
 pub async fn register_browser(webview: tauri::Webview) -> Result<String, AppError> {
     require_trusted(&webview)?;
@@ -251,8 +244,6 @@ pub async fn extension_live_list(
         return Ok(Vec::new());
     };
     let listed = crate::ext_live::list(&webview);
-    // Names and ids, so the page's cards can be told apart from what the browser has:
-    // matching them by name is all we have, and a mismatch silently looks like "off".
     let described: Vec<String> = listed
         .iter()
         .map(|ext| format!("{}={} ({})", ext.name, ext.enabled, &ext.id[..ext.id.len().min(8)]))
@@ -267,14 +258,8 @@ pub async fn extension_live_list(
 }
 
 
-/// Marks the profile for a clean extension reload when the browser contradicts us.
-///
-/// The record only claims an extension should be on after the browser confirmed it, so
-/// finding it off again afterwards means the profile is stuck - the one case where
-/// clearing the state is the right answer rather than overriding a choice.
+/// Marks the profile for a clean extension reload on the next start.
 fn reconcile(state: &AppState, listed: &[crate::ext_live::LiveExtension]) {
-    // An extension is meant to be on unless the user switched it off, and that lives in
-    // the settings list, not in the browser's own record.
     let switched_off: Vec<String> = state.settings.read().disabled_extensions.clone();
     let stuck: Vec<String> = state
         .extensions
@@ -317,8 +302,7 @@ fn request_extension_reset(state: &AppState) {
     }
 }
 
-/// Remembers the state the browser confirmed, so the extensions page does not have to
-/// guess from a list that sometimes omits it.
+/// Remembers the state the browser confirmed for each extension.
 fn remember_extension_state(state: &AppState, dir: &str, enabled: bool) {
     let mut settings = state.settings.write();
     settings
@@ -329,13 +313,7 @@ fn remember_extension_state(state: &AppState, dir: &str, enabled: bool) {
     }
 }
 
-/// Switches one extension off or on, by taking its unpacked folder away or putting it
-/// back.
-///
-/// The browser's own enable call is one way: switching an extension off there is
-/// durable and cannot be undone through the same API, which is why a switch built on it
-/// could never remember "on". The folder is the handle this app controls, and the list
-/// of names it belongs to lives in settings, where it survives restarts.
+/// Switches one extension off or on by taking its folder away or putting it back.
 #[tauri::command]
 pub async fn extension_set(
     app: AppHandle,
@@ -358,8 +336,6 @@ pub async fn extension_set(
     }
     crate::logging::info(&format!("extension {name} enabled={enabled}"));
     if enabled {
-        // The browser may have marked it corrupted when the folder went away and came
-        // back; only a rebuilt profile clears that. One restart, then it stays on.
         request_extension_reset(&state);
     }
 
@@ -367,8 +343,6 @@ pub async fn extension_set(
     let label = selected_label(&state, &window);
     if let Some(page) = app.get_webview(&label) {
         if enabled {
-            // The folder is what the next start reads, so putting it back is the part
-            // that matters; asking the browser to load it now is a bonus.
             if let Some(dir) = dir.as_deref() {
                 let _ = crate::ext_live::add(&page, dir);
             }
@@ -403,9 +377,6 @@ pub async fn extension_add(
             Ok("enabled".to_string())
         }
         Ok(false) => {
-            // The browser took the folder and left it switched off. Its own record of
-            // "off" cannot be changed through the API, so ask for a clean reload on the
-            // next start instead of pretending it worked.
             crate::logging::warn(&format!("extension add {dir}: added but still off"));
             remember_extension_state(&state, &dir, false);
             request_extension_reset(&state);
@@ -513,10 +484,6 @@ pub async fn ui_log(message: String) -> Result<(), AppError> {
 }
 
 /// Runs a COM call on the thread that created the webview.
-///
-/// DownloadOperation answers only from that thread - anywhere else it returns
-/// RPC_E_WRONG_THREAD (0x802A000C) and the call is dropped, which is what made pause and
-/// cancel look like they worked while the file kept growing.
 #[allow(dead_code)]
 fn on_main<T: Send + 'static>(
     app: &AppHandle,
@@ -538,8 +505,6 @@ pub async fn download_pause(
     id: u64,
     paused: bool,
 ) -> Result<bool, AppError> {
-    // Every download belongs to the engine now: a pause is a flag its loop reads between
-    // chunks, so it takes effect instead of being accepted and ignored.
     let _ = &state;
     let ok = if paused {
         crate::fetch::pause(id)
@@ -547,8 +512,6 @@ pub async fn download_pause(
         crate::fetch::resume(app.clone(), id)
     };
     if ok {
-        // The row changes the moment the button is pressed, rather than waiting for the
-        // transfer to notice - a pause that looks delayed is a pause nobody trusts.
         let state = app.try_state::<AppState>();
         if let Some(state) = state.as_ref() {
             mark_paused(&app, state, id, paused);
@@ -570,10 +533,6 @@ pub async fn download_cancel(_app: AppHandle, id: u64) -> Result<bool, AppError>
 }
 
 /// Fetches this download again with the internal engine.
-///
-/// The webview's own download cannot always be steered - its pause is accepted and ignored
-/// while the transfer is starting, and refused once it is paused. The engine reads a flag
-/// between chunks, so retrying through it gives working controls.
 #[tauri::command]
 pub async fn download_reconcile(app: AppHandle) -> Result<(), AppError> {
     crate::downloads::reconcile(&app);
@@ -620,8 +579,7 @@ fn mark_paused(app: &AppHandle, state: &AppState, id: u64, paused: bool) {
     let _ = app.emit("download:changed", tasks);
 }
 
-/// A userscript path arrives from the page, so it is resolved and checked
-/// against the scripts folder before anything is renamed or deleted.
+/// Resolves a userscript path against the scripts folder before using it.
 fn script_path_inside(state: &AppState, path: &str) -> Result<std::path::PathBuf, AppError> {
     let candidate = std::path::PathBuf::from(path);
     let resolved = candidate
@@ -747,8 +705,7 @@ pub(crate) fn reveal(path: &std::path::Path) -> std::io::Result<()> {
     };
     cmd.spawn().map(|_| ())
 }
-/// The address field cannot read the clipboard itself: the webview clipboard API
-/// is gated behind a permission prompt that never appears, so go through the OS.
+/// Reads the clipboard through the OS.
 #[tauri::command]
 pub async fn clipboard_read(webview: tauri::Webview) -> Result<String, AppError> {
     require_trusted(&webview)?;
@@ -763,10 +720,7 @@ pub async fn clipboard_write(webview: tauri::Webview, text: String) -> Result<()
     board.set_text(text).map_err(|err| AppError::new("clipboard", err.to_string()))
 }
 
-/// The super drag engine runs inside the page, so it gets one narrow entry point
-/// instead of the commands it would otherwise need. A remote origin must not be
-/// able to open tabs, write the clipboard or start downloads by itself, and the
-/// page already decided the action - this only checks the wording.
+/// The page-side entry point for super drag and gestures.
 #[tauri::command]
 pub async fn drag_action(
     app: AppHandle,
@@ -777,7 +731,6 @@ pub async fn drag_action(
     text: Option<String>,
     background: Option<bool>,
 ) -> Result<(), AppError> {
-    // Only a page webview may call this: the gesture starts on the page.
     let label = webview.label().to_string();
     let window_label = window_of_tab(&label).to_string();
     if window_label == label {
@@ -863,14 +816,12 @@ pub(crate) async fn save_url(
         .bytes()
         .await
         .map_err(|err| AppError::new("net", err.to_string()))?;
-    // 128 MB is plenty for an image and keeps a stray click from filling the disk.
     if bytes.len() > 128 * 1024 * 1024 {
         return Err(AppError::new("too_big", "file is larger than 128 MB"));
     }
 
     let suggested = file_name.unwrap_or_default();
     let target = crate::downloads::target_for(&state.dirs.downloads, &url, &suggested);
-    // Same rule as the state files: a half written file must not appear.
     crate::paths::write_atomic(&target, &bytes)?;
     crate::downloads::record_done(&app, &url, &target);
     crate::logging::info(&format!("saved {}", target.display()));

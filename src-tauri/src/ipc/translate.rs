@@ -1,10 +1,8 @@
-//! Page translation commands: the bubble, the in-place flow and the
-//! proxy page fallback.
+//! Page translation: in-place replacement and the proxy page fallback.
 
 use super::*;
 
-/// Starts the in-page translator. The page collects its own text and calls back;
-/// eval cannot return a value, so the flow is push based.
+/// Starts the in-page translator.
 #[tauri::command]
 pub async fn translate_page_inplace(
     app: AppHandle,
@@ -20,7 +18,7 @@ pub async fn translate_page_inplace(
     Ok(())
 }
 
-/// Asked by the bubble to show progress without depending on events.
+/// Progress of the in-page translation, polled by the bubble.
 #[tauri::command]
 pub async fn translate_status(
     state: State<'_, AppState>,
@@ -74,7 +72,6 @@ pub async fn translate_done(
     let owner = window_of_tab(webview.label()).to_string();
     if let Some(message) = &error {
         crate::logging::warn(&format!("translation failed: {message}"));
-        // Child webviews drop events, so the hint is pushed in directly.
         if let Some(chrome) = app.get_webview(&format!("{owner}-chrome")) {
             let text = serde_json::to_string(message).unwrap_or_else(|_| "\"failed\"".into());
             let _ = chrome.eval(&format!(
@@ -87,7 +84,7 @@ pub async fn translate_done(
     let _ = app.emit_to(owner, "translate:done", (count, error));
     Ok(())
 }
-/// Translates a batch of page strings through the Microsoft engine Edge uses.
+/// Translates a batch of page strings through the Microsoft engine.
 #[tauri::command]
 pub async fn translate_texts(
     _app: AppHandle,
@@ -119,7 +116,7 @@ pub async fn translate_texts(
     ));
     Ok(out)
 }
-/// Page translation goes through a web proxy: WebView2 has no translate API.
+/// Page translation through a web proxy.
 #[tauri::command]
 pub async fn translate_page(
     app: AppHandle,
@@ -144,12 +141,10 @@ pub async fn translate_page(
 
     let encoded = crate::permissions::encode(&text);
     let proxy = if text.starts_with("http://") || text.starts_with("https://") {
-        // Whole page: Baidu renders the translated document in place.
         format!(
             "https://fanyi.baidu.com/transpage?query={encoded}&source=url&ie=utf8&from=auto&to=zh&render=1"
         )
     } else {
-        // Plain text: the translator page with the text prefilled.
         format!("https://fanyi.baidu.com/mtpe-individual/multimodal?query={encoded}&lang=auto2zh")
     };
 

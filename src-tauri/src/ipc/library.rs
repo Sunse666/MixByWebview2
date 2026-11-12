@@ -1,10 +1,8 @@
-//! History, bookmarks and the favicon cache: the local library the
-//! internal pages read.
+//! History, bookmarks and the favicon cache.
 
 use super::*;
 
-/// Icons are fetched once and stored as files: the site may change or vanish,
-/// and pages should not depend on a remote URL staying alive.
+/// The favicon cache, stored as one file per host.
 pub(crate) fn cache_icon(app: &AppHandle, host: &str, url: &str) {
     if host.is_empty() || !url.starts_with("http") {
         return;
@@ -57,13 +55,11 @@ pub(crate) fn cache_icon(app: &AppHandle, host: &str, url: &str) {
                 bytes.len()
             )),
         }
-        // The refresh of the page happens on the next open; no event needed.
         let _ = handle;
     });
 }
 
-/// The document title arrives after the url change that recorded the visit, so
-/// the newest entry for that url still carries the previous page's title.
+/// Fills in the title that arrives after the visit was recorded.
 pub(crate) fn attach_title(app: &AppHandle, url: &str, title: &str) {
     if title.trim().is_empty() {
         return;
@@ -71,8 +67,6 @@ pub(crate) fn attach_title(app: &AppHandle, url: &str, title: &str) {
     let Some(state) = app.try_state::<AppState>() else {
         return;
     };
-    // The visit is already in memory; this only fills in the title that arrived
-    // after it, and the flusher decides when the file is rewritten.
     let changed = {
         let mut visits = state.history.write().unwrap_or_else(|e| e.into_inner());
         match visits.iter_mut().find(|visit| visit.url == url) {
@@ -88,7 +82,7 @@ pub(crate) fn attach_title(app: &AppHandle, url: &str, title: &str) {
     }
 }
 
-/// The favicon arrives after the visit is recorded, so patch the newest match.
+/// Patches the newest visit for a url with its icon.
 pub(crate) fn attach_icon(app: &AppHandle, url: &str, icon: &str) {
     let Some(state) = app.try_state::<AppState>() else {
         return;
@@ -112,7 +106,6 @@ pub(crate) fn attach_icon(app: &AppHandle, url: &str, icon: &str) {
 }
 
 pub(crate) fn record_visit(app: &AppHandle, url: &str, title: &str) {
-    // Settings, history and the new tab page are the browser, not browsing.
     if !crate::library::worth_recording(url) || trusted_url(url) {
         return;
     }
@@ -123,8 +116,6 @@ pub(crate) fn record_visit(app: &AppHandle, url: &str, title: &str) {
         let mut visits = state.history.write().unwrap_or_else(|e| e.into_inner());
         crate::library::push_visit(&mut visits, url, title);
     }
-    // The flusher writes it once the page has stopped moving; quitting flushes
-    // through the same path, so an orderly exit loses nothing.
     crate::persist::touch_history();
 }
 
@@ -188,8 +179,6 @@ pub async fn history_remove(
                 .iter()
                 .any(|(url, at)| visit.url == *url && visit.at == *at)
         });
-        // Timestamps can drift after a title or icon backfill; fall back to the
-        // url alone so the button keeps working.
         if visits.len() == before {
             visits.retain(|visit| !entries.iter().any(|(url, _)| visit.url == *url));
         }
@@ -353,7 +342,6 @@ fn move_bookmark(bookmarks: &mut Vec<Bookmark>, from: &str, to: usize) -> bool {
     true
 }
 
-/// Renames a bookmark, and optionally re-points it at another url.
 /// Moves a bookmark into a folder; an empty name means the top level.
 #[tauri::command]
 pub async fn bookmark_set_folder(
@@ -384,6 +372,7 @@ pub async fn bookmark_set_folder(
     }
     Ok(changed)
 }
+/// Renames a bookmark, and optionally re-points it at another url.
 #[tauri::command]
 pub async fn bookmark_update(
     app: AppHandle,
