@@ -1,8 +1,4 @@
 //! The sidebar: a column beside the page holding bookmarks, downloads and history.
-//!
-//! Its geometry and its webview live here rather than in the window code, because the
-//! rule that governs it - never create a child webview from inside a window event
-//! dispatch - is a property of this panel, not of the window.
 
 use crate::ipc::AppState;
 use crate::window::{logical_size, set_bounds};
@@ -62,16 +58,11 @@ pub fn plan(app: &AppHandle, width: f64, fullscreen: bool) -> Plan {
     }
     Plan {
         side,
-        // The page keeps at least 200 px: a sidebar that eats the content is worse than
-        // no sidebar.
         reserve: wanted.clamp(180.0, 640.0).min((width - 200.0).max(0.0)),
     }
 }
 
 /// Creates the sidebar webview for a window if it is wanted and missing.
-///
-/// Only call this outside a window event dispatch: add_child waits on the main thread,
-/// which a resize handler is already occupying.
 pub fn ensure(app: &AppHandle, label: &str) {
     let Some(state) = app.try_state::<AppState>() else {
         return;
@@ -134,9 +125,6 @@ pub fn apply(
         Some(webview) => {
             let _ = webview.hide();
         }
-        // Never created here: relayout runs from the window's resize handler, i.e. on the
-        // main thread in the middle of a dispatch, and adding a child webview from there
-        // waits on the very thread that is busy.
         None if plan.on() => {
             crate::logging::warn("sidebar is on but was never created; reopening the window will");
         }
