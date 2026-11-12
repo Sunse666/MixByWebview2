@@ -4,11 +4,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use tauri::{webview::DownloadEvent, Emitter, Manager, Webview};
 
-/// What a download is doing, as opposed to the string it is stored as.
-///
-/// The controls broke repeatedly because the phase was a bare string compared in half a
-/// dozen places, each with its own idea of what "started" meant. The rules live in one
-/// place now, with tests.
+/// What a download is doing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Phase {
     /// The loop should be making progress.
@@ -45,8 +41,7 @@ impl Phase {
         self == Phase::Started
     }
 
-    /// True when asking again should continue this task rather than start another: the
-    /// partial file is the resume point and the row is already there.
+    /// True when asking again should continue this task rather than start another.
     pub fn is_retryable(self) -> bool {
         matches!(self, Phase::Interrupted | Phase::Failed)
     }
@@ -78,22 +73,18 @@ pub struct DownloadTask {
     pub path: String,
     /// started | finished | failed
     pub state: String,
-    /// Bytes written so far; WebView2 gives no total, so there is no percentage.
+    /// Bytes written so far.
     pub bytes: u64,
-    /// Bytes per second over the last sample; zero when nothing is moving.
+    /// Bytes per second over the last sample.
     pub speed: u64,
     /// True while the download operation is paused.
     pub paused: bool,
-    /// Size the server announced, when it did. A percentage needs it.
+    /// Size the server announced, when it did.
     pub total: Option<u64>,
 }
 
 static NEXT_ID: AtomicU64 = AtomicU64::new(1);
-/// The download operations this session has started, so they can be paused and resumed.
-///
-/// WebView2 hands out ICoreWebView2DownloadOperation through DownloadStarting, and that is
-/// the only handle with Pause/Resume/Cancel on it. The webview builder's own callback only
-/// reports that a download began, which is why the list could show progress but not stop it.
+/// The download operations this session has started, by url.
 #[cfg(windows)]
 #[allow(dead_code)]
 pub mod ops {
@@ -124,9 +115,7 @@ pub mod ops {
             .unwrap_or_default()
     }
 
-    /// COM interfaces from one webview are usable from the threads that ask about them;
-    /// the map is behind a mutex, so the only thing being asserted is that the interface
-    /// is free-threaded, which the download objects are.
+    /// COM operation handles, shared across threads.
     struct Ops(Mutex<HashMap<String, ICoreWebView2DownloadOperation>>);
     unsafe impl Send for Ops {}
     unsafe impl Sync for Ops {}
@@ -138,10 +127,6 @@ pub mod ops {
     }
 
     /// Remembers the operation under the url it fetches.
-    ///
-    /// Not under the result path: that is chosen by the webview's own handler, and the
-    /// app rewrites it to the portable downloads folder, so the two disagree. The url is
-    /// the one thing both sides see the same.
     fn remember(args: &webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2DownloadStartingEventArgs) -> Option<String> {
         let operation = unsafe { args.DownloadOperation().ok()? };
         let mut uri = PWSTR::null();
@@ -156,16 +141,11 @@ pub mod ops {
 
     /// Attaches the handler that keeps a handle on every download this page starts.
     pub fn watch(webview: &tauri::Webview) {
-        // Hand every download to the internal engine instead of steering the webview's own.
-        // Its Pause is accepted and ignored while a transfer starts and refused once paused,
-        // which is what made the controls unreliable; the engine pauses by not reading.
         let Some(state) = webview.app_handle().try_state::<crate::ipc::AppState>() else {
             return;
         };
         let app = webview.app_handle().clone();
         let downloads = state.dirs.downloads.clone();
-        // The handler is built inside the closure: it holds a COM pointer and is not Send,
-        // and WebView2 keeps its own reference once the event is hooked up.
         let _ = webview.with_webview(move |platform| unsafe {
             let controller = platform.controller();
             let Ok(core) = controller.CoreWebView2() else {
@@ -201,11 +181,7 @@ pub mod ops {
         });
     }
 
-    /// Runs something against the operation for this url, and says what actually happened.
-    ///
-    /// The result used to be "the operation was found", which reported success for a call
-    /// the browser had refused. Now it carries the state the operation was in and the error
-    /// the call returned, so a failure can be read instead of guessed at.
+    /// Runs something against the operation for this url.
     fn with_op(
         url: &str,
         run: impl FnOnce(&ICoreWebView2DownloadOperation) -> windows_core::Result<()>,
@@ -231,10 +207,6 @@ pub mod ops {
     }
 
     /// Pauses, and says whether it took effect.
-    ///
-    /// The call itself succeeds even when nothing changes - a pause requested before the
-    /// transfer has started is accepted and then ignored - so the state is read back until
-    /// it says interrupted. That is the difference between "paused" and "we asked".
     pub fn pause(url: &str) -> Result<String, String> {
         for _ in 0..10 {
             let state = with_op(url, |operation| unsafe { operation.Pause() })?;
@@ -256,9 +228,6 @@ pub mod ops {
     }
 
     /// Cancels, resuming first when the transfer is paused.
-    ///
-    /// A paused operation refuses Cancel - it is mid-transition as far as the browser is
-    /// concerned - so it is nudged back to running and then cancelled.
     pub fn cancel(url: &str) -> Result<String, String> {
         let state = state_of(url)?;
         if state == "interrupted" {
@@ -297,8 +266,7 @@ pub mod ops {
 
 const KEEP: usize = 50;
 
-/// WebView2 has no download UI of its own beyond a prompt, so we take the
-/// destination, record the task and let the chrome strip show it.
+/// Takes the destination, records the task and lets the strip show it.
 pub fn handle(webview: Webview, event: DownloadEvent<'_>) -> bool {
     let app = webview.app_handle().clone();
 
@@ -307,8 +275,6 @@ pub fn handle(webview: Webview, event: DownloadEvent<'_>) -> bool {
             let Some(state) = app.try_state::<AppState>() else {
                 return true;
             };
-            // WebView2 already resolved Content-Disposition into a file name; keep it
-            // and only move the file into our portable folder.
             let suggested = destination
                 .file_name()
                 .and_then(|name| name.to_str())
@@ -324,7 +290,6 @@ pub fn handle(webview: Webview, event: DownloadEvent<'_>) -> bool {
             record(&app, Some(url.as_str()), path.as_deref(), state);
             success
         }
-        // The enum is non_exhaustive; unknown events keep the default behaviour.
         _ => true,
     }
 }
@@ -350,8 +315,7 @@ pub fn save_history(app: &tauri::AppHandle) {
     }
 }
 
-/// Reads the list back. Anything that was running is shown as interrupted: a transfer
-/// cannot survive a restart, but the file and the row can, and the row can be resumed.
+/// Reads the list back; anything that was running comes back as interrupted.
 pub fn load_history(dirs: &crate::paths::AppDirs) -> Vec<DownloadTask> {
     let Ok(text) = std::fs::read_to_string(history_file(dirs)) else {
         return Vec::new();
@@ -370,10 +334,6 @@ pub fn load_history(dirs: &crate::paths::AppDirs) -> Vec<DownloadTask> {
 
 
 /// Marks rows that claim to be running when nothing is.
-///
-/// A loop can end without its row hearing about it - a failed claim, an aborted task, a
-/// download started before the engine took over. Those rows sat at "downloading" with no
-/// progress and no way back, so they are turned into interrupted ones, which can be resumed.
 pub fn reconcile(app: &tauri::AppHandle) {
     let Some(state) = app.try_state::<AppState>() else {
         return;
@@ -475,16 +435,7 @@ pub fn set_state(app: &tauri::AppHandle, id: u64, next: &str) {
 }
 
 /// Starts a transfer with the internal engine and records it as a task.
-///
-/// One task per file: a retry, or a second DownloadStarting for the same download after a
-/// redirect, takes over the existing row instead of adding another that writes the same
-/// file - two loops appending to one file is how a download reports 113 MB/s and still ends
-/// up corrupt.
 pub fn start_with_engine(app: &tauri::AppHandle, url: &str, path: &Path) -> u64 {
-    // A download that failed or was interrupted is *the same download*: its row and its
-    // partial file are reused, so the list keeps one line per download and the bytes
-    // already on disk are the resume point. Only a finished one starts anew, under the
-    // next free name.
     let existing = {
         let Some(state) = app.try_state::<AppState>() else {
             return 0;
@@ -550,13 +501,12 @@ fn record_into(app: &tauri::AppHandle, id: u64, url: &str, path: &Path) {
     };
     let _ = app.emit("download:changed", tasks);
 }
-/// Records a file that we wrote ourselves (image save), so it shows up in the
-/// same list as the webview downloads.
 /// Fills in the byte count for a finished task from the file on disk.
 fn finish_size(path: &str) -> u64 {
     std::fs::metadata(path).map(|meta| meta.len()).unwrap_or(0)
 }
 
+/// Records a file the app wrote itself, so it shows up in the list.
 pub fn record_done(app: &tauri::AppHandle, url: &str, path: &Path) {
     record(app, Some(url), Some(path), "started");
     record(app, Some(url), Some(path), "finished");
@@ -589,14 +539,10 @@ fn record(app: &tauri::AppHandle, url: Option<&str>, path: Option<&Path>, state:
                 }
             }
             _ => {
-                // Finish the most recent task for this url; path may be absent on macOS.
                 let target = tasks
                     .iter()
                     .rposition(|task| Some(task.url.as_str()) == url && task.state == "started");
                 if let Some(index) = target {
-                    // Pausing makes the browser report the transfer as not successful. It is
-                    // interrupted, not failed, and it keeps its resume button - marking it
-                    // failed is what made the download look broken and unresumable.
                     let interrupted = tasks[index].paused && state != "finished";
                     tasks[index].state = if interrupted {
                         "interrupted".to_string()
@@ -619,8 +565,7 @@ fn record(app: &tauri::AppHandle, url: Option<&str>, path: Option<&Path>, state:
     save_history(app);
 }
 
-/// WebView2 reports only start and finish, so the size on disk is polled to
-/// give the strip something to show while a download runs.
+/// Polls the size on disk while a download runs.
 pub fn start_progress_watch(app: tauri::AppHandle) {
     std::thread::spawn(move || loop {
         std::thread::sleep(std::time::Duration::from_millis(500));
@@ -637,9 +582,6 @@ pub fn start_progress_watch(app: tauri::AppHandle) {
             {
                 let size = std::fs::metadata(&task.path).map(|meta| meta.len()).unwrap_or(0);
                 if size != task.bytes {
-                    // The poll runs every 500 ms, so the difference is a rate over half a
-                    // second; a partly written chunk still produces a sensible number, and
-                    // a stall shows as zero rather than as the last happy value.
                     let delta = size.saturating_sub(task.bytes);
                     task.speed = delta.saturating_mul(2);
                     task.bytes = size;
@@ -657,8 +599,7 @@ pub fn start_progress_watch(app: tauri::AppHandle) {
     });
 }
 
-/// Prefer the name the server suggested, fall back to the URL, then avoid
-/// overwriting an existing file.
+/// Picks the file name and avoids overwriting an existing file.
 pub fn target_for(dir: &Path, url: &str, suggested: &str) -> PathBuf {
     let name = if suggested.trim().is_empty() {
         derive_name(url)
@@ -790,8 +731,6 @@ mod tests {
 
     #[test]
     fn a_finished_download_is_not_retried_in_place() {
-        // Asking again after a finished download must start a new file: resuming the old
-        // one would leave a row claiming to download something already complete.
         assert!(!Phase::Finished.is_retryable());
         assert_eq!(retry_phase(Phase::Finished), Phase::Finished);
         assert_eq!(retry_phase(Phase::Failed), Phase::Started);
