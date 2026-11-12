@@ -95,6 +95,19 @@ pub struct Ui {
     pub find_hit: parking_lot::RwLock<bool>,
 }
 
+/// Navigation bookkeeping: what each tab is loading, where the bundled pages live and
+/// which hosts answered a reachability probe.
+pub struct Nav {
+    /// Origin of the bundled pages.
+    pub app_base: parking_lot::RwLock<String>,
+    /// Tab id -> the url it is currently loading.
+    pub pending: parking_lot::RwLock<std::collections::HashMap<String, String>>,
+    /// Tab id -> the url whose error page is already showing.
+    pub error_shown: parking_lot::RwLock<std::collections::HashMap<String, String>>,
+    /// Reachability cache shared with the probe thread.
+    pub reachability: std::sync::Arc<crate::net::Reachability>,
+}
+
 pub struct AppState {
     pub dirs: AppDirs,
     /// One tab set per window, keyed by the window label.
@@ -111,14 +124,7 @@ pub struct AppState {
     pub snap: parking_lot::Mutex<crate::snap::SnapState>,
     pub opts: crate::tabs::WebviewOpts,
     pub extensions: Vec<ExtInfo>,
-    /// Origin of the bundled pages.
-    pub app_base: parking_lot::RwLock<String>,
-    /// Tab id -> the url it is currently loading.
-    pub pending: parking_lot::RwLock<std::collections::HashMap<String, String>>,
-    /// Reachability cache shared with the probe thread.
-    pub reachability: std::sync::Arc<crate::net::Reachability>,
-    /// Tab id -> the url whose error page is already showing.
-    pub error_shown: parking_lot::RwLock<std::collections::HashMap<String, String>>,
+    pub nav: Nav,
     pub scripts: Vec<crate::userscripts::ScriptInfo>,
 }
 
@@ -156,10 +162,12 @@ impl AppState {
                 translated_tabs: parking_lot::RwLock::new(std::collections::HashSet::new()),
                 find_hit: parking_lot::RwLock::new(true),
             },
-            app_base: parking_lot::RwLock::new(String::new()),
-            pending: parking_lot::RwLock::new(std::collections::HashMap::new()),
-            reachability: std::sync::Arc::new(crate::net::Reachability::default()),
-            error_shown: parking_lot::RwLock::new(std::collections::HashMap::new()),
+            nav: Nav {
+                app_base: parking_lot::RwLock::new(String::new()),
+                pending: parking_lot::RwLock::new(std::collections::HashMap::new()),
+                error_shown: parking_lot::RwLock::new(std::collections::HashMap::new()),
+                reachability: std::sync::Arc::new(crate::net::Reachability::default()),
+            },
             scripts,
             dirs,
             cores: parking_lot::RwLock::new(cores),
@@ -619,14 +627,14 @@ async fn cycle_tab(app: &AppHandle, window: &tauri::Window, delta: isize) {
 pub fn show_error_page(app: &AppHandle, id: &str, failed_url: &str) -> Option<String> {
     let state = app.try_state::<AppState>()?;
     {
-        let mut shown = state.error_shown.write();
+        let mut shown = state.nav.error_shown.write();
         if shown.get(id).map(String::as_str) == Some(failed_url) {
             return None;
         }
         shown.insert(id.to_string(), failed_url.to_string());
     }
 
-    let base = state.app_base.read().clone();
+    let base = state.nav.app_base.read().clone();
     if base.is_empty() {
         return None;
     }

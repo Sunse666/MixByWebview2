@@ -565,12 +565,12 @@ pub fn start_url_watch(app: AppHandle, label: String) {
             }
 
             if let Some(state) = app.try_state::<AppState>() {
-                if state.app_base.read().is_empty() {
+                if state.nav.app_base.read().is_empty() {
                     if let Some(chrome) = app.get_webview(&format!("{label}-chrome")) {
                         if let Ok(url) = chrome.url() {
                             let origin = url.origin().ascii_serialization();
                             if origin.starts_with("http") {
-                                *state.app_base.write() = format!("{origin}/");
+                                *state.nav.app_base.write() = format!("{origin}/");
                                 crate::logging::info(&format!("app base {origin}/"));
                             }
                         }
@@ -597,7 +597,7 @@ pub fn start_url_watch(app: AppHandle, label: String) {
                 if current.starts_with("chrome-error://") {
                     if let Some(state) = app.try_state::<AppState>() {
                         let failed = state
-                            .pending
+                            .nav.pending
                             .read()
                             
                             .get(&id)

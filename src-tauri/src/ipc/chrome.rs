@@ -347,7 +347,7 @@ pub async fn page_failed(
 ) -> Result<(), AppError> {
     let id = webview.label().to_string();
     let failed = state
-        .pending
+        .nav.pending
         .read()
         
         .get(&id)
