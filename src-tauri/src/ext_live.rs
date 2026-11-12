@@ -1,5 +1,4 @@
-//! Reads and toggles the extensions WebView2 itself loaded. The manifest data we
-//! parse is only a mirror: this is the authoritative list.
+//! Reads and toggles the extensions WebView2 itself loaded.
 
 #[cfg(windows)]
 use webview2_com::Microsoft::Web::WebView2::Win32::{
@@ -167,31 +166,14 @@ pub fn set_enabled(_webview: &tauri::Webview, _id: &str, _enabled: bool) -> bool
 }
 
 /// Forgets the enabled state of every extension in the profile.
-///
-/// Turning an extension off through the browser's own API is durable, and switching it
-/// back on does not always stick: Enable answers ok, IsEnabled agrees for a moment,
-/// and the next listing says off again. The state lives in two places that only the
-/// browser can write - the Extension State store and the extensions section of
-/// Preferences - and neither is reachable through the API once an extension is off.
-///
-/// So this deletes both, which is only safe before a webview exists: Chromium rebuilds
-/// them from the folders on the next start, with every extension enabled. Extension
-/// settings (their own storage) are left alone.
 pub fn forget_disabled_state(profile: &std::path::Path) -> Result<bool, String> {
   let mut touched = false;
 
-  // The important-prefs store, where Chromium keeps extension prefs as a leveldb.
   let state = profile.join("EBWebView").join("Default").join("Extension State");
   if state.exists() && std::fs::remove_dir_all(&state).is_ok() {
     touched = true;
   }
 
-  // Secure Preferences holds the per-extension "disable_reasons", and an extension
-  // marked DISABLE_CORRUPTED (8192) can never be enabled through the API again: the
-  // browser decided its files changed underneath it, which is exactly what happens when
-  // the folder is removed and unpacked again. The file is signed and cannot be edited,
-  // but deleting it makes Chromium rebuild the entries from the folders - no disable
-  // reasons, no tamper flag, extension storage untouched.
   let secure = profile
     .join("EBWebView")
     .join("Default")
@@ -201,7 +183,6 @@ pub fn forget_disabled_state(profile: &std::path::Path) -> Result<bool, String> 
     touched = true;
   }
 
-  // The extensions section of the plain preferences file, if it carries one.
   for name in ["Preferences"] {
     let file = profile.join("EBWebView").join("Default").join(name);
     if !file.exists() {
@@ -242,11 +223,6 @@ pub fn forget_disabled_state(profile: &std::path::Path) -> Result<bool, String> 
 }
 
 /// Loads one extension from a directory and turns it on.
-///
-/// Returns what the browser reports afterwards, not what the call returned: adding a
-/// folder that is already installed can succeed and leave the extension exactly as
-/// disabled as it was, which is how a switch ended up claiming "enabled" for an
-/// extension that the live list did not contain at all.
 #[cfg(windows)]
 pub fn add(webview: &tauri::Webview, dir: &str) -> Result<bool, String> {
   use webview2_com::{
@@ -284,7 +260,6 @@ pub fn add(webview: &tauri::Webview, dir: &str) -> Result<bool, String> {
             let _ = sender_for_handler.send(Ok("already enabled".into()));
             return Ok(());
           }
-          // Added but still switched off: turn it on and wait for the answer.
           let sender_for_enable = std::sync::mpsc::Sender::clone(&sender_for_handler);
           let probe = extension.clone();
           let handler = BrowserExtensionEnableCompletedHandler::create(Box::new(move |status| {
@@ -292,9 +267,6 @@ pub fn add(webview: &tauri::Webview, dir: &str) -> Result<bool, String> {
               let _ = sender_for_enable.send(Err(format!("enable refused: {err:?}")));
               return Ok(());
             }
-            // Ask the extension what it thinks now: Enable answering ok is not the
-            // same as the extension being on, and that gap is what kept a switch
-            // showing on for something the browser still had switched off.
             let mut now = windows_core::BOOL(0);
             let _ = probe.IsEnabled(&mut now);
             let _ = sender_for_enable.send(if now.as_bool() {
