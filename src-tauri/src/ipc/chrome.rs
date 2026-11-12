@@ -342,7 +342,6 @@ pub async fn page_failed(
     let id = webview.label().to_string();
     let failed = state
         .nav.read().pending
-        
         .get(&id)
         .cloned()
         .unwrap_or_default();
@@ -393,7 +392,6 @@ pub async fn overlay_toggle(
         .state::<AppState>()
         .windows.overlay
         .read()
-        
         .contains_key(window.label());
     if open {
         crate::overlay::close(&app, window.label());

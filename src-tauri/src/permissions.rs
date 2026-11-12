@@ -114,7 +114,6 @@ pub fn poll(app: &AppHandle, id: u64) -> Option<bool> {
         .permissions
         .pending
         .lock()
-        
         .remove(&id);
     Some(answer)
 }

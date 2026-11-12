@@ -234,7 +234,6 @@ pub fn close(app: &AppHandle, window_label: &str) {
             let flag = state
                 .windows.overlay_from_page
                 .write()
-                
                 .remove(window_label);
             flag.unwrap_or(false)
         };

@@ -598,7 +598,6 @@ pub fn start_url_watch(app: AppHandle, label: String) {
                     if let Some(state) = app.try_state::<AppState>() {
                         let failed = state
                             .nav.read().pending
-                            
                             .get(&id)
                             .cloned()
                             .unwrap_or_default();

@@ -329,7 +329,6 @@ pub async fn thumb_show(
     app.state::<AppState>()
         .windows.overlay_thumb
         .write()
-        
         .insert(window.label().to_string());
     Ok(true)
 }
@@ -614,20 +613,14 @@ pub async fn tab_icon(
         let changed = {
             let state = app.try_state::<AppState>();
             match state {
-                Some(state) => state
-                    .library.favicons
-                    .write()
-                    
+                Some(state) => state.favicons_mut()
                     .set(&host, &icon),
                 None => false,
             }
         };
         if changed {
             if let Some(state) = app.try_state::<AppState>() {
-                state
-                    .library.favicons
-                    .read()
-                    
+                state.favicons()
                     .save(&state.dirs.favicons_file);
             }
         }
@@ -653,7 +646,6 @@ pub async fn tab_reopen(
     let Some((url, _title)) = state
         .windows.closed_tabs
         .write()
-        
         .get_mut(window.label())
         .and_then(|list| list.pop())
     else {
@@ -962,7 +954,6 @@ pub(crate) fn sync_visibility(app: &AppHandle, label: &str) {
                     state
                         .windows.shown_at
                         .write()
-                        
                         .insert(id.clone(), crate::library::now());
                 }
             } else {

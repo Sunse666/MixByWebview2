@@ -76,11 +76,22 @@ pub struct WindowMaps {
 
 /// Browsing data that outlives the window: history, bookmarks, site icons and zoom.
 pub struct Library {
-    pub history: parking_lot::RwLock<Vec<Visit>>,
+    pub history: Vec<Visit>,
     /// host -> favicon url, shared by history, bookmarks and the new tab page.
-    pub favicons: parking_lot::RwLock<crate::favicons::Favicons>,
-    pub bookmarks: parking_lot::RwLock<Vec<Bookmark>>,
-    pub zoom: parking_lot::RwLock<crate::zoom::ZoomStore>,
+    pub favicons: crate::favicons::Favicons,
+    pub bookmarks: Vec<Bookmark>,
+    pub zoom: crate::zoom::ZoomStore,
+}
+
+impl Default for Library {
+    fn default() -> Self {
+        Self {
+            history: Vec::new(),
+            favicons: crate::favicons::Favicons::default(),
+            bookmarks: Vec::new(),
+            zoom: crate::zoom::ZoomStore::default(),
+        }
+    }
 }
 
 /// What the chrome is showing right now: menu, suggestions, find and translation.
@@ -118,7 +129,7 @@ pub struct AppState {
     pub downloads: parking_lot::RwLock<Vec<crate::downloads::DownloadTask>>,
     /// Overlay, suggestion and session state, one entry per window.
     pub windows: WindowMaps,
-    pub library: Library,
+    pub library: parking_lot::RwLock<Library>,
     pub ui: parking_lot::RwLock<Ui>,
     pub permissions: crate::permissions::PermissionStore,
     pub snap: parking_lot::Mutex<crate::snap::SnapState>,
@@ -149,12 +160,12 @@ impl AppState {
         Self {
             opts,
             extensions,
-            library: Library {
-                history: parking_lot::RwLock::new(history),
-                favicons: parking_lot::RwLock::new(crate::favicons::Favicons::load(&dirs.favicons_file)),
-                bookmarks: parking_lot::RwLock::new(bookmarks),
-                zoom: parking_lot::RwLock::new(crate::zoom::ZoomStore::load(&dirs.zoom_file)),
-            },
+            library: parking_lot::RwLock::new(Library {
+                history,
+                favicons: crate::favicons::Favicons::load(&dirs.favicons_file),
+                bookmarks,
+                zoom: crate::zoom::ZoomStore::load(&dirs.zoom_file),
+            }),
             ui: parking_lot::RwLock::new(Ui {
                 menu_context: MenuContext::default(),
                 suggest_width: 420.0,
@@ -179,6 +190,38 @@ impl AppState {
             permissions: crate::permissions::PermissionStore::default(),
             snap: parking_lot::Mutex::new(crate::snap::SnapState::default()),
         }
+    }
+
+    pub fn history(&self) -> parking_lot::MappedRwLockReadGuard<'_, Vec<Visit>> {
+        parking_lot::RwLockReadGuard::map(self.library.read(), |library| &library.history)
+    }
+
+    pub fn history_mut(&self) -> parking_lot::MappedRwLockWriteGuard<'_, Vec<Visit>> {
+        parking_lot::RwLockWriteGuard::map(self.library.write(), |library| &mut library.history)
+    }
+
+    pub fn bookmarks(&self) -> parking_lot::MappedRwLockReadGuard<'_, Vec<Bookmark>> {
+        parking_lot::RwLockReadGuard::map(self.library.read(), |library| &library.bookmarks)
+    }
+
+    pub fn bookmarks_mut(&self) -> parking_lot::MappedRwLockWriteGuard<'_, Vec<Bookmark>> {
+        parking_lot::RwLockWriteGuard::map(self.library.write(), |library| &mut library.bookmarks)
+    }
+
+    pub fn favicons(&self) -> parking_lot::MappedRwLockReadGuard<'_, crate::favicons::Favicons> {
+        parking_lot::RwLockReadGuard::map(self.library.read(), |library| &library.favicons)
+    }
+
+    pub fn favicons_mut(&self) -> parking_lot::MappedRwLockWriteGuard<'_, crate::favicons::Favicons> {
+        parking_lot::RwLockWriteGuard::map(self.library.write(), |library| &mut library.favicons)
+    }
+
+    pub fn zoom(&self) -> parking_lot::MappedRwLockReadGuard<'_, crate::zoom::ZoomStore> {
+        parking_lot::RwLockReadGuard::map(self.library.read(), |library| &library.zoom)
+    }
+
+    pub fn zoom_mut(&self) -> parking_lot::MappedRwLockWriteGuard<'_, crate::zoom::ZoomStore> {
+        parking_lot::RwLockWriteGuard::map(self.library.write(), |library| &mut library.zoom)
     }
 
     pub fn add_window(&self, label: &str) {

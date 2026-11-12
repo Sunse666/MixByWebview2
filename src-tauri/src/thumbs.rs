@@ -123,7 +123,6 @@ pub fn capture_later(app: tauri::AppHandle, id: String, window_label: String) {
     let shown = state
       .windows.shown_at
       .read()
-      
       .get(&id)
       .copied()
       .unwrap_or(0);
@@ -164,7 +163,6 @@ pub fn capture_later(app: tauri::AppHandle, id: String, window_label: String) {
           if state
             .windows.overlay_thumb
             .read()
-            
             .contains(&window_label)
           {
             use tauri::Emitter;

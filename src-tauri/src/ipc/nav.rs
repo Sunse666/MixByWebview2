@@ -90,7 +90,7 @@ pub(crate) fn set_zoom(app: &AppHandle, label: &str, level: f64) -> Result<(), A
         return Ok(());
     }
     {
-        let mut store = state.library.zoom.write();
+        let mut store = state.zoom_mut();
         if store.remember(&url, level) {
             if let Err(err) = store.save(&state.dirs.zoom_file) {
                 crate::logging::warn(&format!("zoom save failed: {err}"));
@@ -143,7 +143,7 @@ fn collect_suggestions(state: &AppState, text: &str, limit: usize) -> Vec<Sugges
 
     let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
     {
-        let history = state.library.history.read();
+        let history = state.history();
         for visit in history.iter() {
             if seen.insert(visit.url.clone()) {
                 found.push(Suggestion {
@@ -155,7 +155,7 @@ fn collect_suggestions(state: &AppState, text: &str, limit: usize) -> Vec<Sugges
         }
     }
     {
-        let bookmarks = state.library.bookmarks.read();
+        let bookmarks = state.bookmarks();
         for bookmark in bookmarks.iter() {
             if seen.insert(bookmark.url.clone()) {
                 found.push(Suggestion {
@@ -202,7 +202,6 @@ pub async fn suggest_open(
         .state::<AppState>()
         .windows.overlay
         .read()
-        
         .contains_key(window.label())
     {
         return Ok(());
@@ -246,7 +245,6 @@ pub async fn suggest_active(
     let label = state
         .windows.overlay
         .read()
-        
         .get(window.label())
         .cloned();
     let Some(label) = label else {
@@ -284,7 +282,6 @@ fn push_suggestions(app: &AppHandle, window_label: &str, state: &AppState) -> Ve
         .state::<AppState>()
         .windows.overlay
         .read()
-        
         .get(window_label)
         .cloned();
 
@@ -315,7 +312,6 @@ pub async fn url_type(
     if !state
         .windows.url_edit
         .read()
-        
         .contains_key(window.label())
     {
         return Ok(());
@@ -376,7 +372,6 @@ pub(crate) fn set_url_edit(app: &AppHandle, window: &tauri::Window, on: bool) {
         state
             .windows.url_edit
             .write()
-            
             .insert(window.label().to_string(), String::new());
     }
 }
@@ -386,7 +381,6 @@ fn exit_url_edit(app: &AppHandle, window_label: &str) {
         state
             .windows.url_edit
             .write()
-            
             .remove(window_label);
     }
     if let Some(win) = app.get_window(window_label) {

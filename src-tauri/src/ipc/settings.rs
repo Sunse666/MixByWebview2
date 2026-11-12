@@ -53,7 +53,6 @@ fn broadcast_theme(app: &AppHandle, theme: &Theme) {
         .state::<AppState>()
         .windows.overlay
         .read()
-        
         .values()
         .cloned()
         .collect::<Vec<_>>()
