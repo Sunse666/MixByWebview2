@@ -513,6 +513,19 @@
     window.__mixOverlay = false;
     send("close_overlay");
   }, true);
+
+  // Ctrl and the wheel zoom natively otherwise, which leaves the app with a stale zoom:
+  // the panel shows 100% and the per site level is never recorded. The scroll is
+  // collected until it is worth one step, so a pinch does not run away.
+  var wheelAccum = 0;
+  window.addEventListener("wheel", function (event) {
+    if (!event.ctrlKey && !event.metaKey) return;
+    event.preventDefault();
+    wheelAccum += event.deltaY;
+    if (Math.abs(wheelAccum) < 50) return;
+    send(wheelAccum < 0 ? "zoom_in" : "zoom_out");
+    wheelAccum = 0;
+  }, { passive: false, capture: true });
 })();
 
 (function () {
