@@ -159,5 +159,6 @@ async function check(name) {
   console.log(failures ? failures + " page(s) failed" : "all pages build");
   await import("./check-chrome.mjs");
   await import("./check-strings.mjs");
+  await import("./check-dom.mjs");
   process.exit(failures ? 1 : 0);
 })();
