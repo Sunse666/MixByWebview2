@@ -564,7 +564,13 @@ pub(crate) fn emit_tabs(app: &AppHandle, label: &str) {
         let core = state.read_core(label);
         snapshot(&core)
     };
+    let json = serde_json::to_string(&list).unwrap_or_else(|_| "{}".into());
     let _ = app.emit_to(label, "tabs:changed", list);
+    if let Some(side) = app.get_webview(&format!("{label}-side")) {
+        let _ = side.eval(&format!(
+            "window.__mixSidebarTabs && window.__mixSidebarTabs({json})"
+        ));
+    }
 }
 
 fn window_geometry(app: &AppHandle, label: &str) -> Option<crate::session::WindowGeometry> {

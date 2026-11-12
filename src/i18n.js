@@ -255,6 +255,8 @@ const DICT = {
     "More tools": "更多工具",
     "History": "历史记录",
     "Bookmarks": "书签",
+    "Tabs": "标签页",
+    "No tabs": "没有打开的标签页",
     "Search history": "搜索历史",
     "Search bookmarks": "搜索书签",
     "Clear": "清除",

@@ -9,8 +9,10 @@ const invoke = withFeedback(window.__TAURI__.core.invoke);
 const tabs = document.getElementById("tabs");
 const body = document.getElementById("body");
 
-const VIEWS = ["bookmarks", "downloads", "history"];
+const VIEWS = ["bookmarks", "downloads", "history", "tabs"];
+const LABELS = { bookmarks: "Bookmarks", downloads: "Downloads", history: "History", tabs: "Tabs" };
 let current = "bookmarks";
+let tabSnapshot = null;
 
 function row(label, host, icon, run) {
   const line = document.createElement("div");
@@ -75,6 +77,11 @@ async function paint() {
     return;
   }
 
+  if (current === "tabs") {
+    const list = tabSnapshot || (await invoke("tab_list").catch(() => null));
+    return renderTabs(list);
+  }
+
   const visits = (await invoke("history_list", { limit: 50 }).catch(() => [])) || [];
   if (!visits.length) return body.append(empty(t("No history yet")));
   const seen = new Set();
@@ -88,6 +95,29 @@ async function paint() {
     );
   }
 }
+
+function renderTabs(list) {
+  body.replaceChildren();
+  const items = (list && list.tabs) || [];
+  if (!items.length) return body.append(empty(t("No tabs")));
+  for (const item of items) {
+    const line = row(item.title || item.url, hostOf(item.url), item.icon, () =>
+      invoke("tab_select", { id: item.id }).catch(() => {}),
+    );
+    line.addEventListener("auxclick", (event) => {
+      if (event.button !== 1) return;
+      event.preventDefault();
+      invoke("tab_close", { id: item.id }).catch(() => {});
+    });
+    if (list.selected === item.id) line.classList.add("on");
+    body.append(line);
+  }
+}
+
+window.__mixSidebarTabs = (list) => {
+  tabSnapshot = list;
+  if (current === "tabs") renderTabs(list);
+};
 
 function hostOf(url) {
   try {
@@ -168,7 +198,7 @@ async function boot() {
     const button = document.createElement("button");
     button.className = "side-tab";
     button.dataset.view = view;
-    button.textContent = t(view === "bookmarks" ? "Bookmarks" : view === "downloads" ? "Downloads" : "History");
+    button.textContent = t(LABELS[view]);
     button.addEventListener("click", () => {
       current = view;
       paint();
