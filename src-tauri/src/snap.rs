@@ -43,7 +43,7 @@ pub fn cycle(app: &AppHandle, direction: Direction) -> Result<(), String> {
 
     let (next, restore) = {
         let state = app.state::<crate::ipc::AppState>();
-        let mut snap = state.snap.lock().unwrap_or_else(|e| e.into_inner());
+        let mut snap = state.snap.lock();
 
         if let Some(last) = snap.last_at {
             if last.elapsed() < DEBOUNCE {

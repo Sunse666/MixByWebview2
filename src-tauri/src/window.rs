@@ -599,7 +599,7 @@ pub fn start_url_watch(app: AppHandle, label: String) {
                         let failed = state
                             .pending
                             .read()
-                            .unwrap_or_else(|e| e.into_inner())
+                            
                             .get(&id)
                             .cloned()
                             .unwrap_or_default();

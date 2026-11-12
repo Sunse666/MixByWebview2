@@ -380,7 +380,7 @@ pub fn create(
                     state
                         .pending
                         .write()
-                        .unwrap_or_else(|e| e.into_inner())
+                        
                         .insert(tab_id.clone(), url.to_string());
                 }
                 true

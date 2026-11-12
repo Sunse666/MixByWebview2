@@ -201,7 +201,7 @@ pub async fn tab_close(app: AppHandle, window: tauri::Window, state: State<'_, A
         if let Some(index) = core.tabs.iter().position(|tab| tab.id == id) {
             let closed = core.tabs[index].clone();
             if !closed.incognito {
-                let mut history = state.closed_tabs.write().unwrap_or_else(|e| e.into_inner());
+                let mut history = state.closed_tabs.write();
                 let list = history.entry(window.label().to_string()).or_default();
                 list.push((closed.url, closed.title));
                 if list.len() > 20 {
@@ -329,7 +329,7 @@ pub async fn thumb_show(
     app.state::<AppState>()
         .overlay_thumb
         .write()
-        .unwrap_or_else(|e| e.into_inner())
+        
         .insert(window.label().to_string());
     Ok(true)
 }
@@ -617,7 +617,7 @@ pub async fn tab_icon(
                 Some(state) => state
                     .favicons
                     .write()
-                    .unwrap_or_else(|e| e.into_inner())
+                    
                     .set(&host, &icon),
                 None => false,
             }
@@ -627,7 +627,7 @@ pub async fn tab_icon(
                 state
                     .favicons
                     .read()
-                    .unwrap_or_else(|e| e.into_inner())
+                    
                     .save(&state.dirs.favicons_file);
             }
         }
@@ -653,7 +653,7 @@ pub async fn tab_reopen(
     let Some((url, _title)) = state
         .closed_tabs
         .write()
-        .unwrap_or_else(|e| e.into_inner())
+        
         .get_mut(window.label())
         .and_then(|list| list.pop())
     else {
@@ -962,7 +962,7 @@ pub(crate) fn sync_visibility(app: &AppHandle, label: &str) {
                     state
                         .shown_at
                         .write()
-                        .unwrap_or_else(|e| e.into_inner())
+                        
                         .insert(id.clone(), crate::library::now());
                 }
             } else {

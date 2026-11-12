@@ -129,7 +129,7 @@ pub fn open_url(
     let _ = webview.set_focus();
     {
         let state = app.state::<crate::ipc::AppState>();
-        let mut slots = state.overlay.write().unwrap_or_else(|e| e.into_inner());
+        let mut slots = state.overlay.write();
         slots.insert(win.label().to_string(), label.clone());
     }
     crate::logging::info(&format!("overlay open {page}"));
@@ -191,7 +191,7 @@ pub fn open_at(
     }
     {
         let state = app.state::<crate::ipc::AppState>();
-        let mut slots = state.overlay.write().unwrap_or_else(|e| e.into_inner());
+        let mut slots = state.overlay.write();
         slots.insert(win.label().to_string(), label.clone());
     }
     crate::logging::info(&format!("overlay open {kind} at {x:.0},{y:.0}"));
@@ -209,14 +209,14 @@ fn remember_owner(app: &AppHandle, window_label: &str, kind: &str) {
     let mut owners = state
         .overlay_from_page
         .write()
-        .unwrap_or_else(|e| e.into_inner());
+        ;
     owners.insert(window_label.to_string(), belongs_to_page(kind));
 }
 
 pub fn close(app: &AppHandle, window_label: &str) {
     let label = {
         let state = app.state::<crate::ipc::AppState>();
-        let mut slots = state.overlay.write().unwrap_or_else(|e| e.into_inner());
+        let mut slots = state.overlay.write();
         slots.remove(window_label)
     };
 
@@ -234,7 +234,7 @@ pub fn close(app: &AppHandle, window_label: &str) {
             let flag = state
                 .overlay_from_page
                 .write()
-                .unwrap_or_else(|e| e.into_inner())
+                
                 .remove(window_label);
             flag.unwrap_or(false)
         };
@@ -260,7 +260,7 @@ pub fn close(app: &AppHandle, window_label: &str) {
             let mut thumbs = state
                 .overlay_thumb
                 .write()
-                .unwrap_or_else(|e| e.into_inner());
+                ;
             thumbs.remove(window_label)
         };
         if !was_thumb {

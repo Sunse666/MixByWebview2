@@ -53,7 +53,7 @@ fn broadcast_theme(app: &AppHandle, theme: &Theme) {
         .state::<AppState>()
         .overlay
         .read()
-        .unwrap_or_else(|e| e.into_inner())
+        
         .values()
         .cloned()
         .collect::<Vec<_>>()

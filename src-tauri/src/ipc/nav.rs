@@ -143,7 +143,7 @@ fn collect_suggestions(state: &AppState, text: &str, limit: usize) -> Vec<Sugges
 
     let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
     {
-        let history = state.history.read().unwrap_or_else(|e| e.into_inner());
+        let history = state.history.read();
         for visit in history.iter() {
             if seen.insert(visit.url.clone()) {
                 found.push(Suggestion {
@@ -155,7 +155,7 @@ fn collect_suggestions(state: &AppState, text: &str, limit: usize) -> Vec<Sugges
         }
     }
     {
-        let bookmarks = state.bookmarks.read().unwrap_or_else(|e| e.into_inner());
+        let bookmarks = state.bookmarks.read();
         for bookmark in bookmarks.iter() {
             if seen.insert(bookmark.url.clone()) {
                 found.push(Suggestion {
@@ -202,7 +202,7 @@ pub async fn suggest_open(
         .state::<AppState>()
         .overlay
         .read()
-        .unwrap_or_else(|e| e.into_inner())
+        
         .contains_key(window.label())
     {
         return Ok(());
@@ -246,7 +246,7 @@ pub async fn suggest_active(
     let label = state
         .overlay
         .read()
-        .unwrap_or_else(|e| e.into_inner())
+        
         .get(window.label())
         .cloned();
     let Some(label) = label else {
@@ -284,7 +284,7 @@ fn push_suggestions(app: &AppHandle, window_label: &str, state: &AppState) -> Ve
         .state::<AppState>()
         .overlay
         .read()
-        .unwrap_or_else(|e| e.into_inner())
+        
         .get(window_label)
         .cloned();
 
@@ -315,7 +315,7 @@ pub async fn url_type(
     if !state
         .url_edit
         .read()
-        .unwrap_or_else(|e| e.into_inner())
+        
         .contains_key(window.label())
     {
         return Ok(());
@@ -376,7 +376,7 @@ pub(crate) fn set_url_edit(app: &AppHandle, window: &tauri::Window, on: bool) {
         state
             .url_edit
             .write()
-            .unwrap_or_else(|e| e.into_inner())
+            
             .insert(window.label().to_string(), String::new());
     }
 }
@@ -386,7 +386,7 @@ fn exit_url_edit(app: &AppHandle, window_label: &str) {
         state
             .url_edit
             .write()
-            .unwrap_or_else(|e| e.into_inner())
+            
             .remove(window_label);
     }
     if let Some(win) = app.get_window(window_label) {

@@ -123,7 +123,7 @@ pub fn capture_later(app: tauri::AppHandle, id: String, window_label: String) {
     let shown = state
       .shown_at
       .read()
-      .unwrap_or_else(|e| e.into_inner())
+      
       .get(&id)
       .copied()
       .unwrap_or(0);
@@ -157,14 +157,14 @@ pub fn capture_later(app: tauri::AppHandle, id: String, window_label: String) {
       remember(&id, png.clone());
       if let Some(state) = app.try_state::<crate::ipc::AppState>() {
         let overlay = {
-          let guard = state.overlay.read().unwrap_or_else(|e| e.into_inner());
+          let guard = state.overlay.read();
           guard.get(&window_label).cloned()
         };
         if let Some(overlay) = overlay {
           if state
             .overlay_thumb
             .read()
-            .unwrap_or_else(|e| e.into_inner())
+            
             .contains(&window_label)
           {
             use tauri::Emitter;

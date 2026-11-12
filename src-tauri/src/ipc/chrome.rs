@@ -94,7 +94,7 @@ pub async fn context_menu(
         tab: None,
     };
     {
-        let mut slot = state.menu_context.write().unwrap_or_else(|e| e.into_inner());
+        let mut slot = state.menu_context.write();
         *slot = context.clone();
     }
 
@@ -137,7 +137,7 @@ pub async fn tab_menu(
     y: f64,
 ) -> Result<(), AppError> {
     {
-        let mut context = state.menu_context.write().unwrap_or_else(|e| e.into_inner());
+        let mut context = state.menu_context.write();
         context.tab = Some(id);
     }
     let _ = app.emit_to(window.label(), "chrome-menu", ());
@@ -147,7 +147,7 @@ pub async fn tab_menu(
 
 #[tauri::command]
 pub async fn menu_context_get(_window: tauri::Window, state: State<'_, AppState>) -> Result<MenuContext, AppError> {
-    Ok(state.menu_context.read().unwrap_or_else(|e| e.into_inner()).clone())
+    Ok(state.menu_context.read().clone())
 }
 
 /// What the page gets back: an answer, or a prompt id to poll.
@@ -349,7 +349,7 @@ pub async fn page_failed(
     let failed = state
         .pending
         .read()
-        .unwrap_or_else(|e| e.into_inner())
+        
         .get(&id)
         .cloned()
         .unwrap_or_default();
@@ -400,7 +400,7 @@ pub async fn overlay_toggle(
         .state::<AppState>()
         .overlay
         .read()
-        .unwrap_or_else(|e| e.into_inner())
+        
         .contains_key(window.label());
     if open {
         crate::overlay::close(&app, window.label());

@@ -25,7 +25,6 @@ use crate::state::Settings;
 use crate::tabs::Tab;
 use crate::theme::Theme;
 use serde::{Deserialize, Serialize};
-use std::sync::RwLock;
 use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_runtime::ResizeDirection;
 
@@ -60,35 +59,35 @@ pub struct AppState {
     pub settings: parking_lot::RwLock<Settings>,
     pub theme: parking_lot::RwLock<Theme>,
     pub baseline: parking_lot::RwLock<Theme>,
-    pub downloads: RwLock<Vec<crate::downloads::DownloadTask>>,
-    pub menu_context: RwLock<MenuContext>,
+    pub downloads: parking_lot::RwLock<Vec<crate::downloads::DownloadTask>>,
+    pub menu_context: parking_lot::RwLock<MenuContext>,
     /// Overlay webview label per window, so each window has its own menu.
-    pub overlay: RwLock<std::collections::HashMap<String, String>>,
+    pub overlay: parking_lot::RwLock<std::collections::HashMap<String, String>>,
     /// Whether each window's overlay came from a page rather than the chrome strip.
-    pub overlay_from_page: RwLock<std::collections::HashMap<String, bool>>,
+    pub overlay_from_page: parking_lot::RwLock<std::collections::HashMap<String, bool>>,
     /// Windows whose overlay is the tab hover card.
-    pub overlay_thumb: RwLock<std::collections::HashSet<String>>,
+    pub overlay_thumb: parking_lot::RwLock<std::collections::HashSet<String>>,
     /// Last time each tab was on screen, in seconds.
-    pub shown_at: RwLock<std::collections::HashMap<String, u64>>,
+    pub shown_at: parking_lot::RwLock<std::collections::HashMap<String, u64>>,
     pub permissions: crate::permissions::PermissionStore,
-    pub snap: std::sync::Mutex<crate::snap::SnapState>,
+    pub snap: parking_lot::Mutex<crate::snap::SnapState>,
     pub opts: crate::tabs::WebviewOpts,
     pub extensions: Vec<ExtInfo>,
-    pub history: RwLock<Vec<Visit>>,
+    pub history: parking_lot::RwLock<Vec<Visit>>,
     /// host -> favicon url, shared by history, bookmarks and the new tab page.
-    pub favicons: RwLock<crate::favicons::Favicons>,
+    pub favicons: parking_lot::RwLock<crate::favicons::Favicons>,
     /// What is typed in each window's address bar, by window label.
     pub suggest_text: parking_lot::RwLock<std::collections::HashMap<String, String>>,
     pub suggest_width: parking_lot::RwLock<f64>,
     /// Recently closed tabs per window, oldest first.
-    pub closed_tabs: RwLock<std::collections::HashMap<String, Vec<(String, String)>>>,
+    pub closed_tabs: parking_lot::RwLock<std::collections::HashMap<String, Vec<(String, String)>>>,
     pub zoom: parking_lot::RwLock<crate::zoom::ZoomStore>,
     /// Windows whose address bar currently has the keyboard.
-    pub url_edit: RwLock<std::collections::HashMap<String, String>>,
+    pub url_edit: parking_lot::RwLock<std::collections::HashMap<String, String>>,
     /// Origin of the bundled pages.
     pub app_base: parking_lot::RwLock<String>,
     /// Tab id -> the url it is currently loading.
-    pub pending: RwLock<std::collections::HashMap<String, String>>,
+    pub pending: parking_lot::RwLock<std::collections::HashMap<String, String>>,
     /// Reachability cache shared with the probe thread.
     pub reachability: std::sync::Arc<crate::net::Reachability>,
     /// Result of the last in-page translation.
@@ -100,8 +99,8 @@ pub struct AppState {
     /// Whether the last in-page search matched anything.
     pub find_hit: parking_lot::RwLock<bool>,
     /// Tab id -> the url whose error page is already showing.
-    pub error_shown: RwLock<std::collections::HashMap<String, String>>,
-    pub bookmarks: RwLock<Vec<Bookmark>>,
+    pub error_shown: parking_lot::RwLock<std::collections::HashMap<String, String>>,
+    pub bookmarks: parking_lot::RwLock<Vec<Bookmark>>,
     pub scripts: Vec<crate::userscripts::ScriptInfo>,
 }
 
@@ -126,36 +125,36 @@ impl AppState {
         Self {
             opts,
             extensions,
-            favicons: RwLock::new(crate::favicons::Favicons::load(&dirs.favicons_file)),
-        history: RwLock::new(history),
+            favicons: parking_lot::RwLock::new(crate::favicons::Favicons::load(&dirs.favicons_file)),
+        history: parking_lot::RwLock::new(history),
             suggest_text: parking_lot::RwLock::new(std::collections::HashMap::new()),
             suggest_width: parking_lot::RwLock::new(420.0),
-            closed_tabs: RwLock::new(std::collections::HashMap::new()),
+            closed_tabs: parking_lot::RwLock::new(std::collections::HashMap::new()),
             zoom: parking_lot::RwLock::new(crate::zoom::ZoomStore::load(&dirs.zoom_file)),
-            url_edit: RwLock::new(std::collections::HashMap::new()),
+            url_edit: parking_lot::RwLock::new(std::collections::HashMap::new()),
             app_base: parking_lot::RwLock::new(String::new()),
-            pending: RwLock::new(std::collections::HashMap::new()),
+            pending: parking_lot::RwLock::new(std::collections::HashMap::new()),
             reachability: std::sync::Arc::new(crate::net::Reachability::default()),
             translate_result: parking_lot::RwLock::new((0, None)),
             translated_tabs: parking_lot::RwLock::new(std::collections::HashSet::new()),
             fullscreen: parking_lot::RwLock::new(std::collections::HashSet::new()),
             find_hit: parking_lot::RwLock::new(true),
-            error_shown: RwLock::new(std::collections::HashMap::new()),
-            bookmarks: RwLock::new(bookmarks),
+            error_shown: parking_lot::RwLock::new(std::collections::HashMap::new()),
+            bookmarks: parking_lot::RwLock::new(bookmarks),
             scripts,
             dirs,
             cores: parking_lot::RwLock::new(cores),
             settings: parking_lot::RwLock::new(settings),
             baseline: parking_lot::RwLock::new(theme.clone()),
             theme: parking_lot::RwLock::new(theme),
-            downloads: RwLock::new(downloads),
-            menu_context: RwLock::new(MenuContext::default()),
-            overlay: RwLock::new(std::collections::HashMap::new()),
-            overlay_from_page: RwLock::new(std::collections::HashMap::new()),
-            overlay_thumb: RwLock::new(std::collections::HashSet::new()),
-            shown_at: RwLock::new(std::collections::HashMap::new()),
+            downloads: parking_lot::RwLock::new(downloads),
+            menu_context: parking_lot::RwLock::new(MenuContext::default()),
+            overlay: parking_lot::RwLock::new(std::collections::HashMap::new()),
+            overlay_from_page: parking_lot::RwLock::new(std::collections::HashMap::new()),
+            overlay_thumb: parking_lot::RwLock::new(std::collections::HashSet::new()),
+            shown_at: parking_lot::RwLock::new(std::collections::HashMap::new()),
             permissions: crate::permissions::PermissionStore::default(),
-            snap: std::sync::Mutex::new(crate::snap::SnapState::default()),
+            snap: parking_lot::Mutex::new(crate::snap::SnapState::default()),
         }
     }
 
@@ -605,7 +604,7 @@ async fn cycle_tab(app: &AppHandle, window: &tauri::Window, delta: isize) {
 pub fn show_error_page(app: &AppHandle, id: &str, failed_url: &str) -> Option<String> {
     let state = app.try_state::<AppState>()?;
     {
-        let mut shown = state.error_shown.write().unwrap_or_else(|e| e.into_inner());
+        let mut shown = state.error_shown.write();
         if shown.get(id).map(String::as_str) == Some(failed_url) {
             return None;
         }

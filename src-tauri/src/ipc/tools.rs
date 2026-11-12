@@ -4,14 +4,14 @@ use super::*;
 
 #[tauri::command]
 pub async fn download_list(_window: tauri::Window, state: State<'_, AppState>) -> Result<Vec<crate::downloads::DownloadTask>, AppError> {
-    Ok(state.downloads.read().unwrap_or_else(|e| e.into_inner()).clone())
+    Ok(state.downloads.read().clone())
 }
 
 /// Drops finished entries from the list; files on disk stay.
 #[tauri::command]
 pub async fn download_clear(webview: tauri::Webview, state: State<'_, AppState>) -> Result<(), AppError> {
     require_trusted(&webview)?;
-    let mut tasks = state.downloads.write().unwrap_or_else(|e| e.into_inner());
+    let mut tasks = state.downloads.write();
     tasks.retain(|task| task.state == "started");
     Ok(())
 }
@@ -24,7 +24,7 @@ pub async fn download_open(
     id: u64,
 ) -> Result<(), AppError> {
     let path = {
-        let tasks = state.downloads.read().unwrap_or_else(|e| e.into_inner());
+        let tasks = state.downloads.read();
         tasks
             .iter()
             .find(|task| task.id == id)
@@ -44,7 +44,7 @@ pub async fn download_reveal(
     id: u64,
 ) -> Result<(), AppError> {
     let path = {
-        let tasks = state.downloads.read().unwrap_or_else(|e| e.into_inner());
+        let tasks = state.downloads.read();
         tasks
             .iter()
             .find(|task| task.id == id)
@@ -79,7 +79,7 @@ pub(crate) fn shell_open(path: &std::path::Path) -> Result<(), AppError> {
 #[tauri::command]
 pub async fn download_open_dir(_window: tauri::Window, state: State<'_, AppState>, id: u64) -> Result<(), AppError> {
     let path = {
-        let tasks = state.downloads.read().unwrap_or_else(|e| e.into_inner());
+        let tasks = state.downloads.read();
         tasks
             .iter()
             .find(|task| task.id == id)
@@ -550,7 +550,7 @@ pub async fn download_retry(app: AppHandle, state: State<'_, AppState>, id: u64)
 }
 
 fn task_parts(state: &AppState, id: u64) -> Option<(String, String)> {
-    let tasks = state.downloads.read().unwrap_or_else(|e| e.into_inner());
+    let tasks = state.downloads.read();
     tasks
         .iter()
         .find(|task| task.id == id)
@@ -564,7 +564,7 @@ fn task_url(state: &AppState, id: u64) -> Option<String> {
 
 fn mark_paused(app: &AppHandle, state: &AppState, id: u64, paused: bool) {
     let tasks = {
-        let mut tasks = state.downloads.write().unwrap_or_else(|e| e.into_inner());
+        let mut tasks = state.downloads.write();
         if let Some(task) = tasks.iter_mut().find(|task| task.id == id) {
             task.paused = paused;
             task.state = crate::downloads::Phase::after_pause(paused)

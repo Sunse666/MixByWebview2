@@ -306,7 +306,7 @@ pub fn save_history(app: &tauri::AppHandle) {
     let Some(state) = app.try_state::<AppState>() else {
         return;
     };
-    let tasks = state.downloads.read().unwrap_or_else(|e| e.into_inner()).clone();
+    let tasks = state.downloads.read().clone();
     let path = history_file(&state.dirs);
     if let Ok(bytes) = serde_json::to_vec_pretty(&tasks) {
         if let Err(err) = crate::paths::write_atomic(&path, &bytes) {
@@ -339,7 +339,7 @@ pub fn reconcile(app: &tauri::AppHandle) {
         return;
     };
     let stale: Vec<u64> = {
-        let tasks = state.downloads.read().unwrap_or_else(|e| e.into_inner());
+        let tasks = state.downloads.read();
         tasks
             .iter()
             .filter(|task| Phase::parse(&task.state).is_live() && !crate::fetch::busy(task.id))
@@ -355,7 +355,7 @@ pub fn reconcile(app: &tauri::AppHandle) {
 /// The task for this id, if it still exists.
 fn task_index(app: &tauri::AppHandle, id: u64) -> Option<usize> {
     let state = app.try_state::<AppState>()?;
-    let tasks = state.downloads.read().unwrap_or_else(|e| e.into_inner());
+    let tasks = state.downloads.read();
     tasks.iter().position(|task| task.id == id)
 }
 
@@ -368,7 +368,7 @@ pub fn set_total(app: &tauri::AppHandle, id: u64, total: Option<u64>) {
         return;
     };
     let tasks = {
-        let mut tasks = state.downloads.write().unwrap_or_else(|e| e.into_inner());
+        let mut tasks = state.downloads.write();
         if let Some(task) = tasks.get_mut(index) {
             task.total = total;
         }
@@ -387,7 +387,7 @@ pub fn set_progress(app: &tauri::AppHandle, id: u64, bytes: u64, speed: u64) {
     };
     let mut changed = false;
     let tasks = {
-        let mut tasks = state.downloads.write().unwrap_or_else(|e| e.into_inner());
+        let mut tasks = state.downloads.write();
         if let Some(task) = tasks.get_mut(index) {
             if task.bytes != bytes || task.speed != speed {
                 task.bytes = bytes;
@@ -413,7 +413,7 @@ pub fn set_state(app: &tauri::AppHandle, id: u64, next: &str) {
         return;
     };
     let tasks = {
-        let mut tasks = state.downloads.write().unwrap_or_else(|e| e.into_inner());
+        let mut tasks = state.downloads.write();
         if let Some(task) = tasks.get_mut(index) {
             task.state = next.to_string();
             task.paused = next == "interrupted";
@@ -440,7 +440,7 @@ pub fn start_with_engine(app: &tauri::AppHandle, url: &str, path: &Path) -> u64 
         let Some(state) = app.try_state::<AppState>() else {
             return 0;
         };
-        let tasks = state.downloads.read().unwrap_or_else(|e| e.into_inner());
+        let tasks = state.downloads.read();
         tasks
             .iter()
             .rev()
@@ -481,7 +481,7 @@ fn record_into(app: &tauri::AppHandle, id: u64, url: &str, path: &Path) {
         return;
     };
     let tasks = {
-        let mut tasks = state.downloads.write().unwrap_or_else(|e| e.into_inner());
+        let mut tasks = state.downloads.write();
         tasks.push(DownloadTask {
             id,
             url: url.to_string(),
@@ -518,7 +518,7 @@ fn record(app: &tauri::AppHandle, url: Option<&str>, path: Option<&Path>, state:
     };
 
     let tasks = {
-        let mut tasks = guard.downloads.write().unwrap_or_else(|e| e.into_inner());
+        let mut tasks = guard.downloads.write();
         match state {
             "started" => {
                 let target = path.map(Path::to_path_buf).unwrap_or_default();
@@ -575,7 +575,7 @@ pub fn start_progress_watch(app: tauri::AppHandle) {
         };
         let mut changed = false;
         let tasks = {
-            let mut tasks = state.downloads.write().unwrap_or_else(|e| e.into_inner());
+            let mut tasks = state.downloads.write();
             for task in tasks
                 .iter_mut()
                 .filter(|task| task.state == "started" || task.state == "interrupted")
