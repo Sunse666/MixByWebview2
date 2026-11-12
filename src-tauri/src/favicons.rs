@@ -1,5 +1,4 @@
-//! Site favicons, keyed by host, kept across restarts so bookmarks, history
-//! and the new tab page can show a real icon without reloading the site.
+//! Site favicons, keyed by host, kept across restarts.
 
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -13,8 +12,7 @@ pub struct Favicons {
     /// host -> icon url
     #[serde(default)]
     pub hosts: BTreeMap<String, String>,
-    /// Insertion order. Evicting by key order dropped whichever host sorted
-    /// first, which is rarely the one that has gone unused longest.
+    /// Insertion order, so the least recently used host is evicted.
     #[serde(default)]
     pub order: Vec<String>,
 }
@@ -97,7 +95,6 @@ pub fn store_icon(dir: &Path, host: &str, bytes: &[u8], content_type: &str) -> O
     };
     std::fs::create_dir_all(dir).ok()?;
     let path = dir.join(format!("{host}.{extension}"));
-    // Write then rename: a torn icon file would be served forever after.
     crate::paths::write_atomic(&path, bytes).ok()?;
     Some(path)
 }

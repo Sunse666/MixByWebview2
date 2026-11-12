@@ -1,6 +1,4 @@
-//! Page translation through Microsoft's translator, the same engine Edge uses.
-//! No key is needed: the web translator page hands out a short lived token and a
-//! session cookie, and the text endpoint accepts one string per request.
+//! Page translation through Microsoft's translator.
 
 use parking_lot::Mutex;
 use std::time::{Duration, Instant};
@@ -78,8 +76,6 @@ fn batches(texts: &[String]) -> Vec<Vec<usize>> {
   for (index, text) in texts.iter().enumerate() {
     let len = text.chars().count() + 1;
     if len > CHUNK {
-      // Too big for any batch, so it goes alone; the caller clips it to CHUNK
-      // before sending rather than dropping the tail silently here.
       if !current.is_empty() {
         out.push(std::mem::take(&mut current));
         size = 0;
@@ -177,8 +173,6 @@ async fn translate_many(
 }
 
 /// Translates one string per slot; empty results mean "leave it alone".
-/// The Microsoft engine comes first because it auto-detects the language; the
-/// keyless fallback only takes over when the first engine returns nothing.
 pub async fn translate(texts: Vec<String>, to: &str) -> Vec<String> {
   let wanted = texts.len();
   let primary = translate_microsoft(texts.clone(), to).await;
@@ -204,13 +198,11 @@ async fn translate_microsoft(texts: Vec<String>, to: &str) -> Vec<String> {
     return out;
   };
 
-  // Short pages: parallel single requests beat batching.
   if texts.len() <= 12 {
     return translate_many(&client, &first, &texts, to).await;
   }
 
   for group in batches(&texts) {
-    // A single long string goes on its own, truncated to the request limit.
     if group.len() == 1 {
       let only = &texts[group[0]];
       let clipped: String = only.chars().take(CHUNK).collect();
@@ -234,7 +226,6 @@ async fn translate_microsoft(texts: Vec<String>, to: &str) -> Vec<String> {
             out[*slot] = part.trim().to_string();
           }
         } else {
-          // Line structure changed; fall back to one request per string.
           for index in group {
             let text = &texts[index];
             if let Ok(one) = translate_chunk(&client, &first, text, to).await {

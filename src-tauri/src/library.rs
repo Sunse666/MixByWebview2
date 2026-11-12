@@ -43,7 +43,7 @@ pub fn now() -> u64 {
         .unwrap_or(0)
 }
 
-/// Only http(s) pages are worth remembering; about:blank and file paths are not.
+/// Only http(s) pages are worth remembering.
 pub fn worth_recording(url: &str) -> bool {
     (url.starts_with("https://") || url.starts_with("http://")) && !url.contains("127.0.0.1")
 }
@@ -61,9 +61,7 @@ pub fn load_visits(path: &Path) -> Vec<Visit> {
     }
 }
 
-/// A file that cannot be parsed is moved aside rather than left in place: the
-/// next save would otherwise overwrite it with an empty list and the entries
-/// would be gone for good.
+/// A file that cannot be parsed is moved aside rather than left in place.
 fn keep_unreadable(path: &Path, what: &str, reason: &str) {
     let extension = path
         .extension()

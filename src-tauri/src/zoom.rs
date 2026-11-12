@@ -54,7 +54,6 @@ impl ZoomStore {
         if let Some(level) = self.sites.get(&host) {
             return *level;
         }
-        // Profiles written before "www." was stripped keep working.
         self.sites
             .get(&format!("www.{host}"))
             .copied()
@@ -80,8 +79,7 @@ pub fn normalize(level: f64) -> f64 {
     (((level * 10.0).round()) / 10.0).clamp(MIN, MAX)
 }
 
-/// "https://www.example.com/a?b" -> "example.com"; the www prefix is dropped so
-/// a site keeps its zoom after redirecting between the two forms.
+/// Host part of a url, without the "www." prefix.
 pub fn host_of(url: &str) -> Option<String> {
     let rest = url.split_once("://").map(|(_, tail)| tail)?;
     let authority = rest.split(['/', '?', '#']).next().unwrap_or_default();

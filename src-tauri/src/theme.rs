@@ -3,8 +3,7 @@ use std::path::Path;
 
 pub const SCHEMA: u32 = 2;
 
-/// One token per surface the UI paints. Empty strings mean "derive it",
-/// which keeps hand written theme files short.
+/// One token per surface the UI paints.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Colors {
@@ -140,7 +139,6 @@ impl Theme {
                 *value = default.clone();
             }
         }
-        // Derived tokens may stay empty; anything else must be a real colour.
         for value in [
             &mut self.colors.tab,
             &mut self.colors.tab_text,
@@ -155,7 +153,6 @@ impl Theme {
         self.tab_radius = self.tab_radius.clamp(0.0, 20.0);
         self.font_size = self.font_size.clamp(10.0, 20.0);
         self.opacity = self.opacity.clamp(0.4, 1.0);
-        // Refuse anything that could break out of the CSS value.
         if self.font_family.contains(|c: char| c == ';' || c == '{' || c == '}' || c == '"') {
             self.font_family.clear();
         }
