@@ -598,6 +598,9 @@ pub fn open_window(
     }
 
     crate::sidebar::ensure(app, label);
+    if let Some(state) = app.try_state::<AppState>() {
+        *state.windows.focused.write() = Some(label.to_string());
+    }
 
     let handle = app.clone();
     let owner = label.to_string();
@@ -605,6 +608,11 @@ pub fn open_window(
         WindowEvent::Resized(_) | WindowEvent::ScaleFactorChanged { .. } => {
             if let Err(err) = relayout(&handle, &owner) {
                 crate::logging::warn(&format!("relayout failed: {err}"));
+            }
+        }
+        WindowEvent::Focused(true) => {
+            if let Some(state) = handle.try_state::<AppState>() {
+                *state.windows.focused.write() = Some(owner.clone());
             }
         }
         WindowEvent::CloseRequested { api, .. } => {

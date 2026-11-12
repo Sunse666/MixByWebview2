@@ -72,6 +72,9 @@ pub struct WindowMaps {
     pub url_edit: parking_lot::RwLock<std::collections::HashMap<String, String>>,
     /// Windows showing a fullscreen page.
     pub fullscreen: parking_lot::RwLock<std::collections::HashSet<String>>,
+    /// The window the user touched last. The session keeps that one, so reopening the
+    /// app brings back the window that was in use rather than the one that started.
+    pub focused: parking_lot::RwLock<Option<String>>,
 }
 
 /// Browsing data that outlives the window: history, bookmarks, site icons and zoom.
@@ -647,14 +650,13 @@ pub(crate) fn save_sessions(app: &AppHandle) {
             .collect();
         snapshots.push((label.clone(), tabs, selected, groups));
     }
-    // A hash map has no order, so without this the window restored first would be a
-    // random one and might not be the primary window at all.
-    snapshots.sort_by_key(|(label, ..)| {
-        if label == crate::window::PRIMARY {
-            (0, label.clone())
-        } else {
-            (1, label.clone())
-        }
+    // A hash map has no order. The window the user was last in goes first, so the one
+    // that gets restored is the one they were working in.
+    let focused = state.windows.focused.read().clone();
+    snapshots.sort_by_key(|(label, ..)| match &focused {
+        Some(active) if active == label => (0, label.clone()),
+        _ if label == crate::window::PRIMARY => (1, label.clone()),
+        _ => (2, label.clone()),
     });
 
     let windows: Vec<crate::session::WindowSession> = snapshots
