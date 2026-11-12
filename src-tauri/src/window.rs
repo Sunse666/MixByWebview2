@@ -526,7 +526,7 @@ pub fn open_window(
             .map(|(index, (url, scroll, pinned))| tabs::Tab {
                 id: crate::ipc::tab_label(label, index + 1),
                 url: url.clone(),
-                title: "New tab".into(),
+                title: String::new(),
                 zoom: 1.0,
                 pinned: *pinned,
                 incognito: false,

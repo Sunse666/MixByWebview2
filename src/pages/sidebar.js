@@ -101,7 +101,8 @@ function renderTabs(list) {
   const items = (list && list.tabs) || [];
   if (!items.length) return body.append(empty(t("No tabs")));
   for (const item of items) {
-    const line = row(item.title || item.url, hostOf(item.url), item.icon, () =>
+    const label = item.title || t(item.incognito ? "Incognito" : "New tab");
+    const line = row(label, hostOf(item.url), item.icon, () =>
       invoke("tab_select", { id: item.id }).catch(() => {}),
     );
     line.addEventListener("auxclick", (event) => {

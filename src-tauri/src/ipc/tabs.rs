@@ -119,11 +119,9 @@ pub async fn tab_new(
         core.tabs.push(Tab {
             id: id.clone(),
             url: target.clone(),
-            title: if incognito.unwrap_or(false) {
-                "Incognito".into()
-            } else {
-                "New tab".into()
-            },
+            // Left empty on purpose: the ui names a tab that has not loaded yet, in
+            // the language it is running in.
+            title: String::new(),
             zoom: 1.0,
             pinned: false,
             incognito: incognito.unwrap_or(false),

@@ -365,7 +365,7 @@ function fillTab(el, tab) {
 
   const label = document.createElement("span");
   label.className = "tab-title";
-  label.textContent = tab.title || "New tab";
+  label.textContent = tab.title || t(tab.incognito ? "Incognito" : "New tab");
 
   const close = document.createElement("button");
   close.className = "tab-close";
