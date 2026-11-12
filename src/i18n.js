@@ -93,7 +93,6 @@ const DICT = {
     "Tools": "工具",
     "Help": "帮助",
     "Appearance & theme": "外观与主题",
-    "Menu bar": "菜单栏",
     "Delete selected": "删除所选",
     "Enabled": "已启用",
     "What the browser actually loaded, built into it included; the switches are on the cards below":
