@@ -121,7 +121,7 @@ pub fn capture_later(app: tauri::AppHandle, id: String, window_label: String) {
     }
     const WAKE_AFTER_SECS: u64 = 30;
     let shown = state
-      .shown_at
+      .windows.shown_at
       .read()
       
       .get(&id)
@@ -157,12 +157,12 @@ pub fn capture_later(app: tauri::AppHandle, id: String, window_label: String) {
       remember(&id, png.clone());
       if let Some(state) = app.try_state::<crate::ipc::AppState>() {
         let overlay = {
-          let guard = state.overlay.read();
+          let guard = state.windows.overlay.read();
           guard.get(&window_label).cloned()
         };
         if let Some(overlay) = overlay {
           if state
-            .overlay_thumb
+            .windows.overlay_thumb
             .read()
             
             .contains(&window_label)

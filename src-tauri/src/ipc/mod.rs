@@ -52,6 +52,28 @@ pub struct Core {
     pub tick: u64,
 }
 
+/// Everything the app tracks per window: overlay panel, suggestion query, closed tabs
+/// and the rest of the address bar and hover state.
+#[derive(Default)]
+pub struct WindowMaps {
+    /// Overlay webview label per window, so each window has its own menu.
+    pub overlay: parking_lot::RwLock<std::collections::HashMap<String, String>>,
+    /// Whether each window's overlay came from a page rather than the chrome strip.
+    pub overlay_from_page: parking_lot::RwLock<std::collections::HashMap<String, bool>>,
+    /// Windows whose overlay is the tab hover card.
+    pub overlay_thumb: parking_lot::RwLock<std::collections::HashSet<String>>,
+    /// Last time each tab was on screen, in seconds.
+    pub shown_at: parking_lot::RwLock<std::collections::HashMap<String, u64>>,
+    /// What is typed in each window's address bar, by window label.
+    pub suggest_text: parking_lot::RwLock<std::collections::HashMap<String, String>>,
+    /// Recently closed tabs per window, oldest first.
+    pub closed_tabs: parking_lot::RwLock<std::collections::HashMap<String, Vec<(String, String)>>>,
+    /// Windows whose address bar currently has the keyboard.
+    pub url_edit: parking_lot::RwLock<std::collections::HashMap<String, String>>,
+    /// Windows showing a fullscreen page.
+    pub fullscreen: parking_lot::RwLock<std::collections::HashSet<String>>,
+}
+
 pub struct AppState {
     pub dirs: AppDirs,
     /// One tab set per window, keyed by the window label.
@@ -61,14 +83,8 @@ pub struct AppState {
     pub baseline: parking_lot::RwLock<Theme>,
     pub downloads: parking_lot::RwLock<Vec<crate::downloads::DownloadTask>>,
     pub menu_context: parking_lot::RwLock<MenuContext>,
-    /// Overlay webview label per window, so each window has its own menu.
-    pub overlay: parking_lot::RwLock<std::collections::HashMap<String, String>>,
-    /// Whether each window's overlay came from a page rather than the chrome strip.
-    pub overlay_from_page: parking_lot::RwLock<std::collections::HashMap<String, bool>>,
-    /// Windows whose overlay is the tab hover card.
-    pub overlay_thumb: parking_lot::RwLock<std::collections::HashSet<String>>,
-    /// Last time each tab was on screen, in seconds.
-    pub shown_at: parking_lot::RwLock<std::collections::HashMap<String, u64>>,
+    /// Overlay, suggestion and session state, one entry per window.
+    pub windows: WindowMaps,
     pub permissions: crate::permissions::PermissionStore,
     pub snap: parking_lot::Mutex<crate::snap::SnapState>,
     pub opts: crate::tabs::WebviewOpts,
@@ -76,14 +92,8 @@ pub struct AppState {
     pub history: parking_lot::RwLock<Vec<Visit>>,
     /// host -> favicon url, shared by history, bookmarks and the new tab page.
     pub favicons: parking_lot::RwLock<crate::favicons::Favicons>,
-    /// What is typed in each window's address bar, by window label.
-    pub suggest_text: parking_lot::RwLock<std::collections::HashMap<String, String>>,
     pub suggest_width: parking_lot::RwLock<f64>,
-    /// Recently closed tabs per window, oldest first.
-    pub closed_tabs: parking_lot::RwLock<std::collections::HashMap<String, Vec<(String, String)>>>,
     pub zoom: parking_lot::RwLock<crate::zoom::ZoomStore>,
-    /// Windows whose address bar currently has the keyboard.
-    pub url_edit: parking_lot::RwLock<std::collections::HashMap<String, String>>,
     /// Origin of the bundled pages.
     pub app_base: parking_lot::RwLock<String>,
     /// Tab id -> the url it is currently loading.
@@ -94,8 +104,6 @@ pub struct AppState {
     pub translate_result: parking_lot::RwLock<(usize, Option<String>)>,
     /// Tabs whose text the translator replaced.
     pub translated_tabs: parking_lot::RwLock<std::collections::HashSet<String>>,
-    /// Windows showing a fullscreen page.
-    pub fullscreen: parking_lot::RwLock<std::collections::HashSet<String>>,
     /// Whether the last in-page search matched anything.
     pub find_hit: parking_lot::RwLock<bool>,
     /// Tab id -> the url whose error page is already showing.
@@ -127,17 +135,13 @@ impl AppState {
             extensions,
             favicons: parking_lot::RwLock::new(crate::favicons::Favicons::load(&dirs.favicons_file)),
         history: parking_lot::RwLock::new(history),
-            suggest_text: parking_lot::RwLock::new(std::collections::HashMap::new()),
             suggest_width: parking_lot::RwLock::new(420.0),
-            closed_tabs: parking_lot::RwLock::new(std::collections::HashMap::new()),
             zoom: parking_lot::RwLock::new(crate::zoom::ZoomStore::load(&dirs.zoom_file)),
-            url_edit: parking_lot::RwLock::new(std::collections::HashMap::new()),
             app_base: parking_lot::RwLock::new(String::new()),
             pending: parking_lot::RwLock::new(std::collections::HashMap::new()),
             reachability: std::sync::Arc::new(crate::net::Reachability::default()),
             translate_result: parking_lot::RwLock::new((0, None)),
             translated_tabs: parking_lot::RwLock::new(std::collections::HashSet::new()),
-            fullscreen: parking_lot::RwLock::new(std::collections::HashSet::new()),
             find_hit: parking_lot::RwLock::new(true),
             error_shown: parking_lot::RwLock::new(std::collections::HashMap::new()),
             bookmarks: parking_lot::RwLock::new(bookmarks),
@@ -149,10 +153,7 @@ impl AppState {
             theme: parking_lot::RwLock::new(theme),
             downloads: parking_lot::RwLock::new(downloads),
             menu_context: parking_lot::RwLock::new(MenuContext::default()),
-            overlay: parking_lot::RwLock::new(std::collections::HashMap::new()),
-            overlay_from_page: parking_lot::RwLock::new(std::collections::HashMap::new()),
-            overlay_thumb: parking_lot::RwLock::new(std::collections::HashSet::new()),
-            shown_at: parking_lot::RwLock::new(std::collections::HashMap::new()),
+            windows: WindowMaps::default(),
             permissions: crate::permissions::PermissionStore::default(),
             snap: parking_lot::Mutex::new(crate::snap::SnapState::default()),
         }

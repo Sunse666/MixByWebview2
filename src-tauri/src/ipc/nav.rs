@@ -200,7 +200,7 @@ pub async fn suggest_open(
 ) -> Result<(), AppError> {
     if app
         .state::<AppState>()
-        .overlay
+        .windows.overlay
         .read()
         
         .contains_key(window.label())
@@ -229,7 +229,7 @@ pub async fn suggest_feed(
     text: String,
 ) -> Result<Vec<Suggestion>, AppError> {
     state
-        .suggest_text
+        .windows.suggest_text
         .write()
         .insert(window.label().to_string(), text.clone());
     Ok(push_suggestions(&app, window.label(), &state))
@@ -244,7 +244,7 @@ pub async fn suggest_active(
     index: i64,
 ) -> Result<(), AppError> {
     let label = state
-        .overlay
+        .windows.overlay
         .read()
         
         .get(window.label())
@@ -272,7 +272,7 @@ pub async fn suggest_refresh(
 
 fn push_suggestions(app: &AppHandle, window_label: &str, state: &AppState) -> Vec<Suggestion> {
     let text = state
-        .suggest_text
+        .windows.suggest_text
         .read()
         .get(window_label)
         .cloned()
@@ -282,7 +282,7 @@ fn push_suggestions(app: &AppHandle, window_label: &str, state: &AppState) -> Ve
 
     let label = app
         .state::<AppState>()
-        .overlay
+        .windows.overlay
         .read()
         
         .get(window_label)
@@ -313,7 +313,7 @@ pub async fn url_type(
     text: String,
 ) -> Result<(), AppError> {
     if !state
-        .url_edit
+        .windows.url_edit
         .read()
         
         .contains_key(window.label())
@@ -374,7 +374,7 @@ pub(crate) fn set_url_edit(app: &AppHandle, window: &tauri::Window, on: bool) {
     crate::logging::info(&format!("url edit {on} for {} ({count} tabs)", window.label()));
     if on {
         state
-            .url_edit
+            .windows.url_edit
             .write()
             
             .insert(window.label().to_string(), String::new());
@@ -384,7 +384,7 @@ pub(crate) fn set_url_edit(app: &AppHandle, window: &tauri::Window, on: bool) {
 fn exit_url_edit(app: &AppHandle, window_label: &str) {
     if let Some(state) = app.try_state::<AppState>() {
         state
-            .url_edit
+            .windows.url_edit
             .write()
             
             .remove(window_label);

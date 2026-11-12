@@ -172,7 +172,7 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
             let target = handle.clone();
             let _ = handle.run_on_main_thread(move || {
                 let state = target.state::<AppState>();
-                state.fullscreen.write().insert(PRIMARY.to_string());
+                state.windows.fullscreen.write().insert(PRIMARY.to_string());
                 let _ = relayout(&target, PRIMARY);
                 crate::logging::info("debug: page marked fullscreen");
             });
@@ -476,7 +476,7 @@ pub fn open_window(
 
     let fullscreen = app
         .try_state::<AppState>()
-        .map(|state| state.fullscreen.read().contains(label))
+        .map(|state| state.windows.fullscreen.read().contains(label))
         .unwrap_or(false);
     let chrome_h = if fullscreen {
         0.0
@@ -668,7 +668,7 @@ pub fn relayout(app: &AppHandle, label: &str) -> Result<(), tauri::Error> {
     let (width, height) = logical_size(&win)?;
     let fullscreen = app
         .try_state::<AppState>()
-        .is_some_and(|state| state.fullscreen.read().contains(label));
+        .is_some_and(|state| state.windows.fullscreen.read().contains(label));
     let chrome_h = if fullscreen {
         0.0
     } else {

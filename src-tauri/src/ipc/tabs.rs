@@ -201,7 +201,7 @@ pub async fn tab_close(app: AppHandle, window: tauri::Window, state: State<'_, A
         if let Some(index) = core.tabs.iter().position(|tab| tab.id == id) {
             let closed = core.tabs[index].clone();
             if !closed.incognito {
-                let mut history = state.closed_tabs.write();
+                let mut history = state.windows.closed_tabs.write();
                 let list = history.entry(window.label().to_string()).or_default();
                 list.push((closed.url, closed.title));
                 if list.len() > 20 {
@@ -327,7 +327,7 @@ pub async fn thumb_show(
     crate::overlay::open_at(&app, &window, &kind, left, top, width, height)
         .map_err(|err| AppError::new("overlay", err))?;
     app.state::<AppState>()
-        .overlay_thumb
+        .windows.overlay_thumb
         .write()
         
         .insert(window.label().to_string());
@@ -651,7 +651,7 @@ pub async fn tab_reopen(
     state: State<'_, AppState>,
 ) -> Result<bool, AppError> {
     let Some((url, _title)) = state
-        .closed_tabs
+        .windows.closed_tabs
         .write()
         
         .get_mut(window.label())
@@ -960,7 +960,7 @@ pub(crate) fn sync_visibility(app: &AppHandle, label: &str) {
                 let _ = webview.show();
                 if let Some(state) = app.try_state::<AppState>() {
                     state
-                        .shown_at
+                        .windows.shown_at
                         .write()
                         
                         .insert(id.clone(), crate::library::now());

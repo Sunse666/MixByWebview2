@@ -129,7 +129,7 @@ pub fn open_url(
     let _ = webview.set_focus();
     {
         let state = app.state::<crate::ipc::AppState>();
-        let mut slots = state.overlay.write();
+        let mut slots = state.windows.overlay.write();
         slots.insert(win.label().to_string(), label.clone());
     }
     crate::logging::info(&format!("overlay open {page}"));
@@ -191,7 +191,7 @@ pub fn open_at(
     }
     {
         let state = app.state::<crate::ipc::AppState>();
-        let mut slots = state.overlay.write();
+        let mut slots = state.windows.overlay.write();
         slots.insert(win.label().to_string(), label.clone());
     }
     crate::logging::info(&format!("overlay open {kind} at {x:.0},{y:.0}"));
@@ -207,7 +207,7 @@ fn belongs_to_page(kind: &str) -> bool {
 fn remember_owner(app: &AppHandle, window_label: &str, kind: &str) {
     let state = app.state::<crate::ipc::AppState>();
     let mut owners = state
-        .overlay_from_page
+        .windows.overlay_from_page
         .write()
         ;
     owners.insert(window_label.to_string(), belongs_to_page(kind));
@@ -216,7 +216,7 @@ fn remember_owner(app: &AppHandle, window_label: &str, kind: &str) {
 pub fn close(app: &AppHandle, window_label: &str) {
     let label = {
         let state = app.state::<crate::ipc::AppState>();
-        let mut slots = state.overlay.write();
+        let mut slots = state.windows.overlay.write();
         slots.remove(window_label)
     };
 
@@ -232,7 +232,7 @@ pub fn close(app: &AppHandle, window_label: &str) {
         let from_page = {
             let state = app.state::<crate::ipc::AppState>();
             let flag = state
-                .overlay_from_page
+                .windows.overlay_from_page
                 .write()
                 
                 .remove(window_label);
@@ -258,7 +258,7 @@ pub fn close(app: &AppHandle, window_label: &str) {
         let was_thumb = {
             let state = app.state::<crate::ipc::AppState>();
             let mut thumbs = state
-                .overlay_thumb
+                .windows.overlay_thumb
                 .write()
                 ;
             thumbs.remove(window_label)

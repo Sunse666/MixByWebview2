@@ -294,7 +294,7 @@ pub async fn page_fullscreen(
 ) -> Result<(), AppError> {
     let owner = window_of_tab(webview.label()).to_string();
     {
-        let mut set = state.fullscreen.write();
+        let mut set = state.windows.fullscreen.write();
         if on {
             set.insert(owner.clone());
         } else {
@@ -398,7 +398,7 @@ pub async fn overlay_toggle(
 ) -> Result<bool, AppError> {
     let open = app
         .state::<AppState>()
-        .overlay
+        .windows.overlay
         .read()
         
         .contains_key(window.label());

@@ -51,7 +51,7 @@ fn broadcast_theme(app: &AppHandle, theme: &Theme) {
     let mut labels = vec!["w1-chrome".to_string()];
     for label in app
         .state::<AppState>()
-        .overlay
+        .windows.overlay
         .read()
         
         .values()
