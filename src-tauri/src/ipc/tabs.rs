@@ -14,7 +14,7 @@ fn spawn_tab(
         .ok_or_else(|| AppError::new("no_window", "window is missing"))?;
     let opts = app.state::<AppState>().opts.clone();
     let (width, height) = crate::window::logical_size(&win)?;
-    crate::tabs::create(
+    let webview = crate::tabs::create(
         &win,
         id,
         url,
@@ -23,7 +23,11 @@ fn spawn_tab(
         &opts,
         incognito,
     )
-    .map_err(AppError::from)
+    .map_err(AppError::from)?;
+    // A new tab is created at the full window width, so it would cover the sidebar
+    // until something resizes the window. Put everything back where the plan says.
+    let _ = crate::window::relayout(app, label);
+    Ok(webview)
 }
 
 
