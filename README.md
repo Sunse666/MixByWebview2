@@ -4,9 +4,11 @@
 
 ## 快速开始
 
-1. 解压 `Mix-0.1.0-release.zip` 到任意目录
+1. 解压 `Mix-0.3.0-release.zip`（`dist/` 里按版本号命名）到任意目录
 2. 双击 `mix.exe`
 3. 首次启动会在同目录生成 `UserData/`、`crx/`、`javascript/`
+
+程序目录不可写时（例如放在 `Program Files` 下），`UserData/` 会回落到系统用户目录，启动日志第一行会写明实际路径。
 
 ## 目录结构
 
@@ -33,7 +35,10 @@ Mix/
 
 **浏览**
 - 多标签 / 多窗口 / 无痕模式
-- 标签固定、撤销关闭（Ctrl+Shift+T）
+- 标签分组（Ctrl+Shift+G）、固定标签、撤销关闭（Ctrl+Shift+T）
+- 标签搜索（Ctrl+Shift+A）、悬停预览缩略图
+- 后台标签挂起（省内存）与冻结，白名单域名不挂起
+- 侧边栏（书签 / 下载 / 历史，可放左或右）
 - 会话恢复、全屏、页内查找
 
 **数据**
@@ -48,7 +53,8 @@ Mix/
 **界面**
 - 内部页面：新标签页、历史、书签、下载、扩展、设置、用户脚本
 - 命令面板：Ctrl+Shift+P（搜索动作与历史站点）
-- 主题：7 个颜色 + 圆角/字号，支持实时预览与导入导出
+- 主题：9 个颜色 + 圆角/字号，支持实时预览与导入导出
+- 页内翻译：点工具栏的「文」原地替换正文，再点一次还原原文（失败会在右上角提示）
 - 中英双语（设置 → 语言）
 
 **系统**
@@ -123,18 +129,26 @@ Mix/
 
 - **不支持密码管理**：没有凭据库集成，也没有自动填充
 - **跨域 iframe、Shadow DOM 内的文字无法翻译**
-- **只能装 MV3 扩展**
+- **只能装 MV3 扩展**，且扩展的 popup 气泡打不开（WebView2 没暴露该接口），只能看扩展信息
 - **画布上的文字无法选中或翻译**
+- **只在 Windows 上编译验证过**：macOS / Linux 的适配层还没写（`src-tauri/src/platform/` 里只有 `windows.rs`）
 
 ## 从源码构建
 
 需要 Rust 1.80+ 和 Node 22。
 
 ```powershell
+# 先跑能自动化的检查：内部页构建、词条、硬编码文案、命令清单一致性、单元测试
+powershell -File scripts\check-all.ps1
+
 cd src-tauri
 cargo build --release
 powershell -File ..\scripts\build-portable.ps1
 ```
+
+新增 IPC 命令后必须跑一次 `node scripts/gen-commands.js`：它把 `main.rs` 里的命令清单同步到
+`build.rs`（ACL 生成）和 `capabilities/default.json`（本地页面授权），三份清单不再手工维护。
+设计文档在 `docs/`，不随仓库分发。
 
 产物在 `dist/Mix-<version>-release.zip`。
 
