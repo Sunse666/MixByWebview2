@@ -7,14 +7,11 @@ use tauri::{
 use crate::paths::AppDirs;
 use std::sync::OnceLock;
 
-/// Action -> combo overrides for the forwarder that runs in every page (frames
-/// cannot see chrome keydown, so shortcuts are forwarded to Rust instead).
-/// A lock rather than a OnceLock: a setting changed in the ui has to win over
-/// the one read at startup.
+/// Action -> combo overrides for the forwarder that runs in every page.
 static SHORTCUTS: std::sync::RwLock<Option<std::collections::BTreeMap<String, String>>> =
     std::sync::RwLock::new(None);
 
-/// Replaces the override map; pages opened later take a copy of it.
+/// Replaces the override map.
 pub fn set_shortcuts(map: std::collections::BTreeMap<String, String>) {
     *SHORTCUTS.write().unwrap_or_else(|e| e.into_inner()) = Some(map);
 }
@@ -27,7 +24,7 @@ fn shortcut_map() -> std::collections::BTreeMap<String, String> {
         .unwrap_or_default()
 }
 
-/// Right button gestures, on by default like every gesture browser.
+/// Right button gestures.
 static GESTURES: std::sync::RwLock<Option<GestureSetup>> = std::sync::RwLock::new(None);
 
 /// Everything the injected engine needs, pre-serialised for the page.
@@ -90,11 +87,9 @@ fn shortcut_prefix() -> String {
     );
     out
 }
-/// Overlay used by the diagnose command: reports what a press lands on.
+/// Reports what a press lands on, for the diagnose command.
 pub const DRAG_PROBE: &str = include_str!("injected/drag_probe.js");
-/// Pushes everything the page init scripts copy at creation time. Runs at
-/// startup and again whenever a setting changes, so a tab opened after a change
-/// is never configured with the previous values.
+/// Pushes everything the page init scripts copy at creation time.
 pub fn apply_settings(dirs: &AppDirs, settings: &crate::state::Settings) {
     let config = serde_json::json!({
         "trail": settings.gesture_trail,
@@ -127,23 +122,19 @@ pub fn apply_settings(dirs: &AppDirs, settings: &crate::state::Settings) {
     set_custom_css(build_custom_css(dirs, settings));
 }
 
-/// UserData/custom.css plus the font overrides the settings add on top.
+/// UserData/custom.css plus the font overrides from the settings.
 fn build_custom_css(dirs: &AppDirs, settings: &crate::state::Settings) -> String {
     let mut css = std::fs::read_to_string(dirs.user_data.join("custom.css"))
         .unwrap_or_default()
         .trim_start_matches('\u{feff}')
         .to_string();
     if !settings.font_family.trim().is_empty() {
-        // Body only: overriding every element breaks icon fonts.
         css.push_str(&format!(
             "\nbody, p, li, td, dd, blockquote {{ font-family: \"{}\" !important; }}\n",
             settings.font_family.replace('"', "")
         ));
     }
     if !settings.font_mono.trim().is_empty() {
-        // Generic families (serif, monospace) cannot be redefined from css, and
-        // WebView2 exposes no font settings, so the elements that conventionally
-        // ask for a monospaced face get the choice applied directly.
         css.push_str(&format!(
             "\ncode, pre, kbd, samp, tt, textarea {{ font-family: \"{}\" !important; }}\n",
             settings.font_mono.replace('"', "")
@@ -156,8 +147,6 @@ fn build_custom_css(dirs: &AppDirs, settings: &crate::state::Settings) -> String
         ));
     }
     if settings.font_min_size > 0 {
-        // 1em resolves to the inherited size, so max() is a floor that still lets
-        // a page grow its own text.
         css.push_str(&format!(
             "\n:where(p, li, td, th, dd, dt, span, div, a, label, button, input, select, textarea, blockquote, figcaption) {{ font-size: max(1em, {}px) !important; }}\n",
             settings.font_min_size
@@ -166,9 +155,7 @@ fn build_custom_css(dirs: &AppDirs, settings: &crate::state::Settings) -> String
     css
 }
 
-/// Shortcut overrides are read on every keypress, so pages that are already
-/// open can take a new map without a reload. Gestures and the stylesheet are
-/// installed once per page and only reach pages opened afterwards.
+/// Pushes the shortcut overrides into the pages that are already open.
 pub fn broadcast_shortcuts(app: &tauri::AppHandle) {
     let json = serde_json::to_string(&shortcut_map()).unwrap_or_else(|_| "{}".to_string());
     let script = format!("window.__mixShortcuts = {json};");
@@ -222,14 +209,13 @@ pub fn default_drag() -> std::collections::BTreeMap<String, String> {
 const SHORTCUT_FORWARDER: &str = include_str!("injected/forwarder.js");
 
 
-/// Where the webview keeps its profile and, on Windows, which folders hold extensions.
+/// Where the webview keeps its profile and, on Windows, its extensions.
 #[derive(Clone, Debug, Default)]
 pub struct WebviewOpts {
     pub tab_data_dir: Option<std::path::PathBuf>,
-    /// Where the strip and the overlays keep their profile. The same directory as
-    /// the pages, so WebView2 makes one environment for the whole app.
+    /// Where the strip and the overlays keep their profile.
     pub ui_data_dir: Option<std::path::PathBuf>,
-    /// Used when sharing that profile is refused: the old separate ui profile.
+    /// Used when sharing that profile is refused.
     pub ui_fallback_dir: Option<std::path::PathBuf>,
     pub extensions_dir: Option<std::path::PathBuf>,
     /// Compiled userscript loader; empty when the drop folder has no scripts.
@@ -241,14 +227,6 @@ impl WebviewOpts {
         let any_loaded = extensions.iter().any(|ext| ext.status == "loaded");
         Self {
             tab_data_dir: Some(dirs.profile.clone()),
-            // One profile for the strip, the overlays and the pages means one
-            // WebView2 environment: one browser process instead of two, one set of
-            // gpu processes, one cache. That measured as 250-400 MB of the total.
-            //
-            // WebView2 insists that every controller in an environment agrees on
-            // the extension setting, so the strip enables extensions exactly like a
-            // page does. Its own pages never match an extension's content scripts,
-            // so nothing is injected into the interface.
             ui_data_dir: Some(dirs.profile.clone()),
             ui_fallback_dir: Some(dirs.profile_ui.clone()),
             #[cfg(windows)]
@@ -278,10 +256,6 @@ pub(crate) fn apply_profile(
 }
 
 /// The browser arguments for this session's proxy choice.
-///
-/// Decided once, at startup, and kept in a static: WebView2 refuses a controller whose
-/// environment options differ from the ones the environment was built with, so a proxy
-/// that changed mid-session would break the next webview rather than take effect.
 static PROXY_ARGS: OnceLock<Option<String>> = OnceLock::new();
 
 /// Sets the arguments for the rest of the run; the first call wins.
@@ -325,8 +299,7 @@ pub struct Tab {
     pub loading: bool,
     /// Last scroll offset, restored when the tab becomes visible again.
     pub scroll: f64,
-    /// False means the webview was dropped to save memory; selecting the tab
-    /// recreates it from url.
+    /// False when the webview was dropped to save memory.
     pub alive: bool,
     pub last_active: u64,
 }
@@ -337,8 +310,7 @@ pub struct TitlePayload {
     pub title: String,
 }
 
-/// Returns None when the text cannot be turned into a web address, so the UI can
-/// say so instead of silently loading a blank page.
+/// Returns None when the text cannot be turned into a web address.
 pub fn parse_url(input: &str) -> Option<Url> {
     let trimmed = input.trim();
     if trimmed.is_empty() {
@@ -347,7 +319,6 @@ pub fn parse_url(input: &str) -> Option<Url> {
     if let Ok(url) = trimmed.parse::<Url>() {
         return Some(url);
     }
-    // A bare host like "example.com" is a common way to type an address.
     if !trimmed.contains(char::is_whitespace) && trimmed.contains('.') {
         if let Ok(url) = format!("https://{trimmed}").parse::<Url>() {
             return Some(url);
@@ -382,9 +353,6 @@ pub fn create(
     let nav_app = app.clone();
     let owner = crate::ipc::window_of_tab(id).to_string();
     let target = parse_url(url).unwrap_or_else(|| "about:blank".parse().expect("static url"));
-    // Hiding and showing a webview repaints it, and the paint used to be white:
-    // switching tabs flashed. Giving the webview the theme's own background makes
-    // that repaint invisible instead.
     let background = win
         .app_handle()
         .try_state::<crate::ipc::AppState>()
@@ -392,26 +360,18 @@ pub fn create(
         .unwrap_or(tauri::window::Color(0x1F, 0x20, 0x20, 0xFF));
     let builder = WebviewBuilder::new(id, WebviewUrl::External(target))
         .background_color(background)
-        // WebView2 keeps ctrl+wheel zoom off unless asked (M0 E2).
         .zoom_hotkeys_enabled(true)
-        // Without this wry leaves AreDevToolsEnabled off and open_devtools is a no-op.
         .devtools(true)
-        // Form autofill stands in for a password vault: WebView2 does not expose one.
         .general_autofill_enabled(true)
-        // Incognito tabs get their own store and never reach the shared profile.
         .incognito(incognito)
         .on_download(crate::downloads::handle)
-        // target=_blank and window.open land here. Creating a webview on this
-        // thread would deadlock, so the chrome ui opens the tab for us.
         .on_new_window(move |url, _features| {
-            // Only the window that owns this tab should open the new one.
             let _ = app.emit_to(owner.clone(), "ui:open-url", url.to_string());
             tauri::webview::NewWindowResponse::Deny
         })
         .initialization_script(&custom_css_script())
         .initialization_script(&shortcut_prefix())
         .initialization_script(SHORTCUT_FORWARDER)
-        // Remember what we are loading, so a failed load can say which url died.
         .on_navigation({
             let tab_id = id.to_string();
             let app = nav_app;
@@ -426,15 +386,12 @@ pub fn create(
                 true
             }
         })
-        // Page load events drive the tab spinner.
         .on_page_load(|webview, payload| {
             let app = webview.app_handle().clone();
             let id = webview.label().to_string();
             let loading = matches!(payload.event(), tauri::webview::PageLoadEvent::Started);
 
-            // Zoom is remembered per site, so it has to be reapplied on every load.
             if !loading {
-                // Restoring the offset has to wait until the document exists.
                 if let Some(state) = app.try_state::<crate::ipc::AppState>() {
                     let scroll = state
                         .try_read_core(crate::ipc::window_of_tab(&id))
@@ -502,7 +459,6 @@ pub fn create(
             }
             let owner = crate::ipc::window_of_tab(&payload.id).to_string();
 
-            // The window title follows the selected tab, like any browser.
             let selected = app
                 .try_state::<crate::ipc::AppState>()
                 .and_then(|state| state.try_read_core(&owner).and_then(|core| core.selected.clone()));
@@ -523,7 +479,6 @@ pub fn create(
     let builder = apply_profile(builder, &opts.tab_data_dir);
     let builder = apply_extensions(builder, opts);
 
-    // The caller already subtracted the chrome height; place below it.
     let top = win
         .inner_size()
         .map(|size| size.to_logical::<f64>(win.scale_factor().unwrap_or(1.0)).height)
@@ -534,8 +489,6 @@ pub fn create(
         LogicalPosition::new(0.0, top),
         LogicalSize::new(width.max(1.0), height.max(1.0)),
     )?;
-    // The download operations live behind this hook: without it a download can be watched
-    // but not paused, resumed or cancelled.
     crate::downloads::ops::watch(&webview);
     Ok(webview)
 }
