@@ -1,5 +1,6 @@
 // The chrome strip: tabs, address bar, toolbar, bookmarks and the key bridge the page forwards.
 const { invoke } = window.__TAURI__.core;
+const PAGE = Math.random().toString(36).slice(2, 6);
 import { setLanguage, t } from "./i18n.js";
 const { listen } = window.__TAURI__.event;
 
@@ -881,7 +882,19 @@ function syncUrl() {
   if (next && urlInput.value !== next) urlInput.value = next;
 }
 
+function windowTag() {
+  const id = selected || (tabs[0] && tabs[0].id) || "";
+  return id.split("-tab-")[0];
+}
+
 function setTabs(payload) {
+  // Every window receives every tab event, so a list that belongs to another window is
+  // dropped: drawing it would put another window's tabs in this strip.
+  const mine = window.__mixWindow;
+  if (payload.window && mine && payload.window !== mine) {
+    report("ui tabs ignored " + payload.window + " page=" + PAGE + " own=" + mine);
+    return;
+  }
   tabs = payload.tabs || [];
   groups = payload.groups || [];
   selected = payload.selected || null;
@@ -1396,7 +1409,10 @@ async function boot() {
       const pill = event.target.closest(".tab");
       if (pill && pill.dataset.tab) invoke("tab_close", { id: pill.dataset.tab });
     });
-  document.getElementById("tab-new").addEventListener("click", () => invoke("tab_new", {}));
+  document.getElementById("tab-new").addEventListener("click", () => {
+    report("ui new tab clicked page=" + PAGE + " own=" + (window.__mixWindow || windowTag()));
+    invoke("tab_new", {}).catch(() => {});
+  });
 
   document.addEventListener(
     "click",
