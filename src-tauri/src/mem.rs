@@ -1,16 +1,6 @@
 //! Memory numbers for the tab card.
-//!
-//! WebView2 does not say which process belongs to which tab: an environment reports
-//! its processes (browser, renderer, gpu, utility) and their kinds, and nothing ties
-//! a renderer back to a tab. So the card shows two honest numbers instead of one
-//! made-up one: the whole browser's working set, read from the process list, and the
-//! page's own javascript heap, which the page can report for itself.
 
 /// Memory of the browser's own processes, leaving the gpu out.
-///
-/// Other browsers do not count their gpu process in the memory shown next to a
-/// page, so neither does this: summing it in made the same work look a quarter
-/// heavier. The gpu figure is still in the breakdown line in the log.
 #[cfg(windows)]
 pub fn total(webview: &tauri::Webview) -> Option<u64> {
   use webview2_com::Microsoft::Web::WebView2::Win32::{
@@ -75,9 +65,7 @@ fn working_set(pid: u32) -> Option<u64> {
   private_counters(pid).map(|(private, _)| private)
 }
 
-/// Both memory numbers Windows reports for a process: the private working set and
-/// the commit charge. They differ by everything paged out, and only the first is
-/// what the task manager shows, so the log prints both until the two agree.
+/// Both memory numbers Windows reports for a process.
 #[cfg(windows)]
 fn private_counters(pid: u32) -> Option<(u64, u64)> {
   use windows::Win32::System::ProcessStatus::{
@@ -106,8 +94,7 @@ fn private_counters(pid: u32) -> Option<(u64, u64)> {
   }
 }
 
-/// The page's own javascript heap. Read through the protocol, so it works for a tab
-/// that is not on screen - nothing needs to be painted for this one.
+/// The page's own javascript heap, read through the protocol.
 #[cfg(windows)]
 pub fn tab_heap(webview: &tauri::Webview) -> Option<u64> {
   const EXPR: &str = r#"JSON.stringify({heap: performance.memory ? performance.memory.usedJSHeapSize : 0})"#;
@@ -122,7 +109,6 @@ pub fn tab_heap(webview: &tauri::Webview) -> Option<u64> {
     std::time::Duration::from_millis(600),
   )?;
   let value: serde_json::Value = serde_json::from_str(&json).ok()?;
-  // The answer carries the json string twice: as a value and as its own text.
   let text = value
     .get("result")
     .and_then(|result| result.get("value"))
@@ -141,9 +127,7 @@ pub fn tab_heap(_webview: &tauri::Webview) -> Option<u64> {
   None
 }
 
-/// What one page is made of, in counts rather than bytes: these are the numbers a
-/// page can report about itself, and unlike a working set they really do belong to
-/// one tab.
+/// What one page is made of, in counts rather than bytes.
 #[derive(Clone, Copy, Default, serde::Serialize)]
 pub struct TabMetrics {
   pub documents: u64,
@@ -151,8 +135,7 @@ pub struct TabMetrics {
   pub listeners: u64,
 }
 
-/// Reads the page's DOM counters through the protocol; nothing has to be painted,
-/// so a tab that is not on screen answers this fine.
+/// Reads the page's DOM counters through the protocol.
 #[cfg(windows)]
 pub fn tab_metrics(webview: &tauri::Webview) -> Option<TabMetrics> {
   let json = crate::screenshot::call_timeout(
@@ -181,11 +164,6 @@ pub fn tab_metrics(_webview: &tauri::Webview) -> Option<TabMetrics> {
 }
 
 /// One line per environment, broken down by process kind, written to the log.
-///
-/// The page environment and the ui environment are separate: they do not share a
-/// browser process, so a total that only covers the pages undercounts what the app
-/// really costs. This prints both, at most every thirty seconds, so a hover is
-/// enough to sample it without flooding the log.
 pub fn report(app: &tauri::AppHandle) {
   use std::sync::atomic::{AtomicU64, Ordering};
   use tauri::Manager;
@@ -197,7 +175,6 @@ pub fn report(app: &tauri::AppHandle) {
   }
   LAST.store(now, Ordering::Relaxed);
 
-  // webviews() answers label/webview pairs.
   let all = app.webviews();
   let page = all
     .iter()
