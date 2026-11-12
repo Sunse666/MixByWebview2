@@ -8,14 +8,9 @@ use std::sync::{Arc, Mutex, OnceLock};
 
 
 /// One transfer, whether it is running, paused or finished.
-#[allow(dead_code)]
 pub struct Job {
-    pub id: u64,
     pub url: String,
     pub path: std::path::PathBuf,
-    pub total: Option<u64>,
-    /// Set while the loop should keep running.
-    running: Arc<AtomicBool>,
     /// Set while the user wants it paused; the bytes stay.
     paused: Arc<AtomicBool>,
     /// Set when the file is no longer wanted, partial file and all.
@@ -80,7 +75,6 @@ pub fn start(app: tauri::AppHandle, id: u64, url: String, path: std::path::PathB
             return;
         };
         if let Some(job) = map.get_mut(&id) {
-            job.running = running.clone();
             job.paused = paused.clone();
             job.cancelled = cancelled.clone();
             job.active = active.clone();
@@ -88,11 +82,8 @@ pub fn start(app: tauri::AppHandle, id: u64, url: String, path: std::path::PathB
             map.insert(
                 id,
                 Job {
-                    id,
                     url: url.clone(),
                     path: path.clone(),
-                    total: None,
-                    running: running.clone(),
                     paused: paused.clone(),
                     cancelled: cancelled.clone(),
                     active: active.clone(),
@@ -260,10 +251,4 @@ pub fn busy(id: u64) -> bool {
         .lock()
         .map(|map| map.get(&id).map(|job| job.active.load(Ordering::Relaxed)).unwrap_or(false))
         .unwrap_or(false)
-}
-
-/// True when this id belongs to the internal engine rather than the webview's.
-#[allow(dead_code)]
-pub fn knows(id: u64) -> bool {
-    jobs().lock().map(|map| map.contains_key(&id)).unwrap_or(false)
 }
