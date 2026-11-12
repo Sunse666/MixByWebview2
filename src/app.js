@@ -677,39 +677,6 @@ function openTabSearch() {
   openSearchPanel("tab_search");
 }
 
-const MENU_BAR = [
-  { id: "file", label: "File" },
-  { id: "edit", label: "Edit" },
-  { id: "view", label: "View" },
-  { id: "history", label: "History" },
-  { id: "bookmarks", label: "Bookmarks" },
-  { id: "tools", label: "Tools" },
-  { id: "help", label: "Help" },
-];
-
-function renderMenuBar() {
-  const bar = document.getElementById("menubar");
-  if (bar) bar.remove();
-  return;
-  if (!bar) return;
-  bar.hidden = !(settings.menu_bar !== false);
-  bar.replaceChildren(
-    ...MENU_BAR.map((entry) => {
-      const button = document.createElement("button");
-      button.textContent = t(entry.label);
-      button.addEventListener("click", () => {
-        const box = button.getBoundingClientRect();
-        invoke("overlay_open_at", {
-          kind: `menubar_menu&group=${entry.id}`,
-          x: Math.round(box.left),
-          y: Math.round(box.bottom + 2),
-        }).catch(() => {});
-      });
-      return button;
-    }),
-  );
-}
-
 const audioState = {};
 
 async function takeScreenshot() {
@@ -1069,7 +1036,6 @@ async function boot() {
   applyTheme(await invoke("theme_get"));
   settings = await invoke("settings_get");
   setLanguage(settings.language || "en");
-  renderMenuBar();
 
   await listen("tabs:changed", (event) => {
     setTabs(event.payload);
@@ -1094,7 +1060,6 @@ async function boot() {
   });
   await listen("settings:changed", async () => {
     settings = await invoke("settings_get");
-    renderMenuBar();
     renderBookmarks(await invoke("bookmark_list"));
     renderToolbar(await invoke("ext_list"));
 

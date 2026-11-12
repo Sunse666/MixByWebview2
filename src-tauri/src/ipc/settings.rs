@@ -245,9 +245,6 @@ pub(crate) fn apply_settings_patch(
         if let Some(value) = patch.new_tab_page {
             guard.new_tab_page = value;
         }
-        if let Some(value) = patch.menu_bar {
-            guard.menu_bar = value;
-        }
         if let Some(value) = patch.language {
             guard.language = match value.as_str() {
                 "zh" => "zh".to_string(),

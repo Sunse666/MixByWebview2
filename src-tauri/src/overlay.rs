@@ -79,7 +79,6 @@ pub fn open(app: &AppHandle, win: &tauri::Window, kind: &str) -> Result<(), Stri
         "app_menu" => APP_MENU,
         "context_menu" => (250.0, 184.0),
         "url_menu" => (190.0, 150.0),
-        "menubar_menu" => (232.0, 300.0),
         "chrome_menu" => (190.0, 110.0),
         "find" => (380.0, 44.0),
         "thumb" => (372.0, 232.0),

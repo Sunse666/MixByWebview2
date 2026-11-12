@@ -241,7 +241,6 @@ pub struct SettingsPatch {
     pub newtab_tiles: Option<u32>,
     pub newtab_columns: Option<u32>,
     pub newtab_radius: Option<u32>,
-    pub menu_bar: Option<bool>,
     pub language: Option<String>,
     pub hidden_extensions: Option<Vec<String>>,
     pub disabled_extensions: Option<Vec<String>>,

@@ -1162,86 +1162,6 @@ async function bootExtInfo() {
   });
 }
 
-const MENU_BAR_GROUPS = {
-  file: [
-    ["New tab", "Ctrl+T", () => invoke("tab_new", {})],
-    ["New window", "Ctrl+N", () => invoke("window_new")],
-    ["New incognito tab", "Ctrl+Shift+N", () => invoke("tab_new", { incognito: true })],
-    ["Reopen closed tab", "Ctrl+Shift+T", () => invoke("tab_reopen")],
-    "-",
-    ["Print", "Ctrl+P", () => invoke("shortcut", { action: "print" })],
-    "-",
-    ["Close tab", "Ctrl+W", () => invoke("tab_close")],
-    ["Quit", "Ctrl+Q", () => invoke("app_quit")],
-  ],
-  edit: [
-    ["Find in page", "Ctrl+F", () => invoke("overlay_close")],
-    ["Focus address bar", "Ctrl+L", () => invoke("shortcut", { action: "focus_url" })],
-    "-",
-    ["Copy link address", "", () => invoke("shortcut", { action: "copy_url" })],
-  ],
-  view: [
-    ["Reload", "Ctrl+R", () => invoke("tab_reload")],
-    ["Zoom in / out", "Ctrl+\u00b1", () => invoke("overlay_close")],
-    ["Reset zoom", "Ctrl+0", () => invoke("shortcut", { action: "zoom_reset" })],
-    "-",
-    ["Full screen", "F11", () => invoke("shortcut", { action: "fullscreen" })],
-  ],
-  history: [
-    ["History", "Ctrl+H", () => invoke("tab_new", { url: "http://tauri.localhost/pages/history.html" })],
-    "-",
-    ["Clear browsing data", "Ctrl+Shift+Del", () => invoke("history_clear")],
-  ],
-  bookmarks: [
-    ["Bookmark this page", "Ctrl+D", () => invoke("bookmark_toggle")],
-    ["Bookmarks", "Ctrl+Shift+O", () => invoke("tab_new", { url: "http://tauri.localhost/pages/history.html" })],
-  ],
-  tools: [
-    ["Downloads", "Ctrl+J", () => invoke("open_dir", { which: "downloads" })],
-    ["Translate this page", "", () => invoke("overlay_toggle", { kind: "translate" })],
-    ["Open in the full translator", "", () => invoke("translate_page", { target: null })],
-    "-",
-    ["Extensions", "", () => invoke("tab_new", { url: "http://tauri.localhost/pages/extensions.html" })],
-    ["Userscripts", "", () => invoke("overlay_open", { kind: "app_menu&page=scripts" })],
-    "-",
-    ["Settings", "", () => invoke("tab_new", { url: "http://tauri.localhost/pages/settings.html" })],
-  ],
-  help: [
-    ["Keyboard shortcuts", "", () => invoke("overlay_open", { kind: "app_menu&page=shortcuts" })],
-    ["Open program folder", "", () => invoke("open_dir", { which: "root" })],
-  ],
-};
-
-async function bootMenuBarMenu(group) {
-  menu.hidden = false;
-  appMenu.hidden = true;
-  themePanel.hidden = true;
-  applyTheme(await invoke("theme_get"));
-
-  const items = MENU_BAR_GROUPS[group] || [];
-  for (const entry of items) {
-    if (entry === "-") {
-      const line = document.createElement("div");
-      line.className = "divider";
-      menu.append(line);
-      continue;
-    }
-    const [label, hint, run] = entry;
-    const button = document.createElement("button");
-    button.className = "row plain";
-    button.textContent = t(label) + (hint ? "" : "");
-    const key = document.createElement("span");
-    key.className = "hint";
-    key.textContent = hint || "";
-    button.append(key);
-    button.addEventListener("click", async () => {
-      await invoke("overlay_close").catch(() => {});
-      await run();
-    });
-    menu.append(button);
-  }
-}
-
 async function bootChromeMenu(kind) {
   menu.hidden = false;
   appMenu.hidden = true;
@@ -1463,10 +1383,6 @@ async function boot() {
   }
   if (kind === "find") {
     await bootFind();
-    return;
-  }
-  if (kind === "menubar_menu") {
-    await bootMenuBarMenu(params.get("group") || "file");
     return;
   }
   if (kind === "url_menu") {

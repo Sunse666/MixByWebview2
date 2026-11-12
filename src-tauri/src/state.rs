@@ -111,8 +111,6 @@ pub struct Settings {
     pub search_engine: String,
     /// New tabs open the built-in page instead of the start url.
     pub new_tab_page: bool,
-    /// Shows the menu bar row above the address field.
-    pub menu_bar: bool,
     /// Interface language: "en" or "zh".
     pub language: String,
     /// Suspend tabs beyond the live limit to give memory back.
@@ -188,7 +186,6 @@ impl Default for Settings {
             shortcuts: std::collections::BTreeMap::new(),
             search_engine: "baidu".into(),
             new_tab_page: true,
-            menu_bar: true,
             language: "en".into(),
             memory_saver: true,
             keep_alive_hosts: String::new(),
