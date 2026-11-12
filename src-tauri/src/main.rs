@@ -237,6 +237,13 @@ fn main() {
             ipc::custom_css_open,
             ipc::open_dir,
         ])
-        .run(tauri::generate_context!())
-        .expect("mix failed to start");
+        .build(tauri::generate_context!())
+        .expect("mix failed to start")
+        .run(|app, event| {
+            // The last state of this process is written on the way out, with a
+            // timestamp, so the next launch restores the window closed last.
+            if let tauri::RunEvent::Exit = event {
+                ipc::finalize_session(app);
+            }
+        });
 }

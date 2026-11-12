@@ -105,6 +105,56 @@ impl Session {
         let json = serde_json::to_string_pretty(self)?;
         crate::paths::write_atomic(path, json.as_bytes())
     }
+
+    /// Writes this process's final state with a timestamp, so a later launch can tell
+    /// which process closed last.
+    pub fn save_closed(&self, path: &Path, closed_at: u64) -> std::io::Result<()> {
+        let body = serde_json::json!({
+            "schema_version": self.schema_version,
+            "windows": self.windows,
+            "closed_at": closed_at,
+        });
+        let text = serde_json::to_string_pretty(&body).unwrap_or_else(|_| "{}".into());
+        std::fs::write(path, text)
+    }
+}
+
+/// The state left by the process that closed last, if any. Reading it consumes the
+/// files: they describe a run that is over.
+pub fn latest_closed(dir: &Path) -> Option<Session> {
+    let mut newest: Option<(u64, Session)> = None;
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return None;
+    };
+    let mut files = Vec::new();
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let name = path.file_name().and_then(|n| n.to_str()).unwrap_or_default();
+        if !name.starts_with("session-") || !name.ends_with(".json") {
+            continue;
+        }
+        files.push(path.clone());
+        let Ok(text) = std::fs::read_to_string(&path) else {
+            continue;
+        };
+        let Ok(value) = serde_json::from_str::<serde_json::Value>(&text) else {
+            continue;
+        };
+        let closed_at = value.get("closed_at").and_then(|v| v.as_u64()).unwrap_or(0);
+        if closed_at == 0 {
+            continue;
+        }
+        let Ok(session) = serde_json::from_value::<Session>(value) else {
+            continue;
+        };
+        if newest.as_ref().map(|(at, _)| closed_at > *at).unwrap_or(true) {
+            newest = Some((closed_at, session));
+        }
+    }
+    for path in files {
+        let _ = std::fs::remove_file(path);
+    }
+    newest.map(|(_, session)| session)
 }
 
 #[cfg(test)]

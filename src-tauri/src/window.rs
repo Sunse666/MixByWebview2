@@ -126,13 +126,14 @@ fn install_owner_ui(app: &tauri::AppHandle) -> tauri::Result<()> {
 }
 
 pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
-    let (start_url, restore, session_file) = {
+    let (start_url, restore, session_file, user_data) = {
         let state = app.state::<AppState>();
         let settings = state.settings.read();
         (
             settings.start_url.clone(),
             settings.restore_session,
             state.dirs.session_file.clone(),
+            state.dirs.user_data.clone(),
         )
     };
 
@@ -165,8 +166,10 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
         return Ok(());
     }
 
+    // The window that closed last wins: every process leaves its final state behind,
+    // and the newest of those is what the user was looking at when they quit.
     let restored = if restore {
-        crate::session::Session::load(&session_file)
+        crate::session::latest_closed(&user_data).or_else(|| crate::session::Session::load(&session_file))
     } else {
         None
     };

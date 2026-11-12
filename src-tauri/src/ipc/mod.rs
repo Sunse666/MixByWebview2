@@ -597,10 +597,21 @@ fn window_geometry(app: &AppHandle, label: &str) -> Option<crate::session::Windo
 /// Writes every window to session.json.
 pub(crate) fn save_sessions(app: &AppHandle) {
     // A window that runs as its own process must not rewrite the session of the window
-    // that spawned it: two writers would keep replacing each other's file.
+    // that spawned it: two writers would keep replacing each other's file. It records
+    // its own state only when it closes (finalize_session).
     if crate::paths::instance_mode() {
         return;
     }
+    write_session(app, 0)
+}
+
+/// Records this process's last state with a timestamp, so the next launch can restore
+/// whichever window was closed last.
+pub(crate) fn finalize_session(app: &AppHandle) {
+    write_session(app, crate::library::now_ms())
+}
+
+fn write_session(app: &AppHandle, closed_at: u64) {
     let state = app.state::<AppState>();
 
     // The geometry of a window is asked for on the main thread, so the tab state has to
@@ -673,6 +684,16 @@ pub(crate) fn save_sessions(app: &AppHandle) {
         schema_version: crate::session::SCHEMA,
         windows,
     };
+    if closed_at > 0 {
+        let path = state
+            .dirs
+            .user_data
+            .join(format!("session-{}.json", std::process::id()));
+        if let Err(err) = session.save_closed(&path, closed_at) {
+            crate::logging::warn(&format!("final session save failed: {err}"));
+        }
+        return;
+    }
     if let Err(err) = session.save(&state.dirs.session_file) {
         crate::logging::warn(&format!("session save failed: {err}"));
     }
