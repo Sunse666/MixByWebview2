@@ -647,6 +647,15 @@ pub(crate) fn save_sessions(app: &AppHandle) {
             .collect();
         snapshots.push((label.clone(), tabs, selected, groups));
     }
+    // A hash map has no order, so without this the window restored first would be a
+    // random one and might not be the primary window at all.
+    snapshots.sort_by_key(|(label, ..)| {
+        if label == crate::window::PRIMARY {
+            (0, label.clone())
+        } else {
+            (1, label.clone())
+        }
+    });
 
     let windows: Vec<crate::session::WindowSession> = snapshots
         .into_iter()

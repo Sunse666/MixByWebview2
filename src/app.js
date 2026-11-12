@@ -304,6 +304,9 @@ function onDragEnd(event) {
       event.clientX < strip.left - 60 ||
       event.clientX > strip.right + 60;
     if (outside) {
+      // The last tab of a window stays where it is: dragging it out would leave an
+      // empty window behind, so the gesture is refused before it reaches the backend.
+      if (tabs.length < 2) return;
       invoke("tab_pop_out", { id: held.id, x: event.screenX, y: event.screenY }).catch((error) =>
         invoke("ui_log", { message: "tab pop out failed: " + error }).catch(() => {}),
       );

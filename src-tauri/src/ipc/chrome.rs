@@ -426,11 +426,10 @@ pub async fn tab_pop_out(
         crate::logging::info(&format!("tab {id} popped out into {label}"));
     }
 
-    // The window that just gave away its last tab goes with it, the way a browser does:
-    // leaving a fresh blank tab behind is not what dragging one out means. The primary
-    // window keeps its strip, since the tray depends on it.
-    if only_tab && window.label() != crate::window::PRIMARY {
-        let _ = window.close();
+    // A window with a single tab is not a place to drag from: taking it away would leave
+    // nothing behind, so the gesture is refused instead of moving the last tab out.
+    if only_tab {
+        crate::logging::info(&format!("tab {id} stays: it is the only one in its window"));
         return Ok(());
     }
     tab_close(app.clone(), window, app.state::<AppState>(), id).await?;
