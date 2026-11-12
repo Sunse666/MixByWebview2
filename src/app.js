@@ -297,12 +297,17 @@ function onDragEnd(event) {
     ?.closest(".tab, .group-chip");
   if (!under) {
     const strip = tabStrip.getBoundingClientRect();
-    const inside =
-      event.clientX >= strip.left &&
-      event.clientX <= strip.right + 40 &&
-      event.clientY >= strip.top - 12 &&
-      event.clientY <= strip.bottom + 12;
-    if (!inside) return;
+    const outside =
+      event.clientY - strip.bottom > 24 ||
+      event.clientY < strip.top - 24 ||
+      event.clientX < strip.left - 60 ||
+      event.clientX > strip.right + 60;
+    if (outside) {
+      invoke("tab_pop_out", { id: held.id, x: event.screenX, y: event.screenY }).catch((error) =>
+        invoke("ui_log", { message: "tab pop out failed: " + error }).catch(() => {}),
+      );
+      return;
+    }
     let to = tabs.length;
     for (const pill of tabStrip.querySelectorAll(".tab[data-tab]")) {
       const box = pill.getBoundingClientRect();
@@ -453,6 +458,14 @@ function wireTab(el, id) {
   el.addEventListener("mousedown", (event) => {
     if (event.button !== 0 || event.target.closest("button")) return;
     beginTabDrag(id, event.clientX, event.clientY);
+  });
+  el.addEventListener("pointerdown", (event) => {
+    if (event.button !== 0) return;
+    try {
+      el.setPointerCapture(event.pointerId);
+    } catch {
+      // Capture is a best effort: without it the drag simply stops at the strip.
+    }
   });
   if (settings.tab_hover_preview) {
     el.addEventListener("mouseenter", (enter) => {

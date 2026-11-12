@@ -99,6 +99,7 @@ fn main() {
         "tab_icon",
         "tab_reopen",
         "window_new",
+        "tab_pop_out",
         "favicon_map",
         "history_list",
         "clear_data",

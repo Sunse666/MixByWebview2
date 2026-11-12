@@ -353,23 +353,60 @@ pub async fn page_failed(
     Ok(())
 }
 
+/// First window label that is not in use.
+fn free_window_label(state: &AppState) -> String {
+    let taken: Vec<String> = state.cores.read().keys().cloned().collect();
+    let mut index = 2;
+    loop {
+        let candidate = format!("w{index}");
+        if !taken.contains(&candidate) {
+            return candidate;
+        }
+        index += 1;
+    }
+}
+
 /// Opens another window with its own tab strip.
 #[tauri::command]
 pub async fn window_new(app: AppHandle, state: State<'_, AppState>) -> Result<String, AppError> {
-    let taken: Vec<String> = state.cores.read().keys().cloned().collect();
-    let mut index = 2;
-    let label = loop {
-        let candidate = format!("w{index}");
-        if !taken.contains(&candidate) {
-            break candidate;
-        }
-        index += 1;
-    };
-
+    let label = free_window_label(&state);
     let url = state.settings.read().start_url.clone();
     crate::window::open_window(&app, &label, vec![(url, 0.0, false)], 0, None)?;
     crate::logging::info(&format!("window {label} opened"));
     Ok(label)
+}
+
+/// Moves a tab into a window of its own, dropped where the pointer let go.
+#[tauri::command]
+pub async fn tab_pop_out(
+    app: AppHandle,
+    window: tauri::Window,
+    state: State<'_, AppState>,
+    id: String,
+    x: f64,
+    y: f64,
+) -> Result<(), AppError> {
+    let (url, scroll, pinned) = {
+        let core = state.read_core(window.label());
+        match core.tabs.iter().find(|tab| tab.id == id) {
+            Some(tab) => (tab.url.clone(), tab.scroll, tab.pinned),
+            None => return Ok(()),
+        }
+    };
+    let label = free_window_label(&state);
+    let scale = window.scale_factor().unwrap_or(1.0);
+    let size = window.inner_size().unwrap_or(tauri::PhysicalSize::new(1100, 760));
+    let geometry = crate::session::WindowGeometry {
+        x: (x * scale) as i32 - 80,
+        y: (y * scale) as i32 - 16,
+        width: size.width,
+        height: size.height,
+        maximized: false,
+    };
+    crate::window::open_window(&app, &label, vec![(url, scroll, pinned)], 0, Some(geometry))?;
+    crate::logging::info(&format!("tab {id} popped out into {label}"));
+    tab_close(app.clone(), window, app.state::<AppState>(), id).await?;
+    Ok(())
 }
 
 #[tauri::command]

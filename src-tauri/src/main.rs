@@ -182,6 +182,7 @@ fn main() {
             ipc::tab_icon,
             ipc::tab_reopen,
             ipc::window_new,
+            ipc::tab_pop_out,
             ipc::favicon_map,
             ipc::history_list,
             ipc::clear_data,
