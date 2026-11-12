@@ -343,12 +343,6 @@ pub async fn url_key(
     Ok(())
 }
 
-#[tauri::command]
-pub async fn url_blur(app: AppHandle, window: tauri::Window) -> Result<(), AppError> {
-    exit_url_edit(&app, window.label());
-    Ok(())
-}
-
 /// Turns the page-side key bridge on or off for every tab in a window.
 pub(crate) fn set_url_edit(app: &AppHandle, window: &tauri::Window, on: bool) {
     let state = app.state::<AppState>();

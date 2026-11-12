@@ -76,22 +76,6 @@ pub(crate) fn shell_open(path: &std::path::Path) -> Result<(), AppError> {
             .map_err(|err| AppError::new("open", err.to_string()))
     }
 }
-#[tauri::command]
-pub async fn download_open_dir(_window: tauri::Window, state: State<'_, AppState>, id: u64) -> Result<(), AppError> {
-    let path = {
-        let tasks = state.downloads.read();
-        tasks
-            .iter()
-            .find(|task| task.id == id)
-            .map(|task| task.path.clone())
-    };
-    match path {
-        Some(path) if !path.is_empty() => reveal(std::path::Path::new(&path)),
-        _ => reveal(&state.dirs.downloads),
-    }?;
-    Ok(())
-}
-
 /// Zips the whole profile so it can be restored on another machine.
 #[tauri::command]
 pub async fn backup_export(webview: tauri::Webview, state: State<'_, AppState>) -> Result<String, AppError> {

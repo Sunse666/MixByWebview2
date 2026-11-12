@@ -177,7 +177,7 @@ fn main() {
             ipc::tab_scroll,
             ipc::url_type,
             ipc::url_key,
-            ipc::url_blur,
+
             ipc::tab_move,
             ipc::tab_icon,
             ipc::tab_reopen,
@@ -226,7 +226,7 @@ fn main() {
             ipc::download_list,
             ipc::download_open,
             ipc::download_clear,
-            ipc::download_open_dir,
+
             ipc::custom_css_open,
             ipc::open_dir,
         ])

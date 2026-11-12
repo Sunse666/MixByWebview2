@@ -95,7 +95,6 @@ fn main() {
         "tab_scroll",
         "url_type",
         "url_key",
-        "url_blur",
         "tab_move",
         "tab_icon",
         "tab_reopen",
@@ -144,7 +143,6 @@ fn main() {
         "download_list",
         "download_open",
         "download_clear",
-        "download_open_dir",
         "custom_css_open",
         "open_dir",
     ];

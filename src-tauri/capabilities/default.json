@@ -78,7 +78,6 @@
     "allow-tab-scroll",
     "allow-url-type",
     "allow-url-key",
-    "allow-url-blur",
     "allow-tab-move",
     "allow-tab-icon",
     "allow-tab-reopen",
@@ -127,7 +126,6 @@
     "allow-download-list",
     "allow-download-open",
     "allow-download-clear",
-    "allow-download-open-dir",
     "allow-custom-css-open",
     "allow-open-dir"
   ]
