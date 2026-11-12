@@ -1000,7 +1000,7 @@ function urlEditMenu() {
 function chromeMenu() {
   return [
     { label: "New tab", run: () => invoke("tab_new", { url: null }) },
-    { label: "Reload", run: () => invoke("tab_reload") },
+    { label: "Reload", run: () => invoke("tab_nav", { action: "reload" }) },
     "-",
     { label: "Settings", run: () => invoke("overlay_open", { kind: "app_menu&page=settings" }) },
   ];

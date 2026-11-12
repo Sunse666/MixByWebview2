@@ -1199,7 +1199,7 @@ async function bootChromeMenu(kind) {
     item(tab.pinned ? "Unpin tab" : "Pin tab", () =>
       invoke("tab_pin", { id, pinned: !tab.pinned }),
     );
-    item("Reload", () => invoke("tab_reload"));
+    item("Reload", () => invoke("tab_nav", { action: "reload" }));
     item("Group or ungroup", async () => {
       const group = (list.groups || []).find((entry) => entry.members.includes(id));
       if (group) await invoke("group_remove", { id }).catch(() => {});
@@ -1215,7 +1215,7 @@ async function bootChromeMenu(kind) {
   }
 
   item("New tab", () => invoke("tab_new", { url: null }));
-  item("Reload", () => invoke("tab_reload"));
+  item("Reload", () => invoke("tab_nav", { action: "reload" }));
   const divider = document.createElement("div");
   divider.className = "divider";
   menu.append(divider);
