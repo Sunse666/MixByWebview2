@@ -26,6 +26,21 @@ pub struct AppDirs {
     pub fell_back: bool,
 }
 
+/// A window that was dragged out of another one runs as its own process. It gets its
+/// own WebView2 profile, since one profile cannot be opened by two processes at once.
+pub fn instance_mode() -> bool {
+    std::env::args().any(|arg| arg == "--instance")
+}
+
+/// Identifies this process's profile folders; only set in instance mode.
+pub fn instance_id() -> Option<String> {
+    if instance_mode() {
+        Some(std::process::id().to_string())
+    } else {
+        None
+    }
+}
+
 impl AppDirs {
     pub fn resolve() -> Self {
         let root = app_root();
@@ -40,10 +55,13 @@ impl AppDirs {
 
     fn under(root: &Path) -> Self {
         let user_data = root.join("UserData");
+        let suffix = instance_id()
+            .map(|id| format!("-{id}"))
+            .unwrap_or_default();
         Self {
             root: root.to_path_buf(),
-            profile: user_data.join("profile"),
-            profile_ui: user_data.join("profile-ui"),
+            profile: user_data.join(format!("profile{suffix}")),
+            profile_ui: user_data.join(format!("profile-ui{suffix}")),
             logs: user_data.join("logs"),
             downloads: user_data.join("downloads"),
             extensions: user_data.join("extensions"),

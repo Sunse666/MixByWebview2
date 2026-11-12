@@ -44,8 +44,12 @@ fn main() {
         env!("MIX_GIT")
     ));
 
-    tauri::Builder::default()
-        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+    let secondary = paths::instance_mode();
+    let builder = tauri::Builder::default();
+    let builder = if secondary {
+        builder
+    } else {
+        builder.plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
             crate::logging::info("second instance forwarded to the running window");
             crate::window::show_or_focus(app);
             let url = args
@@ -63,6 +67,8 @@ fn main() {
                 });
             }
         }))
+    };
+    builder
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,

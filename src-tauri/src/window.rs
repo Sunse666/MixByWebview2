@@ -61,6 +61,17 @@ fn apply_groups(app: &AppHandle, label: &str, groups: &[crate::session::SessionG
         });
     }
 }
+/// The tray and the global hotkeys belong to one process: the first window that starts.
+/// A window dragged out of it runs on its own and leaves these alone.
+fn install_owner_ui(app: &tauri::AppHandle) -> tauri::Result<()> {
+    if crate::paths::instance_mode() {
+        return Ok(());
+    }
+    crate::snap::install_hotkeys(app);
+    crate::tray::install(app)?;
+    Ok(())
+}
+
 pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
     let (start_url, restore, session_file) = {
         let state = app.state::<AppState>();
@@ -80,8 +91,7 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
         crate::downloads::start_progress_watch(app.handle().clone());
         crate::persist::spawn_history_flusher(app.handle().clone());
         crate::audio::watch(app.handle().clone());
-        crate::snap::install_hotkeys(app.handle());
-        crate::tray::install(&app.handle().clone())?;
+        install_owner_ui(app.handle())?;
         return Ok(());
     }
 
@@ -126,13 +136,12 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
     crate::downloads::start_progress_watch(app.handle().clone());
     crate::persist::spawn_history_flusher(app.handle().clone());
     crate::audio::watch(app.handle().clone());
-    crate::snap::install_hotkeys(app.handle());
+    install_owner_ui(app.handle())?;
     #[cfg(debug_assertions)]
     {
         debug_ext_toggle(app.handle());
         debug_gesture_test(app.handle());
     }
-    crate::tray::install(&app.handle().clone())?;
     #[cfg(debug_assertions)]
     if debug_hooks() {
         if let Ok(kind) = std::env::var("MIX_OPEN_ON_START") {
@@ -465,7 +474,8 @@ pub fn open_window(
             format!("{label}-chrome"),
             WebviewUrl::App("index.html".into()),
         )
-        .devtools(true);
+        .devtools(true)
+        .initialization_script(&format!("window.__mixWindow = \"{label}\";"));
         let builder = tabs::apply_profile(builder, dir);
         if with_extensions {
             tabs::apply_extensions(builder, &opts)
@@ -526,6 +536,11 @@ pub fn open_window(
         }
         WindowEvent::CloseRequested { api, .. } => {
             crate::ipc::save_sessions(&handle);
+            // A window that runs on its own has no tray to hide into: closing it ends
+            // that process, the way closing a browser window does.
+            if crate::paths::instance_mode() {
+                return;
+            }
             if owner == PRIMARY {
                 api.prevent_close();
                 if let Some(win) = handle.get_window(PRIMARY) {

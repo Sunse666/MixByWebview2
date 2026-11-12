@@ -531,13 +531,17 @@ pub struct UrlPayload {
 
 #[derive(Clone, Serialize)]
 pub struct TabList {
+    /// The window this list belongs to. Events reach every window, so the page has to
+    /// check this before drawing a list that is not its own.
+    window: String,
     tabs: Vec<TabMeta>,
     selected: Option<String>,
     groups: Vec<TabGroup>,
 }
 
-fn snapshot(core: &Core) -> TabList {
+fn snapshot(core: &Core, label: &str) -> TabList {
     TabList {
+        window: label.to_string(),
         tabs: core
             .tabs
             .iter()
@@ -562,9 +566,10 @@ pub(crate) fn emit_tabs(app: &AppHandle, label: &str) {
     let state = app.state::<AppState>();
     let list = {
         let core = state.read_core(label);
-        snapshot(&core)
+        snapshot(&core, label)
     };
     let json = serde_json::to_string(&list).unwrap_or_else(|_| "{}".into());
+    crate::logging::info(&format!("tabs:changed -> {label} n={}", list.tabs.len()));
     let _ = app.emit_to(label, "tabs:changed", list);
     if let Some(side) = app.get_webview(&format!("{label}-side")) {
         let _ = side.eval(&format!(
@@ -588,6 +593,11 @@ fn window_geometry(app: &AppHandle, label: &str) -> Option<crate::session::Windo
 
 /// Writes every window to session.json.
 pub(crate) fn save_sessions(app: &AppHandle) {
+    // A window that runs as its own process must not rewrite the session of the window
+    // that spawned it: two writers would keep replacing each other's file.
+    if crate::paths::instance_mode() {
+        return;
+    }
     let state = app.state::<AppState>();
 
     // The geometry of a window is asked for on the main thread, so the tab state has to

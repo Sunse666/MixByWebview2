@@ -376,6 +376,20 @@ pub async fn window_new(app: AppHandle, state: State<'_, AppState>) -> Result<St
     Ok(label)
 }
 
+/// Starts another copy of the app on this url. Each copy has its own webview profile.
+fn spawn_instance(url: &str) -> bool {
+    let Ok(exe) = std::env::current_exe() else {
+        return false;
+    };
+    match std::process::Command::new(exe).arg("--instance").arg(url).spawn() {
+        Ok(_) => true,
+        Err(err) => {
+            crate::logging::warn(&format!("cannot start a second process: {err}"));
+            false
+        }
+    }
+}
+
 /// Moves a tab into a window of its own, dropped where the pointer let go.
 #[tauri::command]
 pub async fn tab_pop_out(
@@ -393,18 +407,24 @@ pub async fn tab_pop_out(
             None => return Ok(()),
         }
     };
-    let label = free_window_label(&state);
-    let scale = window.scale_factor().unwrap_or(1.0);
-    let size = window.inner_size().unwrap_or(tauri::PhysicalSize::new(1100, 760));
-    let geometry = crate::session::WindowGeometry {
-        x: (x * scale) as i32 - 80,
-        y: (y * scale) as i32 - 16,
-        width: size.width,
-        height: size.height,
-        maximized: false,
-    };
-    crate::window::open_window(&app, &label, vec![(url, scroll, pinned)], 0, Some(geometry))?;
-    crate::logging::info(&format!("tab {id} popped out into {label}"));
+    // The dragged tab becomes a window of its own, run as its own process: the same
+    // thing as starting mix.exe again, which is what "drag it out" means to a user.
+    if spawn_instance(&url) {
+        crate::logging::info(&format!("tab {id} opened in its own process"));
+    } else {
+        let label = free_window_label(&state);
+        let scale = window.scale_factor().unwrap_or(1.0);
+        let size = window.inner_size().unwrap_or(tauri::PhysicalSize::new(1100, 760));
+        let geometry = crate::session::WindowGeometry {
+            x: (x * scale) as i32 - 80,
+            y: (y * scale) as i32 - 16,
+            width: size.width,
+            height: size.height,
+            maximized: false,
+        };
+        crate::window::open_window(&app, &label, vec![(url, scroll, pinned)], 0, Some(geometry))?;
+        crate::logging::info(&format!("tab {id} popped out into {label}"));
+    }
 
     // The window that just gave away its last tab goes with it, the way a browser does:
     // leaving a fresh blank tab behind is not what dragging one out means. The primary

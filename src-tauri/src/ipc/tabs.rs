@@ -33,7 +33,7 @@ fn spawn_tab(
 #[tauri::command]
 pub async fn tab_list(window: tauri::Window, state: State<'_, AppState>) -> Result<TabList, AppError> {
     let core = state.read_core(window.label());
-    Ok(snapshot(&core))
+    Ok(snapshot(&core, window.label()))
 }
 
 #[tauri::command]
@@ -190,6 +190,13 @@ pub async fn tab_pin(
 }
 #[tauri::command]
 pub async fn tab_close(app: AppHandle, window: tauri::Window, state: State<'_, AppState>, id: String) -> Result<(), AppError> {
+    if window_of_tab(&id) != window.label() {
+        crate::logging::warn(&format!(
+            "refused to close {id} from window {}",
+            window.label()
+        ));
+        return Ok(());
+    }
     if let Some(webview) = app.get_webview(&id) {
         let _ = webview.close();
     }
