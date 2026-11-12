@@ -37,14 +37,7 @@ struct Manifest {
     permissions: Vec<String>,
 }
 
-/// Unpack every crx in the drop folder. Unpacked copies are a cache: they are
-/// rebuilt whenever the source file is newer.
-/// Copies what is in crx/ into the folder WebView2 loads from.
-///
-/// An extension the user switched off is not copied, and any copy left from before is
-/// removed: the folder is what the browser loads, so taking it away is the switch that
-/// actually holds. The list of names lives in settings, which is the only state this
-/// app can keep reliably - the browser's own enable call is one way.
+/// Unpacks every crx in the drop folder and copies it where WebView2 loads from.
 pub fn scan(dirs: &AppDirs, disabled: &[String]) -> Vec<ExtInfo> {
     let Ok(entries) = std::fs::read_dir(&dirs.crx) else {
         return Vec::new();
@@ -57,7 +50,6 @@ pub fn scan(dirs: &AppDirs, disabled: &[String]) -> Vec<ExtInfo> {
         let is_unpacked = source.is_dir() && source.join("manifest.json").is_file();
 
         if !is_crx && !is_unpacked {
-            // Say something: a silently ignored folder looks like a broken feature.
             if source.is_dir() {
                 crate::logging::warn(&format!(
                     "extension folder {} has no manifest.json, ignored",
@@ -74,8 +66,6 @@ pub fn scan(dirs: &AppDirs, disabled: &[String]) -> Vec<ExtInfo> {
             .to_string();
         let target = dirs.extensions.join(slug(&label));
         if disabled.iter().any(|name| name == &label || name == &slug(&label)) {
-            // Report it anyway: the card is the only place the switch lives, so an
-            // extension left out of this list would have no way back on.
             crate::logging::info(&format!("extension {label}: off, not copied"));
             let _ = std::fs::remove_dir_all(&target);
             let manifest = if is_unpacked {
@@ -91,7 +81,6 @@ pub fn scan(dirs: &AppDirs, disabled: &[String]) -> Vec<ExtInfo> {
                 },
                 version: manifest.version.clone(),
                 manifest_version: manifest.manifest_version,
-                // Nothing was unpacked, so there is no folder to load from.
                 dir: String::new(),
                 source: label.clone(),
                 status: "off".into(),
@@ -103,7 +92,6 @@ pub fn scan(dirs: &AppDirs, disabled: &[String]) -> Vec<ExtInfo> {
             });
             continue;
         }
-        // A name that slugifies to nothing must never resolve to the shared root.
         if target == dirs.extensions {
             crate::logging::warn(&format!("extension {label}: unusable file name, skipped"));
             continue;
@@ -262,7 +250,6 @@ fn install_crx(source: &Path, target: &Path) -> Result<(Manifest, String, String
 fn read_manifest(dir: &Path) -> Result<Manifest, String> {
     let path = dir.join("manifest.json");
     let raw = std::fs::read_to_string(&path).map_err(|err| format!("no manifest.json: {err}"))?;
-    // Some editors and PowerShell write a UTF-8 BOM; serde_json chokes on it.
     let raw = raw.trim_start_matches('\u{feff}');
     let json: serde_json::Value =
         serde_json::from_str(&raw).map_err(|err| format!("manifest.json is not valid JSON: {err}"))?;
@@ -272,13 +259,11 @@ fn read_manifest(dir: &Path) -> Result<Manifest, String> {
         .and_then(|value| value.as_u64())
         .unwrap_or(2) as u32;
 
-    // Localized names ("__MSG_appName__") are not resolved here; fall back to the folder.
     let mut name = json
         .get("name")
         .and_then(|value| value.as_str())
         .unwrap_or_default()
         .to_string();
-    // MV3 uses "action", MV2 used "browser_action"; both may carry an icon.
     let action = json.get("action").or_else(|| json.get("browser_action"));
     let mut action_icon = None;
     let mut action_icon_map = std::collections::HashMap::new();
@@ -370,7 +355,6 @@ fn resolve_icon(dir: &Path, manifest: &Manifest) -> String {
             return url;
         }
     }
-    // Extensions often only ship icons/icon-16.png.
     for guess in ["icons/icon-32.png", "icons/icon-16.png", "icon.png"] {
         if let Some(url) = icon_data_url(dir, guess) {
             return url;
@@ -418,8 +402,7 @@ pub fn base64(bytes: &[u8]) -> String {
     out
 }
 
-/// Folder name for an unpacked extension: alphanumerics, dash and underscore only,
-/// so a crafted file name can never climb out of the extensions folder.
+/// Folder name for an unpacked extension: alphanumerics, dash and underscore only.
 fn slug(input: &str) -> String {
     let mut out = String::with_capacity(input.len());
     for ch in input.chars() {
