@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
-/// Bumped when the on-disk shape changes. Old files are migrated, not ignored.
+/// Bumped when the on-disk shape changes.
 pub const SCHEMA: u32 = 1;
 
 fn default_proxy_mode() -> String {
@@ -22,14 +22,11 @@ pub struct Settings {
     pub schema_version: u32,
     pub start_url: String,
     pub restore_session: bool,
-    /// What the chrome page last reported. Informational: the layout uses a
-    /// constant, because the page measures its own viewport and cannot tell a
-    /// wrong height from a right one.
+    /// Height the chrome page last reported.
     pub chrome_height: f64,
     /// Adds a bookmarks row under the address bar, which also grows the chrome.
     pub show_bookmarks: bool,
-    /// Proxy: "system" follows Windows, "off" connects directly, "manual" uses
-    /// proxy_server. Takes effect on the next start.
+    /// Proxy: "system", "off" or "manual" (uses proxy_server).
     #[serde(default = "default_proxy_mode")]
     pub proxy_mode: String,
     #[serde(default)]
@@ -47,11 +44,6 @@ pub struct Settings {
     /// Extensions that must not load at all; takes effect on the next start.
     pub disabled_extensions: Vec<String>,
     /// Last state the browser confirmed for an extension, by folder.
-    ///
-    /// The live list is the first choice, but it does not always contain an
-    /// extension that was just loaded - adding a folder can report success while the
-    /// collection stays as it was - so the switch reads this when the list is silent,
-    /// and the page no longer flips back to off on every visit.
     #[serde(default)]
     pub extension_state: std::collections::BTreeMap<String, bool>,
 
@@ -133,12 +125,10 @@ pub struct Settings {
     pub tab_hover_preview: bool,
     /// Stop the timers of a background tab that is not playing sound.
     pub freeze_background: bool,
-    /// Set by the extensions page: clear the profile's extension state on the next
-    /// start, because a disabled extension cannot be reached through the API again.
+    /// Set by the extensions page: clear the profile's extension state on the next start.
     #[serde(default)]
     pub reset_extensions: bool,
-    /// Wake a background tab for a moment to photograph it instead of showing the
-    /// picture from when it was last visited.
+    /// Wake a background tab to photograph it instead of reusing the stored picture.
     pub live_thumbs: bool,
     pub max_live_tabs: usize,
     pub download_dir: Option<String>,
@@ -216,8 +206,6 @@ impl Default for Settings {
 impl Settings {
     /// Keeps older profiles in step with changes to the default toolbar.
     fn migrate(mut self) -> Self {
-        // The magnifier slot became the zoom control; "find" still exists but is
-        // no longer part of the default strip.
         if !self.toolbar.iter().any(|id| id == "zoom") {
             for id in self.toolbar.iter_mut() {
                 if id == "find" {
@@ -225,8 +213,6 @@ impl Settings {
                 }
             }
         }
-        // An empty list means "nothing enabled", but it also happens when a
-        // profile predates the field, where falling back to the default is right.
         if self.toolbar.is_empty() {
             self.toolbar = Settings::default().toolbar;
         }
