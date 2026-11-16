@@ -43,23 +43,22 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      # The version the checks were last run with on the machine. clippy gains lints with
-      # every release, so a newer stable would fail this gate on findings the local build
-      # does not have; bump this together with the toolchain on the machine.
+      # The version the checks were run with on the machine. clippy gains lints with every
+      # release, so a newer stable fails this gate on findings the local build does not
+      # have; bump this together with the toolchain on the machine.
       - name: Install the toolchain the checks were written for
         run: rustup toolchain install 1.97.1 --profile minimal --component clippy,rustfmt
-      - name: Make it the default, so cargo below picks it up
-        run: rustup default 1.97.1
-      # The gate names the toolchain it used, but only in the middle of its output. This
-      # puts it at the top, where a failed run gets read from: "which clippy even ran" is
-      # the first question when a lint fails here and not on the machine.
+      # `rustup default` is not enough here: the runner keeps another toolchain active
+      # through the environment, which is how the gate ended up linting with the runner's
+      # stable. Everything below names the toolchain instead, and MIX_TOOLCHAIN tells the
+      # gate to do the same - so the log always says which compiler ran.
       - name: Show what will run the checks
         run: |
-          rustup show active-toolchain
-          cargo --version
-          cargo clippy --version
-      # After the toolchain is pinned, so the cache is keyed on the version that will
-      # actually compile.
+          rustup toolchain list
+          rustup run 1.97.1 rustc --version
+          rustup run 1.97.1 cargo clippy --version
+          rustup run 1.97.1 cargo fmt --version
+      # After the toolchain is fixed, so the cache is keyed on the version that compiles.
       - uses: Swatinem/rust-cache@v2
       # check-all runs cargo with --offline, which is right on a machine that already has
       # the crates and wrong on a fresh runner. One scoped fetch fills the cache for it;
@@ -67,7 +66,9 @@ jobs:
       # depends on and fetching those costs a minute for nothing.
       - name: Fetch the crates the offline checks will need
         working-directory: src-tauri
-        run: cargo fetch --target x86_64-pc-windows-msvc
+        run: rustup run 1.97.1 cargo fetch --target x86_64-pc-windows-msvc
       - name: Tests, clippy, rustfmt, pages, i18n, command lists
         shell: pwsh
+        env:
+          MIX_TOOLCHAIN: "1.97.1"
         run: ./scripts/check-all.ps1

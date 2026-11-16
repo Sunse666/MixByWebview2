@@ -3,17 +3,23 @@
 $repo = Split-Path -Parent $PSScriptRoot
 $failed = @()
 
+# A toolchain named in MIX_TOOLCHAIN wins and is used for everything. CI sets it, because
+# `rustup default` is not enough there: the runner keeps another toolchain active through
+# the environment, so `(default)` never moved and the gate linted with the runner's newer
+# stable - and failed on lints this tree was never cleaned against.
+$pinned = $env:MIX_TOOLCHAIN
+
 # rustup can report the clippy and rustfmt components as installed for a toolchain while
 # the binaries are not on disk, and cargo then refuses them with "not applicable to the
-# toolchain". So the toolchain is chosen by looking at the files - but the default one
-# comes first, because the checks have to run with the same compiler `cargo test` used.
-# A machine that also has a newer stable with clippy must not lint this code with lints the
-# pinned version does not have; that is exactly what broke the first CI run.
+# toolchain". So the toolchain is chosen by looking at the files - the pinned one first,
+# then the default, because the checks should run with the same compiler `cargo test` used.
 function Find-ToolchainWith($binary) {
   $listed = & rustup toolchain list 2>$null
   $names = @($listed | ForEach-Object { ($_ -split '\s+')[0] })
   $default = @($listed | Where-Object { $_ -match '\(default\)' } | ForEach-Object { ($_ -split '\s+')[0] })
-  $ordered = $default + @($names | Where-Object { $default -notcontains $_ })
+  $ordered = @()
+  if ($pinned) { $ordered += $names | Where-Object { $_ -like "$pinned*" } }
+  $ordered += $default + @($names | Where-Object { $default -notcontains $_ })
   foreach ($name in $ordered) {
     $root = & rustup run $name rustc --print sysroot 2>$null
     if ($root -and (Test-Path (Join-Path $root "bin\$binary"))) { return $name }
@@ -21,8 +27,15 @@ function Find-ToolchainWith($binary) {
   return $null
 }
 
+# `cargo +toolchain` when one is pinned, plain `cargo` otherwise.
+function Invoke-Cargo($arguments) {
+  if ($pinned) { & cargo "+$pinned" @arguments } else { & cargo @arguments }
+}
+
 Push-Location (Join-Path $repo "src-tauri")
-$out = & cargo test --offline 2>&1 | Out-String
+if ($pinned) { Write-Host "toolchain: $pinned (from MIX_TOOLCHAIN)" }
+
+$out = Invoke-Cargo @("test", "--offline") 2>&1 | Out-String
 $code = $LASTEXITCODE
 ($out -split "`n" | Select-String -Pattern "test result|^error") | ForEach-Object { $_.Line }
 if ($code -ne 0) { $failed += "cargo test" }
@@ -41,6 +54,7 @@ if ($clippy) {
   }
 } else {
   Write-Host "skipped clippy: no installed toolchain ships cargo-clippy" -ForegroundColor Yellow
+  if ($pinned) { $failed += "clippy under $pinned" }
 }
 
 $fmt = Find-ToolchainWith "cargo-fmt.exe"
@@ -54,6 +68,7 @@ if ($fmt) {
   }
 } else {
   Write-Host "skipped rustfmt: no installed toolchain ships cargo-fmt" -ForegroundColor Yellow
+  if ($pinned) { $failed += "rustfmt under $pinned" }
 }
 Pop-Location
 
