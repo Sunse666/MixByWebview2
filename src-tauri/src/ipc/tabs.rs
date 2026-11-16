@@ -228,6 +228,9 @@ pub async fn tab_close(
     }
     crate::thumbs::forget(&id);
     crate::freeze::forget(&id);
+    // Per-tab bookkeeping that nothing would ever read again once the tab is gone.
+    state.windows.shown_at.write().remove(&id);
+    state.windows.url_published.write().remove(&id);
 
     let (go_left, next_url) = {
         let settings = state.settings.read();

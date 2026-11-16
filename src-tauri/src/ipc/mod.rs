@@ -233,6 +233,24 @@ impl AppState {
 
     pub fn remove_window(&self, label: &str) {
         self.cores.write().remove(label);
+        // The maps beside the tabs are keyed by window label or by tab id, and neither was
+        // being cleaned: a closed window left its suggest text, its closed-tab list and one
+        // entry per tab it ever had behind. Tab ids carry their window ("w1-tab-3"), which
+        // is what makes them findable here.
+        let prefix = format!("{label}-tab-");
+        {
+            let mut shown = self.windows.shown_at.write();
+            shown.retain(|id, _| !id.starts_with(&prefix));
+        }
+        {
+            let mut published = self.windows.url_published.write();
+            published.retain(|id, _| !id.starts_with(&prefix));
+        }
+        self.windows.closed_tabs.write().remove(label);
+        self.windows.suggest_text.write().remove(label);
+        self.windows.url_edit.write().remove(label);
+        self.windows.overlay_frame.write().remove(label);
+        self.windows.overlay_thumb.write().remove(label);
     }
 
     /// Tab state of one window.
