@@ -30,6 +30,7 @@
     "allow-theme-revert",
     "allow-overlay-open",
     "allow-overlay-close",
+    "allow-overlay-resize",
     "allow-ext-list",
     "allow-extension-add",
     "allow-extension-set",

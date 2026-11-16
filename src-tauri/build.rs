@@ -47,6 +47,7 @@ fn main() {
         "theme_revert",
         "overlay_open",
         "overlay_close",
+        "overlay_resize",
         "ext_list",
         "extension_add",
         "extension_set",

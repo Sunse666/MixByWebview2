@@ -707,16 +707,18 @@ footer { margin-top: auto; display: flex; justify-content: flex-end; gap: 8px; }
 }
 
 /* Download bubble -------------------------------------------------------- */
+/* The bubble reports its own height, so the list gets a cap of its own rather than a
+   share of a window it no longer fills. */
 .download-panel {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  height: auto;
   padding: 8px;
   gap: 6px;
 }
 .download-list {
-  flex: 1;
-  min-height: 0;
+  flex: 0 1 auto;
+  max-height: 240px;
   overflow-y: auto;
 }
 .download-row {

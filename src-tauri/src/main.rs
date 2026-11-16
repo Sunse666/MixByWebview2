@@ -135,6 +135,7 @@ fn main() {
             ipc::theme_revert,
             ipc::overlay_open,
             ipc::overlay_close,
+            ipc::overlay_resize,
             ipc::ext_list,
             ipc::extension_add,
             ipc::extension_set,

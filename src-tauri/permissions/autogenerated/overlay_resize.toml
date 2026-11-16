@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-overlay-resize"
+description = "Enables the overlay_resize command without any pre-configured scope."
+commands.allow = ["overlay_resize"]
+
+[[permission]]
+identifier = "deny-overlay-resize"
+description = "Denies the overlay_resize command without any pre-configured scope."
+commands.deny = ["overlay_resize"]

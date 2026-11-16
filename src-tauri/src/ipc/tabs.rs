@@ -332,11 +332,12 @@ pub async fn thumb_show(
         crate::thumbs::capture_later(app.clone(), id.clone(), window.label().to_string());
     }
     let (win_w, _) = crate::window::logical_size(&window)?;
-    let (width, height) = (372.0, 236.0);
+    // The card is a picture frame: its size is the design, not a measurement.
+    let (width, height) = crate::overlay::initial_size("thumb");
     let left = (x - width / 2.0).clamp(6.0, (win_w - width - 6.0).max(6.0));
     let top = chrome_height(&app) + 6.0;
     let kind = format!("thumb&id={}", crate::permissions::encode(&id));
-    crate::overlay::open_at(&app, &window, &kind, left, top, width, height)
+    crate::overlay::open_sized(&app, &window, &kind, left, top, (width, height))
         .map_err(|err| AppError::new("overlay", err))?;
     app.state::<AppState>()
         .windows.overlay_thumb

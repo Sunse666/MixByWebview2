@@ -1,4 +1,4 @@
-//! Shared state for the ipc layer; the commands live in one module per area.
+﻿//! Shared state for the ipc layer; the commands live in one module per area.
 
 mod chrome;
 mod keys;
@@ -62,6 +62,9 @@ pub struct WindowMaps {
     pub overlay_from_page: parking_lot::RwLock<std::collections::HashMap<String, bool>>,
     /// Windows whose overlay is the tab hover card.
     pub overlay_thumb: parking_lot::RwLock<std::collections::HashSet<String>>,
+    /// The geometry each window's overlay was opened with. The page reports a new
+    /// height for it once it has rendered, and that has to be measured against it.
+    pub overlay_frame: parking_lot::RwLock<std::collections::HashMap<String, crate::overlay::Frame>>,
     /// Last time each tab was on screen, in seconds.
     pub shown_at: parking_lot::RwLock<std::collections::HashMap<String, u64>>,
     /// What is typed in each window's address bar, by window label.

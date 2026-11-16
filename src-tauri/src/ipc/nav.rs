@@ -222,14 +222,16 @@ pub async fn suggest_open(
         return Ok(());
     }
     app.state::<AppState>().ui.write().suggest_width = width;
-    crate::overlay::open_at(
+    // The list is as wide as the address bar, so the width comes from the caller; the
+    // height is whatever the suggestions need, which the page measures.
+    let height = crate::overlay::initial_size("suggest").1;
+    crate::overlay::open_sized(
         &app,
         &window,
         "suggest",
         x,
         chrome_height(&app) + 2.0,
-        width,
-        48.0,
+        (width, height),
     )
     .map_err(|e| AppError::new("overlay", e))
 }

@@ -1349,7 +1349,7 @@ async function applyLanguage() {
   setLanguage((settings && settings.language) || "en");
 }
 
-async function boot() {
+async function bootPanel() {
   menu.hidden = true;
   appMenu.hidden = true;
   themePanel.hidden = true;
@@ -1495,6 +1495,55 @@ async function boot() {
       await close();
     }
   });
+}
+
+/** Panels whose size is the design rather than a measurement: Rust keeps it. */
+const FIXED_SIZE = new Set(["thumb", "palette", "tab_search", "settings"]);
+
+/** The panel the boot function just revealed, if it revealed one. */
+function visiblePanel() {
+  return [menu, appMenu, themePanel, permissionPanel].find(
+    (panel) => !panel.hidden && panel.childElementCount > 0,
+  );
+}
+
+/**
+ * Reports the height the panel's content needs, and reports it again whenever that
+ * changes: the window is resized to match, so the page has to measure its own content
+ * instead of describing itself as "as tall as the window".
+ */
+function fitHeight(panel) {
+  let sent = 0;
+  let queued = 0;
+  let failed = false;
+  const measure = () => {
+    queued = 0;
+    panel.style.height = "auto";
+    panel.style.maxHeight = "none";
+    const height = Math.ceil(panel.getBoundingClientRect().height);
+    if (height < 1 || Math.abs(height - sent) < 1) return;
+    sent = height;
+    // The measured height stays as the cap, so a panel with more rows than the window
+    // can show scrolls inside it instead of losing its first rows off the top.
+    panel.style.maxHeight = `${height}px`;
+    invoke("overlay_resize", { height }).catch((error) => {
+      if (failed) return;
+      failed = true;
+      report(`overlay resize failed: ${error && error.message ? error.message : error}`);
+    });
+  };
+  const soon = () => {
+    if (!queued) queued = requestAnimationFrame(measure);
+  };
+  measure();
+  new ResizeObserver(soon).observe(panel);
+}
+
+async function boot() {
+  await bootPanel();
+  if (FIXED_SIZE.has(kind)) return;
+  const panel = visiblePanel();
+  if (panel) fitHeight(panel);
 }
 
 boot().catch((error) => {

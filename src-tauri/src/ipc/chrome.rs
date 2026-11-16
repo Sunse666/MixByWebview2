@@ -61,14 +61,8 @@ pub async fn chrome_menu(
         "tab" => "tab_menu",
         _ => "chrome_menu",
     };
-    let (menu_w, menu_h) = match label {
-        "url_menu" => (190.0, 150.0),
-        "tab_menu" => (200.0, 224.0),
-        "downloads" => (360.0, 320.0),
-        _ => (190.0, 110.0),
-    };
     let _ = app.emit_to(window.label(), "chrome-menu", ());
-    let _ = crate::overlay::open_at(&app, &window, label, x, y, menu_w, menu_h);
+    let _ = crate::overlay::open_at(&app, &window, label, x, y);
     Ok(())
 }
 
@@ -97,15 +91,9 @@ pub async fn context_menu(
 
     let win = window_of(&window);
     let (width, height) = crate::window::logical_size(&win)?;
-    let mut rows = 5.0; // back, forward, reload, print, inspect
-    let mut groups = 2.0;
-    if context.link.is_some() { rows += 2.0; groups += 1.0; }
-    if context.image.is_some() { rows += 2.0; groups += 1.0; }
-    if context.selection.is_some() { rows += 1.0; groups += 1.0; }
-    if context.editable { rows += 3.0; groups += 1.0; }
-
-    let menu_w = 250.0;
-    let menu_h = rows * 30.0 + groups * 11.0 + 12.0;
+    // Which rows the menu will have is the page's business: this only places the corner
+    // it hangs from, with the size the menu opens at.
+    let (menu_w, menu_h) = crate::overlay::initial_size("context_menu");
     let x = (request.x.unwrap_or(0.0) + 80.0).clamp(4.0, (width - menu_w - 4.0).max(4.0));
     let y = (chrome_height(&app) + request.y.unwrap_or(0.0))
         .clamp(4.0, (height - menu_h - 4.0).max(4.0));
@@ -116,7 +104,7 @@ pub async fn context_menu(
         context.image.is_some(),
         context.selection.is_some()
     ));
-    if let Err(err) = crate::overlay::open_at(&app, &window, "context_menu", x, y, menu_w, menu_h) {
+    if let Err(err) = crate::overlay::open_at(&app, &window, "context_menu", x, y) {
         crate::logging::warn(&format!("context menu overlay failed: {err}"));
         return Err(AppError::new("overlay", err));
     }
@@ -135,7 +123,7 @@ pub async fn tab_menu(
 ) -> Result<(), AppError> {
     state.ui.write().menu_context.tab = Some(id);
     let _ = app.emit_to(window.label(), "chrome-menu", ());
-    let _ = crate::overlay::open_at(&app, &window, "tab_menu", x, y, 200.0, 224.0);
+    let _ = crate::overlay::open_at(&app, &window, "tab_menu", x, y);
     Ok(())
 }
 
@@ -172,8 +160,7 @@ pub async fn permission_request(
     let id = crate::permissions::open_prompt(&app, window.label(), &key);
     let win = window_of(&window);
     let (width, _) = crate::window::logical_size(&win)?;
-    let prompt_w = 380.0;
-    let prompt_h = 150.0;
+    let (prompt_w, prompt_h) = crate::overlay::initial_size("permission");
     let x = ((width - prompt_w) / 2.0).max(0.0);
     let hash = format!(
         "permission&id={id}&origin={}&kind={}",
@@ -253,38 +240,7 @@ pub async fn overlay_open_at(
     x: f64,
     y: f64,
 ) -> Result<(), AppError> {
-    let menu_h = match kind.split("group=").nth(1).unwrap_or("file") {
-        "file" => 322.0,
-        "edit" => 128.0,
-        "view" => 150.0,
-        "history" => 96.0,
-        "bookmarks" => 96.0,
-        "tools" => 254.0,
-        _ => 96.0,
-    };
-    let palette = kind == "palette" || kind == "tab_search";
-    let downloads = kind.starts_with("downloads");
-    let group_menu = kind.starts_with("group_menu");
-    let (width, height) = if palette {
-        (560.0, 420.0)
-    } else if group_menu {
-        (214.0, 138.0)
-    } else if downloads {
-        (360.0, 320.0)
-    } else {
-        (232.0, menu_h)
-    };
-    // Measured in css pixels by the page; placed in logical pixels by the window.
-    let scale = crate::overlay::page_scale(&window);
-    let _ = crate::overlay::open_at(
-        &app,
-        &window,
-        &kind,
-        x * scale,
-        y * scale,
-        width * scale,
-        height * scale,
-    );
+    let _ = crate::overlay::open_at(&app, &window, &kind, x, y);
     Ok(())
 }
 
@@ -506,6 +462,25 @@ pub async fn overlay_toggle(
 pub async fn overlay_close(app: AppHandle, window: tauri::Window) -> Result<(), AppError> {
     crate::overlay::close(&app, window.label());
     Ok(())
+}
+
+/// The panel measured its own content; put the window's bounds there.
+///
+/// A panel's height belongs to its content and only the page can see it, so the page is
+/// the one that says how tall it is. The width is left alone: that is a design decision.
+#[tauri::command]
+pub async fn overlay_resize(
+    app: AppHandle,
+    webview: tauri::Webview,
+    height: f64,
+) -> Result<(), AppError> {
+    require_trusted(&webview)?;
+    let label = webview.label().to_string();
+    if !label.starts_with("overlay-") {
+        return Err(AppError::new("untrusted", "only an overlay panel may size itself"));
+    }
+    crate::overlay::resize(&app, &label, height)
+        .map_err(|err| AppError::new("overlay", err))
 }
 
 
