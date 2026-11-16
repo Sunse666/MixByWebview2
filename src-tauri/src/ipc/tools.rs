@@ -374,7 +374,17 @@ pub async fn extension_set(
             let _ = crate::ext_live::set_enabled(&page, &entry.id, false);
         }
     }
+    extensions_changed(&app);
     Ok(())
+}
+
+/// Tells the toolbar that the set of extensions it draws has moved.
+///
+/// The chrome listens for this and re-reads the list; nothing used to send it, so a switch
+/// thrown from the app menu left the toolbar showing the old set until something else
+/// happened to refresh it.
+fn extensions_changed(app: &AppHandle) {
+    let _ = app.emit("ext:changed", ());
 }
 
 /// Loads one extension from its folder again: the way back from a disabled switch.
@@ -391,7 +401,7 @@ pub async fn extension_add(
     let Some(page) = app.get_webview(&label) else {
         return Err(AppError::new("extension", "no page to load it into"));
     };
-    match crate::ext_live::add(&page, &dir) {
+    let result = match crate::ext_live::add(&page, &dir) {
         Ok(true) => {
             crate::logging::info(&format!("extension add {dir}: enabled"));
             remember_extension_state(&state, &dir, true);
@@ -411,7 +421,11 @@ pub async fn extension_add(
             request_extension_reset(&state);
             Err(AppError::new("extension", err))
         }
-    }
+    };
+    // Added but off still counts as a change: the list the toolbar draws is about what is
+    // there, not about what is running.
+    extensions_changed(&app);
+    result
 }
 
 /// Enables or disables a loaded extension without restarting the app.
@@ -436,6 +450,7 @@ pub async fn extension_live_set(
         if let Some(dir) = dir {
             remember_extension_state(&state, &dir, enabled);
         }
+        extensions_changed(&app);
     }
     Ok(ok)
 }
