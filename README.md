@@ -138,13 +138,17 @@ Mix/
 需要 Rust 1.80+ 和 Node 22。
 
 ```powershell
-# 先跑能自动化的检查：内部页构建、词条、硬编码文案、命令清单一致性、单元测试
+# 先跑能自动化的检查：单元测试、clippy、rustfmt、内部页构建、词条、硬编码文案、命令清单一致性
 powershell -File scripts\check-all.ps1
 
 cd src-tauri
 cargo build --release
 powershell -File ..\scripts\build-portable.ps1
 ```
+
+`check-all.ps1` 用**已安装的、磁盘上真有 `cargo-clippy` / `cargo-fmt` 的那个工具链**跑这两项检查
+（`rustup component list` 可能报告组件已安装而二进制缺失，脚本按文件判断），任何一项不过就失败；
+一个都没有时打印 skipped，不会静默通过。
 
 新增 IPC 命令后必须跑一次 `node scripts/gen-commands.js`：它把 `main.rs` 里的命令清单同步到
 `build.rs`（ACL 生成）和 `capabilities/default.json`（本地页面授权），三份清单不再手工维护。
