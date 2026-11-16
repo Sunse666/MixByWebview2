@@ -231,6 +231,105 @@ impl Settings {
         self
     }
 
+    /// Every rule the settings have to satisfy before they are used or written.
+    ///
+    /// It runs on the way in - a patch from the ui, a file from disk - instead of at each
+    /// field read, so there is one answer to "which values are allowed" rather than one
+    /// per call site. Nothing here trusts its input: the page and the file are both
+    /// outside this process's control.
+    pub fn sanitize(&mut self) {
+        self.schema_version = SCHEMA;
+
+        self.proxy_mode = match self.proxy_mode.as_str() {
+            "manual" => "manual".to_string(),
+            "off" => "off".to_string(),
+            _ => default_proxy_mode(),
+        };
+        self.proxy_server = self.proxy_server.trim().to_string();
+
+        self.sidebar = match self.sidebar.as_str() {
+            "left" => "left".to_string(),
+            "right" => "right".to_string(),
+            _ => default_sidebar(),
+        };
+        self.sidebar_width = finite(self.sidebar_width, default_sidebar_width()).clamp(180.0, 640.0);
+        // Only the panels this build knows, in their standard order, and never none.
+        let known = default_sidebar_views();
+        if self.sidebar_views.is_empty() || self.sidebar_views.iter().any(|id| !known.contains(id)) {
+            let asked = std::mem::take(&mut self.sidebar_views);
+            self.sidebar_views = known
+                .into_iter()
+                .filter(|id| asked.is_empty() || asked.iter().any(|entry| entry == id))
+                .collect();
+        }
+
+        let toolbar = [
+            "downloads",
+            "translate",
+            "find",
+            "zoom",
+            "bookmark",
+            "extensions",
+            "home",
+            "reopen",
+            "mute",
+            "shot",
+        ];
+        self.toolbar.retain(|id| toolbar.contains(&id.as_str()));
+        if self.toolbar.is_empty() {
+            self.toolbar = Settings::default().toolbar;
+        }
+
+        self.keep_alive_hosts = self.keep_alive_hosts.trim().to_string();
+        self.drag_threshold = self.drag_threshold.clamp(8, 120);
+        self.gesture_width = self.gesture_width.clamp(1, 10);
+        self.gesture_threshold = self.gesture_threshold.clamp(10, 200);
+        self.gesture_color = self.gesture_color.trim().to_string();
+        self.gesture_blocked = self.gesture_blocked.trim().to_string();
+
+        self.theme_mode = match self.theme_mode.as_str() {
+            "light" => "light".to_string(),
+            "system" => "system".to_string(),
+            _ => "dark".to_string(),
+        };
+        self.font_family = self.font_family.trim().to_string();
+        self.font_mono = self.font_mono.trim().to_string();
+        self.font_size = self.font_size.min(32);
+        self.font_min_size = self.font_min_size.min(24);
+        self.home_url = self.home_url.trim().to_string();
+        self.default_zoom = finite(self.default_zoom, 1.0).clamp(0.5, 2.0);
+
+        self.custom_search = self.custom_search.trim().to_string();
+        self.newtab_url = self.newtab_url.trim().to_string();
+        self.newtab_tiles = self.newtab_tiles.clamp(1, 40);
+        self.newtab_columns = self.newtab_columns.clamp(1, 12);
+        self.newtab_radius = self.newtab_radius.min(50);
+
+        let combos = std::mem::take(&mut self.shortcuts);
+        self.shortcuts = combos
+            .into_iter()
+            .filter(|(_, combo)| !combo.trim().is_empty())
+            .map(|(action, combo)| (action, normalize_combo(&combo)))
+            .collect();
+
+        self.search_engine = match self.search_engine.as_str() {
+            "bing" => "bing".to_string(),
+            "google" => "google".to_string(),
+            "ddg" => "ddg".to_string(),
+            _ => "baidu".to_string(),
+        };
+        self.language = if self.language == "zh" { "zh".to_string() } else { "en".to_string() };
+        self.translate_to = match self.translate_to.trim() {
+            "" => "zh".to_string(),
+            value => value.to_string(),
+        };
+        if self.start_url.trim().is_empty() {
+            self.start_url = Settings::default().start_url;
+        }
+        self.max_live_tabs = self.max_live_tabs.clamp(1, 64);
+        self.chrome_height = finite(self.chrome_height, 86.0).clamp(0.0, 400.0);
+    }
+
     pub fn save(&self, path: &Path) -> std::io::Result<()> {
         let json = serde_json::to_string_pretty(self)?;
         crate::paths::write_atomic(path, json.as_bytes())
@@ -241,13 +340,14 @@ impl Settings {
             return Self::default();
         };
         match serde_json::from_str::<Settings>(&raw) {
-            Ok(mut value) => {
+            Ok(value) => {
                 if value.schema_version > SCHEMA {
                     crate::logging::warn("settings.json is newer than this build; using defaults");
                     return Self::default();
                 }
-                value.schema_version = SCHEMA;
-                value.migrate()
+                let mut value = value.migrate();
+                value.sanitize();
+                value
             }
             Err(err) => {
                 crate::logging::warn(&format!("settings.json unreadable ({err}); keeping a backup"));
@@ -256,6 +356,38 @@ impl Settings {
             }
         }
     }
+}
+
+/// A number that came from outside; NaN and infinity are replaced by a sane one.
+fn finite(value: f64, fallback: f64) -> f64 {
+    if value.is_finite() {
+        value
+    } else {
+        fallback
+    }
+}
+
+/// Stores key combos in one spelling: "ctrl+shift+t".
+pub(crate) fn normalize_combo(raw: &str) -> String {
+    let mut parts: Vec<String> = raw
+        .split('+')
+        .map(|part| part.trim().to_ascii_lowercase())
+        .filter(|part| !part.is_empty())
+        .map(|part| match part.as_str() {
+            "control" => "ctrl".to_string(),
+            "esc" => "escape".to_string(),
+            "del" => "delete".to_string(),
+            other => other.to_string(),
+        })
+        .collect();
+    parts.sort_by_key(|part| match part.as_str() {
+        "ctrl" => 0,
+        "alt" => 1,
+        "shift" => 2,
+        "meta" => 3,
+        _ => 4,
+    });
+    parts.join("+")
 }
 #[cfg(test)]
 mod tests {
@@ -295,5 +427,48 @@ mod tests {
         );
         let settings = Settings::load(&file);
         assert_eq!(settings.toolbar, vec!["zoom".to_string(), "bookmark".to_string()]);
+    }
+
+    #[test]
+    fn a_hand_edited_file_is_clamped_on_the_way_in() {
+        let file = write(
+            "mix-settings-sanitize",
+            r#"{"schema_version":1,"theme_mode":"solarized","max_live_tabs":900,
+                "sidebar_width":-4.0,"toolbar":["zoom","nonsense"],"language":"fr"}"#,
+        );
+        let settings = Settings::load(&file);
+        assert_eq!(settings.theme_mode, "dark");
+        assert_eq!(settings.max_live_tabs, 64);
+        assert_eq!(settings.sidebar_width, 180.0);
+        assert_eq!(settings.toolbar, vec!["zoom".to_string()]);
+        assert_eq!(settings.language, "en");
+    }
+
+    #[test]
+    fn a_nonsense_number_does_not_become_nan() {
+        let mut settings = Settings::default();
+        settings.sidebar_width = f64::NAN;
+        settings.default_zoom = f64::INFINITY;
+        settings.sanitize();
+        assert_eq!(settings.sidebar_width, default_sidebar_width());
+        assert_eq!(settings.default_zoom, 1.0);
+    }
+
+    #[test]
+    fn the_panels_the_build_knows_survive_in_their_order() {
+        let mut settings = Settings::default();
+        settings.sidebar_views =
+            vec!["history".to_string(), "gone".to_string(), "bookmarks".to_string()];
+        settings.sanitize();
+        assert_eq!(
+            settings.sidebar_views,
+            vec!["bookmarks".to_string(), "history".to_string()]
+        );
+    }
+
+    #[test]
+    fn key_combos_are_stored_in_one_spelling() {
+        assert_eq!(normalize_combo("Shift + Control + T"), "ctrl+shift+t");
+        assert_eq!(normalize_combo("ESC"), "escape");
     }
 }

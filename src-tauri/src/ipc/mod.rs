@@ -1,4 +1,4 @@
-﻿//! Shared state for the ipc layer; the commands live in one module per area.
+//! Shared state for the ipc layer; the commands live in one module per area.
 
 mod chrome;
 mod keys;
@@ -250,8 +250,8 @@ impl AppState {
         parking_lot::RwLockWriteGuard::try_map(self.cores.write(), |map| map.get_mut(label)).ok()
     }
 
-    /// Tab state of one window. A window whose state is gone — a webview callback that
-    /// outlived its window — gets an empty one instead of taking the process down.
+    /// Tab state of one window. A window whose state is gone 鈥?a webview callback that
+    /// outlived its window 鈥?gets an empty one instead of taking the process down.
     pub fn read_core(&self, label: &str) -> parking_lot::MappedRwLockReadGuard<'_, Core> {
         if let Some(core) = self.try_read_core(label) {
             return core;
@@ -279,60 +279,6 @@ impl AppState {
     }
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
-pub struct SettingsPatch {
-    pub restore_session: Option<bool>,
-    pub show_bookmarks: Option<bool>,
-    pub proxy_mode: Option<String>,
-    pub proxy_server: Option<String>,
-    pub sidebar: Option<String>,
-    pub sidebar_width: Option<f64>,
-    pub sidebar_views: Option<Vec<String>>,
-    pub toolbar: Option<Vec<String>>,
-    pub translate_to: Option<String>,
-    pub new_tab_page: Option<bool>,
-    pub search_engine: Option<String>,
-    pub shortcuts: Option<std::collections::BTreeMap<String, String>>,
-    pub custom_search: Option<String>,
-    pub gestures: Option<bool>,
-    pub super_drag: Option<bool>,
-    pub memory_saver: Option<bool>,
-    pub keep_alive_hosts: Option<String>,
-    pub mark_suspended: Option<bool>,
-    pub tab_hover_preview: Option<bool>,
-    pub freeze_background: Option<bool>,
-    pub live_thumbs: Option<bool>,
-    pub drag_hint: Option<bool>,
-    pub drag_threshold: Option<u32>,
-    pub drag_map: Option<std::collections::BTreeMap<String, String>>,
-    pub gesture_trail: Option<bool>,
-    pub gesture_color: Option<String>,
-    pub gesture_width: Option<u32>,
-    pub gesture_threshold: Option<u32>,
-    pub gesture_map: Option<std::collections::BTreeMap<String, String>>,
-    pub gesture_blocked: Option<String>,
-    pub theme_mode: Option<String>,
-    pub font_family: Option<String>,
-    pub font_mono: Option<String>,
-    pub font_size: Option<u32>,
-    pub font_min_size: Option<u32>,
-    pub home_url: Option<String>,
-    pub default_zoom: Option<f64>,
-    pub tab_double_click_close: Option<bool>,
-    pub tab_show_close: Option<bool>,
-    pub tab_close_goes_left: Option<bool>,
-    pub newtab_show_search: Option<bool>,
-    pub newtab_show_sites: Option<bool>,
-    pub newtab_url: Option<String>,
-    pub newtab_tiles: Option<u32>,
-    pub newtab_columns: Option<u32>,
-    pub newtab_radius: Option<u32>,
-    pub language: Option<String>,
-    pub hidden_extensions: Option<Vec<String>>,
-    pub disabled_extensions: Option<Vec<String>>,
-    pub start_url: Option<String>,
-    pub max_live_tabs: Option<usize>,
-}
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct MenuContext {
@@ -374,29 +320,6 @@ pub(crate) fn encode_query(text: &str) -> String {
         }
     }
     out
-}
-
-/// Stores key combos in one spelling: "ctrl+shift+t".
-fn normalize_combo(raw: &str) -> String {
-    let mut parts: Vec<String> = raw
-        .split('+')
-        .map(|part| part.trim().to_ascii_lowercase())
-        .filter(|part| !part.is_empty())
-        .map(|part| match part.as_str() {
-            "control" => "ctrl".to_string(),
-            "esc" => "escape".to_string(),
-            "del" => "delete".to_string(),
-            other => other.to_string(),
-        })
-        .collect();
-    parts.sort_by_key(|part| match part.as_str() {
-        "ctrl" => 0,
-        "alt" => 1,
-        "shift" => 2,
-        "meta" => 3,
-        _ => 4,
-    });
-    parts.join("+")
 }
 
 impl AppError {

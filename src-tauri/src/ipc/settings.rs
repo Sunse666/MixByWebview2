@@ -76,11 +76,13 @@ pub async fn settings_get(webview: tauri::Webview, state: State<'_, AppState>) -
 #[tauri::command]
 pub async fn settings_set(
     webview: tauri::Webview, state: State<'_, AppState>,
-    patch: SettingsPatch,
+    patch: serde_json::Value,
 ) -> Result<Settings, AppError> {
     require_trusted(&webview)?;
-    let asked_side = patch.sidebar.is_some();
-    let asked_views = patch.sidebar_views.is_some();
+    // The sidebar has to be told what changed, and the patch itself is the only thing
+    // that says so.
+    let asked_side = patch.get("sidebar").is_some_and(|value| !value.is_null());
+    let asked_views = patch.get("sidebar_views").is_some_and(|value| !value.is_null());
     let settings = apply_settings_patch(&state, patch)?;
     crate::tabs::apply_settings(&state.dirs, &settings);
     crate::tabs::broadcast_shortcuts(webview.app_handle());
@@ -120,215 +122,33 @@ pub async fn sidebar_resize(
     Ok(clamped)
 }
 
-/// Mutates and writes the settings.
+/// Fields the ui may not write: they belong to the app, not to a setting.
+///
+/// The chrome strip measures its own height, the extension state is reconciled against
+/// what the browser confirms at runtime, and a reset request is a one-shot instruction
+/// the app clears itself. `download_dir` is a path, and comes from a file dialog.
+const PROTECTED: [&str; 5] = [
+    "schema_version",
+    "chrome_height",
+    "extension_state",
+    "reset_extensions",
+    "download_dir",
+];
+
+/// Applies a partial settings object and writes the result.
+///
+/// The page sends only the fields it changed, as plain json. That object is merged into
+/// the settings as they are - not into the defaults, so a field left out keeps its current
+/// value - then deserialized and clamped by [`Settings::sanitize`]. One merge replaces the
+/// field-by-field copy this used to do, and a new setting needs no code here at all.
 pub(crate) fn apply_settings_patch(
     state: &AppState,
-    patch: SettingsPatch,
+    patch: serde_json::Value,
 ) -> Result<Settings, AppError> {
     let settings = {
         let mut guard = state.settings.write();
-        if let Some(value) = patch.restore_session {
-            guard.restore_session = value;
-        }
-        if let Some(value) = patch.show_bookmarks {
-            guard.show_bookmarks = value;
-        }
-        if let Some(value) = patch.proxy_mode {
-            guard.proxy_mode = match value.as_str() {
-                "off" | "manual" => value,
-                _ => "system".to_string(),
-            };
-        }
-        if let Some(value) = patch.proxy_server {
-            guard.proxy_server = value.trim().to_string();
-        }
-        if let Some(value) = patch.sidebar {
-            guard.sidebar = match value.as_str() {
-                "left" | "right" => value,
-                _ => "off".to_string(),
-            };
-        }
-        if let Some(value) = patch.sidebar_width {
-            guard.sidebar_width = value.clamp(180.0, 640.0);
-        }
-        if let Some(value) = patch.sidebar_views {
-            // Only the panels this build knows, in their standard order, and never none.
-            let known = crate::state::default_sidebar_views();
-            let mut kept: Vec<String> = known
-                .iter()
-                .filter(|id| value.iter().any(|asked| asked == *id))
-                .cloned()
-                .collect();
-            if kept.is_empty() {
-                kept = known;
-            }
-            guard.sidebar_views = kept;
-        }
-        if let Some(value) = patch.keep_alive_hosts {
-            guard.keep_alive_hosts = value.trim().to_string();
-        }
-        if let Some(value) = patch.tab_hover_preview {
-            guard.tab_hover_preview = value;
-        }
-        if let Some(value) = patch.freeze_background {
-            guard.freeze_background = value;
-        }
-        if let Some(value) = patch.live_thumbs {
-            guard.live_thumbs = value;
-        }
-        if let Some(value) = patch.mark_suspended {
-            guard.mark_suspended = value;
-        }
-        if let Some(value) = patch.memory_saver {
-            guard.memory_saver = value;
-        }
-        if let Some(value) = patch.drag_hint {
-            guard.drag_hint = value;
-        }
-        if let Some(value) = patch.drag_threshold {
-            guard.drag_threshold = value.clamp(8, 120);
-        }
-        if let Some(value) = patch.drag_map {
-            guard.drag_map = value;
-        }
-        if let Some(value) = patch.super_drag {
-            guard.super_drag = value;
-        }
-        if let Some(value) = patch.gesture_trail {
-            guard.gesture_trail = value;
-        }
-        if let Some(value) = patch.gesture_color {
-            guard.gesture_color = value.trim().to_string();
-        }
-        if let Some(value) = patch.gesture_width {
-            guard.gesture_width = value.clamp(1, 10);
-        }
-        if let Some(value) = patch.gesture_threshold {
-            guard.gesture_threshold = value.clamp(10, 200);
-        }
-        if let Some(value) = patch.gesture_map {
-            guard.gesture_map = value;
-        }
-        if let Some(value) = patch.gesture_blocked {
-            guard.gesture_blocked = value.trim().to_string();
-        }
-        if let Some(value) = patch.gestures {
-            guard.gestures = value;
-        }
-        if let Some(value) = patch.theme_mode {
-            guard.theme_mode = match value.as_str() {
-                "light" => "light".into(),
-                "system" => "system".into(),
-                _ => "dark".into(),
-            };
-        }
-        if let Some(value) = patch.font_family {
-            guard.font_family = value.trim().to_string();
-        }
-        if let Some(value) = patch.font_mono {
-            guard.font_mono = value.trim().to_string();
-        }
-        if let Some(value) = patch.font_size {
-            guard.font_size = value.min(32);
-        }
-        if let Some(value) = patch.font_min_size {
-            guard.font_min_size = value.min(24);
-        }
-        if let Some(value) = patch.home_url {
-            guard.home_url = value.trim().to_string();
-        }
-        if let Some(value) = patch.default_zoom {
-            guard.default_zoom = value.clamp(0.5, 2.0);
-        }
-        if let Some(value) = patch.tab_double_click_close {
-            guard.tab_double_click_close = value;
-        }
-        if let Some(value) = patch.tab_show_close {
-            guard.tab_show_close = value;
-        }
-        if let Some(value) = patch.tab_close_goes_left {
-            guard.tab_close_goes_left = value;
-        }
-        if let Some(value) = patch.custom_search {
-            guard.custom_search = value.trim().to_string();
-        }
-        if let Some(value) = patch.newtab_show_search {
-            guard.newtab_show_search = value;
-        }
-        if let Some(value) = patch.newtab_show_sites {
-            guard.newtab_show_sites = value;
-        }
-        if let Some(value) = patch.newtab_url {
-            guard.newtab_url = value.trim().to_string();
-        }
-        if let Some(value) = patch.newtab_tiles {
-            guard.newtab_tiles = value.clamp(1, 40);
-        }
-        if let Some(value) = patch.newtab_columns {
-            guard.newtab_columns = value.clamp(1, 12);
-        }
-        if let Some(value) = patch.newtab_radius {
-            guard.newtab_radius = value.min(50);
-        }
-        if let Some(value) = patch.shortcuts {
-            guard.shortcuts = value
-                .into_iter()
-                .filter(|(_, combo)| !combo.trim().is_empty())
-                .map(|(action, combo)| (action, normalize_combo(&combo)))
-                .collect();
-        }
-        if let Some(value) = patch.search_engine {
-            guard.search_engine = match value.as_str() {
-                "bing" | "google" | "ddg" => value,
-                _ => "baidu".to_string(),
-            };
-        }
-        if let Some(value) = patch.new_tab_page {
-            guard.new_tab_page = value;
-        }
-        if let Some(value) = patch.language {
-            guard.language = match value.as_str() {
-                "zh" => "zh".to_string(),
-                _ => "en".to_string(),
-            };
-        }
-        if let Some(value) = patch.translate_to {
-            if !value.trim().is_empty() {
-                guard.translate_to = value.trim().to_string();
-            }
-        }
-        if let Some(value) = patch.toolbar {
-            let known = [
-                "downloads",
-                "translate",
-                "find",
-                "zoom",
-                "bookmark",
-                "extensions",
-                "home",
-                "reopen",
-                "mute",
-                "shot",
-            ];
-            guard.toolbar = value
-                .into_iter()
-                .filter(|id| known.contains(&id.as_str()))
-                .collect();
-        }
-        if let Some(value) = patch.hidden_extensions {
-            guard.hidden_extensions = value;
-        }
-        if let Some(value) = patch.disabled_extensions {
-            guard.disabled_extensions = value;
-        }
-        if let Some(value) = patch.start_url {
-            if !value.trim().is_empty() {
-                guard.start_url = value;
-            }
-        }
-        if let Some(value) = patch.max_live_tabs {
-            guard.max_live_tabs = value.clamp(1, 64);
-        }
+        let next = merge_settings(&guard, &patch)?;
+        *guard = next;
         guard.clone()
     };
 
@@ -338,6 +158,112 @@ pub(crate) fn apply_settings_patch(
         settings.restore_session, settings.max_live_tabs
     ));
     Ok(settings)
+}
+
+/// Copies the fields a patch names onto these settings and clamps the result.
+///
+/// A field the patch leaves out, or sends as null, keeps the value it already had. A key
+/// that is not a setting at all is ignored, which is what lets an older build survive a
+/// newer ui.
+pub(crate) fn merge_settings(
+    current: &Settings,
+    patch: &serde_json::Value,
+) -> Result<Settings, AppError> {
+    let asked = patch
+        .as_object()
+        .ok_or_else(|| AppError::new("bad_settings", "a settings patch has to be an object"))?;
+
+    let mut merged = serde_json::to_value(current)
+        .map_err(|err| AppError::new("bad_settings", err.to_string()))?;
+    let fields = merged
+        .as_object_mut()
+        .ok_or_else(|| AppError::new("bad_settings", "settings are not an object"))?;
+    for (key, value) in asked {
+        if value.is_null() || PROTECTED.contains(&key.as_str()) {
+            continue;
+        }
+        fields.insert(key.clone(), value.clone());
+    }
+
+    let mut settings: Settings = serde_json::from_value(merged)
+        .map_err(|err| AppError::new("bad_settings", err.to_string()))?;
+    settings.sanitize();
+    Ok(settings)
+}
+
+#[cfg(test)]
+mod settings_patch_tests {
+    use super::*;
+
+    fn patched(patch: serde_json::Value) -> Settings {
+        merge_settings(&Settings::default(), &patch).expect("patch applies")
+    }
+
+    #[test]
+    fn a_named_field_changes_and_the_rest_stay() {
+        let settings = patched(serde_json::json!({ "max_live_tabs": 7 }));
+        assert_eq!(settings.max_live_tabs, 7);
+        assert_eq!(settings.language, Settings::default().language);
+        assert_eq!(settings.toolbar, Settings::default().toolbar);
+    }
+
+    #[test]
+    fn a_null_field_keeps_what_was_there() {
+        let settings = patched(serde_json::json!({ "language": "zh", "theme_mode": null }));
+        assert_eq!(settings.language, "zh");
+        assert_eq!(settings.theme_mode, Settings::default().theme_mode);
+    }
+
+    #[test]
+    fn the_ui_cannot_write_what_the_app_owns() {
+        let settings = patched(serde_json::json!({
+            "schema_version": 99,
+            "chrome_height": 12.0,
+            "reset_extensions": true,
+            "download_dir": "C:/windows"
+        }));
+        assert_eq!(settings.schema_version, crate::state::SCHEMA);
+        assert_eq!(settings.chrome_height, Settings::default().chrome_height);
+        assert!(!settings.reset_extensions);
+        assert_eq!(settings.download_dir, None);
+    }
+
+    #[test]
+    fn an_out_of_range_value_is_clamped_not_stored() {
+        let settings = patched(serde_json::json!({
+            "max_live_tabs": 999,
+            "sidebar_width": 5000.0,
+            "default_zoom": 9.0
+        }));
+        assert_eq!(settings.max_live_tabs, 64);
+        assert_eq!(settings.sidebar_width, 640.0);
+        assert_eq!(settings.default_zoom, 2.0);
+    }
+
+    #[test]
+    fn an_unknown_value_falls_back_to_a_legal_one() {
+        let settings = patched(serde_json::json!({ "theme_mode": "solarized", "language": "fr" }));
+        assert_eq!(settings.theme_mode, "dark");
+        assert_eq!(settings.language, "en");
+    }
+
+    #[test]
+    fn an_unknown_key_is_ignored() {
+        let settings = patched(serde_json::json!({ "not_a_setting": 1, "language": "zh" }));
+        assert_eq!(settings.language, "zh");
+    }
+
+    #[test]
+    fn a_wrong_type_is_an_error_rather_than_a_silent_default() {
+        let error = merge_settings(&Settings::default(), &serde_json::json!({ "font_size": "big" }));
+        assert!(error.is_err());
+    }
+
+    #[test]
+    fn a_patch_that_is_not_an_object_is_refused() {
+        let error = merge_settings(&Settings::default(), &serde_json::json!([1, 2, 3]));
+        assert!(error.is_err());
+    }
 }
 
 #[tauri::command]

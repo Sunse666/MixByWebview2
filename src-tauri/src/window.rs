@@ -357,10 +357,7 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
                     return;
                 }
                 let state = target.state::<AppState>();
-                let patch = crate::ipc::SettingsPatch {
-                    hidden_extensions: Some(vec![name]),
-                    ..Default::default()
-                };
+                let patch = serde_json::json!({ "hidden_extensions": [name] });
                 match crate::ipc::apply_settings_patch(&state, patch) {
                     Ok(_) => crate::logging::info("debug: settings patched"),
                     Err(err) => crate::logging::warn(&format!("debug patch failed: {}", err.message)),
