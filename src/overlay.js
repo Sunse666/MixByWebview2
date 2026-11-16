@@ -3,7 +3,7 @@ const { invoke } = window.__TAURI__.core;
 
 /// Leaving the overlay, whatever the reason, closes it: the pointer went somewhere else.
 window.addEventListener("blur", () => invoke("overlay_close").catch(() => {}));
-import { setLanguage, t } from "./i18n.js";
+import { applyStatic, setLanguage, t } from "./i18n.js";
 const { listen } = window.__TAURI__.event;
 
 const root = document.documentElement;
@@ -1347,6 +1347,8 @@ document.addEventListener("keydown", (event) => {
 async function applyLanguage() {
   const settings = await invoke("settings_get").catch(() => null);
   setLanguage((settings && settings.language) || "en");
+  // The theme panel and the permission prompt are markup, not rows built in js.
+  applyStatic();
 }
 
 async function bootPanel() {
@@ -1419,7 +1421,7 @@ async function bootPanel() {
 
   const section = params.get("section") || "appearance";
   const titles = { appearance: "Appearance", startup: "Startup", theme: "Theme file" };
-  document.getElementById("panel-title").textContent = titles[section] || "Settings";
+  document.getElementById("panel-title").textContent = t(titles[section] || "Settings");
   for (const block of document.querySelectorAll("[data-section]")) {
     block.hidden = block.dataset.section !== section;
   }
