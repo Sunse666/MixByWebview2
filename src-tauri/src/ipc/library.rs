@@ -2,6 +2,24 @@
 
 use super::*;
 
+/// One client for every icon.
+///
+/// Building a client per icon meant a fresh connection pool and a new TLS handshake for
+/// each 4 KB file, on a network that usually already has a warm connection to the same
+/// host. Kept for the life of the process, like the translator's client.
+fn icon_client() -> Option<&'static reqwest::Client> {
+    static CLIENT: std::sync::OnceLock<reqwest::Client> = std::sync::OnceLock::new();
+    if let Some(client) = CLIENT.get() {
+        return Some(client);
+    }
+    let built = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .ok()?;
+    let _ = CLIENT.set(built);
+    CLIENT.get()
+}
+
 /// The favicon cache, stored as one file per host.
 pub(crate) fn cache_icon(app: &AppHandle, host: &str, url: &str) {
     if host.is_empty() || !url.starts_with("http") {
@@ -22,10 +40,7 @@ pub(crate) fn cache_icon(app: &AppHandle, host: &str, url: &str) {
         if crate::favicons::cache_path(&dir, &host).is_some() {
             return;
         }
-        let Ok(client) = reqwest::Client::builder()
-            .timeout(std::time::Duration::from_secs(10))
-            .build()
-        else {
+        let Some(client) = icon_client() else {
             return;
         };
         let response = match client.get(&url).send().await {
