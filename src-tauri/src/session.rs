@@ -129,7 +129,10 @@ pub fn latest_closed(dir: &Path) -> Option<Session> {
     let mut files = Vec::new();
     for entry in entries.flatten() {
         let path = entry.path();
-        let name = path.file_name().and_then(|n| n.to_str()).unwrap_or_default();
+        let name = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or_default();
         if !name.starts_with("session-") || !name.ends_with(".json") {
             continue;
         }
@@ -147,7 +150,11 @@ pub fn latest_closed(dir: &Path) -> Option<Session> {
         let Ok(session) = serde_json::from_value::<Session>(value) else {
             continue;
         };
-        if newest.as_ref().map(|(at, _)| closed_at > *at).unwrap_or(true) {
+        if newest
+            .as_ref()
+            .map(|(at, _)| closed_at > *at)
+            .unwrap_or(true)
+        {
             newest = Some((closed_at, session));
         }
     }

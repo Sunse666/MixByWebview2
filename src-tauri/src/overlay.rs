@@ -1,4 +1,4 @@
-﻿//! Overlay panels: menus, bubbles and the tab card, each one a webview of its own.
+//! Overlay panels: menus, bubbles and the tab card, each one a webview of its own.
 //!
 //! A panel's height belongs to its content, and only the page knows what that is. So a
 //! panel opens with the size this file keeps for its kind and then reports the height it
@@ -123,7 +123,8 @@ fn overlay_builder(app: &AppHandle, label: &str, page: &str) -> WebviewBuilder<t
         parse_color(&theme.colors.chrome)
     };
 
-    let focused = !page.starts_with("overlay.html#suggest") && !page.starts_with("overlay.html#thumb");
+    let focused =
+        !page.starts_with("overlay.html#suggest") && !page.starts_with("overlay.html#thumb");
     let builder = WebviewBuilder::new(label, WebviewUrl::App(page.into()))
         .background_color(color)
         .devtools(true)
@@ -298,7 +299,14 @@ fn place(app: &AppHandle, win: &tauri::Window, kind: &str, frame: Frame) -> Resu
     let builder = overlay_builder(app, &label, &page);
     let builder = crate::tabs::apply_profile(builder, &opts.ui_data_dir);
 
-    let webview = place_at(win, builder, frame.left(), frame.y, frame.width, frame.height)?;
+    let webview = place_at(
+        win,
+        builder,
+        frame.left(),
+        frame.y,
+        frame.width,
+        frame.height,
+    )?;
 
     if base(kind) != "suggest" && base(kind) != "thumb" {
         let _ = webview.set_focus();
@@ -364,11 +372,10 @@ pub fn resize(app: &AppHandle, overlay_label: &str, height: f64) -> Result<(), S
 
     let (win_w, win_h) = logical_size(&win).map_err(|err| err.to_string())?;
     let height = height.clamp(MIN_H, (win_h - MARGIN).max(MIN_H));
-    let left = frame.left().clamp(4.0, (win_w - frame.width - 4.0).max(4.0));
-    let top = frame
-        .y
-        .min((win_h - height - 4.0).max(4.0))
-        .max(4.0);
+    let left = frame
+        .left()
+        .clamp(4.0, (win_w - frame.width - 4.0).max(4.0));
+    let top = frame.y.min((win_h - height - 4.0).max(4.0)).max(4.0);
 
     #[cfg(debug_assertions)]
     crate::logging::info(&format!("overlay {overlay_label} measured {height:.0}"));
@@ -387,7 +394,8 @@ fn place_at(
     height: f64,
 ) -> Result<tauri::Webview, String> {
     let scale = win.scale_factor().map_err(|e| e.to_string())?;
-    let position = tauri::PhysicalPosition::new((x * scale).round() as i32, (y * scale).round() as i32);
+    let position =
+        tauri::PhysicalPosition::new((x * scale).round() as i32, (y * scale).round() as i32);
     let size = tauri::PhysicalSize::new(
         (width * scale).round() as u32,
         (height * scale).round() as u32,
@@ -446,11 +454,7 @@ pub fn close(app: &AppHandle, window_label: &str) {
         let from_page = {
             let state = app.state::<crate::ipc::AppState>();
             state.windows.overlay_frame.write().remove(window_label);
-            let flag = state
-                .windows
-                .overlay_from_page
-                .write()
-                .remove(window_label);
+            let flag = state.windows.overlay_from_page.write().remove(window_label);
             flag.unwrap_or(false)
         };
         let page = if from_page {
@@ -479,11 +483,7 @@ pub fn close(app: &AppHandle, window_label: &str) {
             thumbs.remove(window_label)
         };
         if !was_thumb {
-            let _ = app.emit_to(
-                format!("{window_label}-chrome"),
-                "settings:changed",
-                (),
-            );
+            let _ = app.emit_to(format!("{window_label}-chrome"), "settings:changed", ());
         }
     }
 }

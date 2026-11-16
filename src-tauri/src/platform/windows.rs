@@ -121,8 +121,12 @@ fn child_hwnd(webview: &tauri::Webview) -> Option<HWND> {
 
 /// Places one webview directly under another.
 pub fn place_below(webview: &tauri::Webview, above: &tauri::Webview) {
-    let Some(above) = child_hwnd(above) else { return };
-    let Some(hwnd) = child_hwnd(webview) else { return };
+    let Some(above) = child_hwnd(above) else {
+        return;
+    };
+    let Some(hwnd) = child_hwnd(webview) else {
+        return;
+    };
     unsafe {
         let _ = SetWindowPos(
             hwnd,

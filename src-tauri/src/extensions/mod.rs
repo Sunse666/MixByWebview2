@@ -1,4 +1,4 @@
-﻿pub mod crx;
+pub mod crx;
 
 use crate::paths::AppDirs;
 use serde::Serialize;
@@ -65,7 +65,10 @@ pub fn scan(dirs: &AppDirs, disabled: &[String]) -> Vec<ExtInfo> {
             .unwrap_or("extension")
             .to_string();
         let target = dirs.extensions.join(slug(&label));
-        if disabled.iter().any(|name| name == &label || name == &slug(&label)) {
+        if disabled
+            .iter()
+            .any(|name| name == &label || name == &slug(&label))
+        {
             crate::logging::info(&format!("extension {label}: off, not copied"));
             let _ = std::fs::remove_dir_all(&target);
             let manifest = if is_unpacked {
@@ -185,10 +188,7 @@ fn copy_tree(source: &Path, target: &Path) -> Result<(), String> {
     if target.exists() {
         std::fs::remove_dir_all(target).map_err(|err| format!("cannot reset target: {err}"))?;
     }
-    let mut budget = Budget {
-        files: 0,
-        bytes: 0,
-    };
+    let mut budget = Budget { files: 0, bytes: 0 };
     copy_dir(source, target, &mut budget, 0)
 }
 
@@ -206,7 +206,10 @@ fn copy_dir(from: &Path, to: &Path, budget: &mut Budget, depth: usize) -> Result
     }
     std::fs::create_dir_all(to).map_err(|err| format!("mkdir failed: {err}"))?;
 
-    for entry in std::fs::read_dir(from).map_err(|err| format!("read_dir failed: {err}"))?.flatten() {
+    for entry in std::fs::read_dir(from)
+        .map_err(|err| format!("read_dir failed: {err}"))?
+        .flatten()
+    {
         let path = entry.path();
         let name = entry.file_name();
         let destination = to.join(&name);
@@ -251,8 +254,8 @@ fn read_manifest(dir: &Path) -> Result<Manifest, String> {
     let path = dir.join("manifest.json");
     let raw = std::fs::read_to_string(&path).map_err(|err| format!("no manifest.json: {err}"))?;
     let raw = raw.trim_start_matches('\u{feff}');
-    let json: serde_json::Value =
-        serde_json::from_str(raw).map_err(|err| format!("manifest.json is not valid JSON: {err}"))?;
+    let json: serde_json::Value = serde_json::from_str(raw)
+        .map_err(|err| format!("manifest.json is not valid JSON: {err}"))?;
 
     let manifest_version = json
         .get("manifest_version")

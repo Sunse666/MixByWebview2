@@ -100,10 +100,22 @@ mod tests {
 
     #[test]
     fn host_is_extracted_from_real_urls() {
-        assert_eq!(host_of("https://www.example.com/a?b=1").as_deref(), Some("example.com"));
-        assert_eq!(host_of("https://example.com/").as_deref(), Some("example.com"));
-        assert_eq!(host_of("http://example.com:8080").as_deref(), Some("example.com"));
-        assert_eq!(host_of("https://user:pw@Example.COM/").as_deref(), Some("example.com"));
+        assert_eq!(
+            host_of("https://www.example.com/a?b=1").as_deref(),
+            Some("example.com")
+        );
+        assert_eq!(
+            host_of("https://example.com/").as_deref(),
+            Some("example.com")
+        );
+        assert_eq!(
+            host_of("http://example.com:8080").as_deref(),
+            Some("example.com")
+        );
+        assert_eq!(
+            host_of("https://user:pw@Example.COM/").as_deref(),
+            Some("example.com")
+        );
         assert_eq!(host_of("about:blank"), None);
     }
 

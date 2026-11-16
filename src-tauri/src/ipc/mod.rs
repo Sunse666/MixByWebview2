@@ -64,7 +64,8 @@ pub struct WindowMaps {
     pub overlay_thumb: parking_lot::RwLock<std::collections::HashSet<String>>,
     /// The geometry each window's overlay was opened with. The page reports a new
     /// height for it once it has rendered, and that has to be measured against it.
-    pub overlay_frame: parking_lot::RwLock<std::collections::HashMap<String, crate::overlay::Frame>>,
+    pub overlay_frame:
+        parking_lot::RwLock<std::collections::HashMap<String, crate::overlay::Frame>>,
     /// Tab id -> the url the address bar was last told about. A finished page load
     /// reports its own url and the fallback poll reads it, so both paths have to agree on
     /// what counts as a change.
@@ -212,7 +213,9 @@ impl AppState {
         parking_lot::RwLockReadGuard::map(self.library.read(), |library| &library.favicons)
     }
 
-    pub fn favicons_mut(&self) -> parking_lot::MappedRwLockWriteGuard<'_, crate::favicons::Favicons> {
+    pub fn favicons_mut(
+        &self,
+    ) -> parking_lot::MappedRwLockWriteGuard<'_, crate::favicons::Favicons> {
         parking_lot::RwLockWriteGuard::map(self.library.write(), |library| &mut library.favicons)
     }
 
@@ -225,10 +228,7 @@ impl AppState {
     }
 
     pub fn add_window(&self, label: &str) {
-        self.cores
-            .write()
-            .entry(label.to_string())
-            .or_default();
+        self.cores.write().entry(label.to_string()).or_default();
     }
 
     pub fn remove_window(&self, label: &str) {
@@ -236,11 +236,17 @@ impl AppState {
     }
 
     /// Tab state of one window.
-    pub fn try_read_core(&self, label: &str) -> Option<parking_lot::MappedRwLockReadGuard<'_, Core>> {
+    pub fn try_read_core(
+        &self,
+        label: &str,
+    ) -> Option<parking_lot::MappedRwLockReadGuard<'_, Core>> {
         parking_lot::RwLockReadGuard::try_map(self.cores.read(), |map| map.get(label)).ok()
     }
 
-    pub fn try_write_core(&self, label: &str) -> Option<parking_lot::MappedRwLockWriteGuard<'_, Core>> {
+    pub fn try_write_core(
+        &self,
+        label: &str,
+    ) -> Option<parking_lot::MappedRwLockWriteGuard<'_, Core>> {
         parking_lot::RwLockWriteGuard::try_map(self.cores.write(), |map| map.get_mut(label)).ok()
     }
 
@@ -252,7 +258,9 @@ impl AppState {
         }
         let mut guard = self.cores.write();
         guard.entry(label.to_string()).or_default();
-        crate::logging::warn(&format!("no tab state for window {label}; using an empty one"));
+        crate::logging::warn(&format!(
+            "no tab state for window {label}; using an empty one"
+        ));
         let read = parking_lot::RwLockWriteGuard::downgrade(guard);
         // The entry cannot vanish here: the lock was never released between the
         // insert and the downgrade.
@@ -264,15 +272,17 @@ impl AppState {
     pub fn write_core(&self, label: &str) -> parking_lot::MappedRwLockWriteGuard<'_, Core> {
         let mut guard = self.cores.write();
         if !guard.contains_key(label) {
-            crate::logging::warn(&format!("no tab state for window {label}; using an empty one"));
+            crate::logging::warn(&format!(
+                "no tab state for window {label}; using an empty one"
+            ));
             guard.insert(label.to_string(), Core::default());
         }
         parking_lot::RwLockWriteGuard::map(guard, |map| {
-            map.get_mut(label).expect("core inserted under the same lock")
+            map.get_mut(label)
+                .expect("core inserted under the same lock")
         })
     }
 }
-
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct MenuContext {
@@ -361,7 +371,11 @@ pub(crate) fn trusted_url(url: &str) -> bool {
         .rsplit_once('@')
         .map(|(_, tail)| tail)
         .unwrap_or(authority);
-    let host = authority.split(':').next().unwrap_or_default().to_ascii_lowercase();
+    let host = authority
+        .split(':')
+        .next()
+        .unwrap_or_default()
+        .to_ascii_lowercase();
     matches!(host.as_str(), "tauri.localhost" | "ipc.localhost")
 }
 
@@ -397,7 +411,6 @@ pub fn focused_window(app: &AppHandle) -> Option<tauri::Window> {
         .find(|win| win.is_focused().unwrap_or(false))
         .or_else(|| app.get_window("w1"))
 }
-
 
 /// Height of the chrome strip: the base plus the optional bookmarks row.
 pub fn chrome_height(app: &AppHandle) -> f64 {
@@ -537,8 +550,12 @@ fn write_session(app: &AppHandle, closed_at: u64) {
     // The geometry of a window is asked for on the main thread, so the tab state has to
     // be copied out first: waiting for the event loop while holding this lock is what
     // deadlocks against relayout.
-    let mut snapshots: Vec<(String, Vec<crate::session::SessionTab>, usize, Vec<crate::session::SessionGroup>)> =
-        Vec::new();
+    let mut snapshots: Vec<(
+        String,
+        Vec<crate::session::SessionTab>,
+        usize,
+        Vec<crate::session::SessionGroup>,
+    )> = Vec::new();
     for (label, core) in state.cores.read().iter() {
         let tabs: Vec<crate::session::SessionTab> = core
             .tabs
@@ -592,12 +609,14 @@ fn write_session(app: &AppHandle, closed_at: u64) {
 
     let windows: Vec<crate::session::WindowSession> = snapshots
         .into_iter()
-        .map(|(label, tabs, selected, groups)| crate::session::WindowSession {
-            tabs,
-            selected,
-            window: window_geometry(app, &label),
-            groups,
-        })
+        .map(
+            |(label, tabs, selected, groups)| crate::session::WindowSession {
+                tabs,
+                selected,
+                window: window_geometry(app, &label),
+                groups,
+            },
+        )
         .collect();
 
     let session = crate::session::Session {
@@ -665,7 +684,8 @@ pub fn show_error_page(app: &AppHandle, id: &str, failed_url: &str) -> Option<St
         if nav.error_shown.get(id).map(String::as_str) == Some(failed_url) {
             return None;
         }
-        nav.error_shown.insert(id.to_string(), failed_url.to_string());
+        nav.error_shown
+            .insert(id.to_string(), failed_url.to_string());
     }
 
     let base = state.nav.read().app_base.clone();
@@ -673,7 +693,10 @@ pub fn show_error_page(app: &AppHandle, id: &str, failed_url: &str) -> Option<St
         return None;
     }
     let webview = app.get_webview(id)?;
-    let page = format!("{base}error.html#{}", crate::permissions::encode(failed_url));
+    let page = format!(
+        "{base}error.html#{}",
+        crate::permissions::encode(failed_url)
+    );
     if let Ok(url) = tauri::Url::parse(&page) {
         let _ = webview.navigate(url);
         crate::logging::info(&format!("error page for {failed_url}"));
@@ -699,9 +722,13 @@ mod trusted_caller_tests {
         assert!(!trusted_url("https://example.com/"));
         assert!(!trusted_url("http://example.com/tauri.localhost"));
         assert!(!trusted_url("https://tauri.localhost.evil.test/"));
-        assert!(!trusted_url("https://user@evil.test/?x=http://tauri.localhost"));
+        assert!(!trusted_url(
+            "https://user@evil.test/?x=http://tauri.localhost"
+        ));
         assert!(!trusted_url("data:text/html,<p>hi</p>"));
-        assert!(!trusted_url("file:///C:/Windows/System32/drivers/etc/hosts"));
+        assert!(!trusted_url(
+            "file:///C:/Windows/System32/drivers/etc/hosts"
+        ));
         assert!(!trusted_url(""));
     }
 }

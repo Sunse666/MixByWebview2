@@ -3,7 +3,12 @@
 use super::*;
 
 #[tauri::command]
-pub async fn shortcut(app: AppHandle, window: tauri::Window, state: State<'_, AppState>, action: String) -> Result<(), AppError> {
+pub async fn shortcut(
+    app: AppHandle,
+    window: tauri::Window,
+    state: State<'_, AppState>,
+    action: String,
+) -> Result<(), AppError> {
     if action != "dismiss" {
         crate::logging::info(&format!("shortcut {action}"));
     }
@@ -82,8 +87,8 @@ pub async fn shortcut(app: AppHandle, window: tauri::Window, state: State<'_, Ap
                     .unwrap_or_default()
             };
             if !url.is_empty() {
-                let mut board =
-                    arboard::Clipboard::new().map_err(|err| AppError::new("clipboard", err.to_string()))?;
+                let mut board = arboard::Clipboard::new()
+                    .map_err(|err| AppError::new("clipboard", err.to_string()))?;
                 board
                     .set_text(url)
                     .map_err(|err| AppError::new("clipboard", err.to_string()))?;
@@ -118,7 +123,11 @@ pub async fn shortcut(app: AppHandle, window: tauri::Window, state: State<'_, Ap
         "toggle_pin" => {
             let (id, pinned) = {
                 let core = state.read_core(window.label());
-                match core.tabs.iter().find(|tab| Some(&tab.id) == core.selected.as_ref()) {
+                match core
+                    .tabs
+                    .iter()
+                    .find(|tab| Some(&tab.id) == core.selected.as_ref())
+                {
                     Some(tab) => (tab.id.clone(), tab.pinned),
                     None => (String::new(), false),
                 }
@@ -140,7 +149,8 @@ pub async fn shortcut(app: AppHandle, window: tauri::Window, state: State<'_, Ap
             }
         }
         "close_window" => window_of(&window).close()?,
-        "open_home" | "open_history" | "open_bookmarks" | "open_settings" | "open_extensions" | "open_downloads" => {
+        "open_home" | "open_history" | "open_bookmarks" | "open_settings" | "open_extensions"
+        | "open_downloads" => {
             let page = match action.as_str() {
                 "open_home" => {
                     let settings = state.settings.read();

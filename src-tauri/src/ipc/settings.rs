@@ -3,14 +3,18 @@
 use super::*;
 
 #[tauri::command]
-pub async fn theme_get(_window: tauri::Window, state: State<'_, AppState>) -> Result<Theme, AppError> {
+pub async fn theme_get(
+    _window: tauri::Window,
+    state: State<'_, AppState>,
+) -> Result<Theme, AppError> {
     Ok(state.theme.read().clone())
 }
 
 #[tauri::command]
 pub async fn theme_apply(
     app: AppHandle,
-    webview: tauri::Webview, state: State<'_, AppState>,
+    webview: tauri::Webview,
+    state: State<'_, AppState>,
     theme: Theme,
     persist: bool,
 ) -> Result<Theme, AppError> {
@@ -34,7 +38,11 @@ pub async fn theme_apply(
 }
 
 #[tauri::command]
-pub async fn theme_revert(app: AppHandle, _window: tauri::Window, state: State<'_, AppState>) -> Result<Theme, AppError> {
+pub async fn theme_revert(
+    app: AppHandle,
+    _window: tauri::Window,
+    state: State<'_, AppState>,
+) -> Result<Theme, AppError> {
     let baseline = {
         let value = state.baseline.read().clone();
         *state.theme.write() = value.clone();
@@ -51,7 +59,8 @@ fn broadcast_theme(app: &AppHandle, theme: &Theme) {
     let mut labels = vec!["w1-chrome".to_string()];
     for label in app
         .state::<AppState>()
-        .windows.overlay
+        .windows
+        .overlay
         .read()
         .values()
         .cloned()
@@ -68,21 +77,27 @@ fn broadcast_theme(app: &AppHandle, theme: &Theme) {
 }
 
 #[tauri::command]
-pub async fn settings_get(webview: tauri::Webview, state: State<'_, AppState>) -> Result<Settings, AppError> {
+pub async fn settings_get(
+    webview: tauri::Webview,
+    state: State<'_, AppState>,
+) -> Result<Settings, AppError> {
     require_trusted(&webview)?;
     Ok(state.settings.read().clone())
 }
 
 #[tauri::command]
 pub async fn settings_set(
-    webview: tauri::Webview, state: State<'_, AppState>,
+    webview: tauri::Webview,
+    state: State<'_, AppState>,
     patch: serde_json::Value,
 ) -> Result<Settings, AppError> {
     require_trusted(&webview)?;
     // The sidebar has to be told what changed, and the patch itself is the only thing
     // that says so.
     let asked_side = patch.get("sidebar").is_some_and(|value| !value.is_null());
-    let asked_views = patch.get("sidebar_views").is_some_and(|value| !value.is_null());
+    let asked_views = patch
+        .get("sidebar_views")
+        .is_some_and(|value| !value.is_null());
     let settings = apply_settings_patch(&state, patch)?;
     crate::tabs::apply_settings(&state.dirs, &settings);
     crate::tabs::broadcast_shortcuts(webview.app_handle());
@@ -255,7 +270,10 @@ mod settings_patch_tests {
 
     #[test]
     fn a_wrong_type_is_an_error_rather_than_a_silent_default() {
-        let error = merge_settings(&Settings::default(), &serde_json::json!({ "font_size": "big" }));
+        let error = merge_settings(
+            &Settings::default(),
+            &serde_json::json!({ "font_size": "big" }),
+        );
         assert!(error.is_err());
     }
 

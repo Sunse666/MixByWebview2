@@ -1,4 +1,4 @@
-﻿//! Address bar, suggestions, find, zoom and the url edit bridge.
+//! Address bar, suggestions, find, zoom and the url edit bridge.
 
 use super::*;
 
@@ -54,7 +54,12 @@ pub(crate) fn zoom_by(app: &AppHandle, label: &str, delta: f64) -> Result<(), Ap
         let core = state.read_core(label);
         let label = core.selected.clone();
         label
-            .and_then(|id| core.tabs.iter().find(|tab| tab.id == id).map(|tab| tab.zoom))
+            .and_then(|id| {
+                core.tabs
+                    .iter()
+                    .find(|tab| tab.id == id)
+                    .map(|tab| tab.zoom)
+            })
             .unwrap_or(1.0)
     };
     set_zoom(app, label, current + delta)
@@ -130,7 +135,12 @@ pub async fn zoom_get(window: tauri::Window, state: State<'_, AppState>) -> Resu
 }
 
 #[tauri::command]
-pub async fn zoom_step(app: AppHandle, delta: f64, window: tauri::Window, _state: State<'_, AppState>) -> Result<f64, AppError> {
+pub async fn zoom_step(
+    app: AppHandle,
+    delta: f64,
+    window: tauri::Window,
+    _state: State<'_, AppState>,
+) -> Result<f64, AppError> {
     let current = {
         let state = app.state::<AppState>();
         let core = state.read_core(window.label());
@@ -215,7 +225,8 @@ pub async fn suggest_open(
 ) -> Result<(), AppError> {
     if app
         .state::<AppState>()
-        .windows.overlay
+        .windows
+        .overlay
         .read()
         .contains_key(window.label())
     {
@@ -245,7 +256,8 @@ pub async fn suggest_feed(
     text: String,
 ) -> Result<Vec<Suggestion>, AppError> {
     state
-        .windows.suggest_text
+        .windows
+        .suggest_text
         .write()
         .insert(window.label().to_string(), text.clone());
     Ok(push_suggestions(&app, window.label(), &state))
@@ -259,11 +271,7 @@ pub async fn suggest_active(
     state: State<'_, AppState>,
     index: i64,
 ) -> Result<(), AppError> {
-    let label = state
-        .windows.overlay
-        .read()
-        .get(window.label())
-        .cloned();
+    let label = state.windows.overlay.read().get(window.label()).cloned();
     let Some(label) = label else {
         return Ok(());
     };
@@ -287,7 +295,8 @@ pub async fn suggest_refresh(
 
 fn push_suggestions(app: &AppHandle, window_label: &str, state: &AppState) -> Vec<Suggestion> {
     let text = state
-        .windows.suggest_text
+        .windows
+        .suggest_text
         .read()
         .get(window_label)
         .cloned()
@@ -297,7 +306,8 @@ fn push_suggestions(app: &AppHandle, window_label: &str, state: &AppState) -> Ve
 
     let label = app
         .state::<AppState>()
-        .windows.overlay
+        .windows
+        .overlay
         .read()
         .get(window_label)
         .cloned();
@@ -311,10 +321,16 @@ fn push_suggestions(app: &AppHandle, window_label: &str, state: &AppState) -> Ve
 
     let json = serde_json::to_string(&items).unwrap_or_else(|_| "[]".into());
     let rows = count as f64;
-    let height = if rows == 0.0 { 40.0 } else { rows * 34.0 + 14.0 };
+    let height = if rows == 0.0 {
+        40.0
+    } else {
+        rows * 34.0 + 14.0
+    };
     let width = state.ui.read().suggest_width;
     let _ = webview.set_size(tauri::LogicalSize::new(width, height));
-    let _ = webview.eval(format!("window.__mixSuggest && window.__mixSuggest({json})"));
+    let _ = webview.eval(format!(
+        "window.__mixSuggest && window.__mixSuggest({json})"
+    ));
     items
 }
 
@@ -326,11 +342,7 @@ pub async fn url_type(
     state: State<'_, AppState>,
     text: String,
 ) -> Result<(), AppError> {
-    if !state
-        .windows.url_edit
-        .read()
-        .contains_key(window.label())
-    {
+    if !state.windows.url_edit.read().contains_key(window.label()) {
         return Ok(());
     }
     let _ = app.emit_to(window.label(), "ui:url-insert", text);
@@ -378,10 +390,14 @@ pub(crate) fn set_url_edit(app: &AppHandle, window: &tauri::Window, on: bool) {
             let _ = webview.eval(script);
         }
     }
-    crate::logging::info(&format!("url edit {on} for {} ({count} tabs)", window.label()));
+    crate::logging::info(&format!(
+        "url edit {on} for {} ({count} tabs)",
+        window.label()
+    ));
     if on {
         state
-            .windows.url_edit
+            .windows
+            .url_edit
             .write()
             .insert(window.label().to_string(), String::new());
     }
@@ -389,10 +405,7 @@ pub(crate) fn set_url_edit(app: &AppHandle, window: &tauri::Window, on: bool) {
 
 fn exit_url_edit(app: &AppHandle, window_label: &str) {
     if let Some(state) = app.try_state::<AppState>() {
-        state
-            .windows.url_edit
-            .write()
-            .remove(window_label);
+        state.windows.url_edit.write().remove(window_label);
     }
     if let Some(win) = app.get_window(window_label) {
         set_url_edit(app, &win, false);
@@ -436,7 +449,6 @@ pub async fn find_status(state: State<'_, AppState>) -> Result<bool, AppError> {
     Ok(state.ui.read().find_hit)
 }
 
-
 /// Runs a text edit in the chrome page, which owns the address field.
 #[tauri::command]
 pub async fn url_action(
@@ -451,7 +463,9 @@ pub async fn url_action(
     let label = webview.window().label().to_string();
     if let Some(chrome) = app.get_webview(&format!("{label}-chrome")) {
         let encoded = serde_json::to_string(&action).unwrap_or_else(|_| "\"\"".to_string());
-        let _ = chrome.eval(format!("window.__mixUrlAction && window.__mixUrlAction({encoded})"));
+        let _ = chrome.eval(format!(
+            "window.__mixUrlAction && window.__mixUrlAction({encoded})"
+        ));
     }
     Ok(())
 }

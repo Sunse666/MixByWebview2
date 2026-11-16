@@ -1,7 +1,7 @@
+use parking_lot::Mutex;
 use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::path::Path;
-use parking_lot::Mutex;
 use std::sync::OnceLock;
 use std::time::Instant;
 
@@ -9,7 +9,10 @@ use std::time::Instant;
 static START: OnceLock<Instant> = OnceLock::new();
 
 pub fn elapsed_ms() -> u128 {
-    START.get().map(|start| start.elapsed().as_millis()).unwrap_or(0)
+    START
+        .get()
+        .map(|start| start.elapsed().as_millis())
+        .unwrap_or(0)
 }
 
 const MAX_BYTES: u64 = 10 * 1024 * 1024;

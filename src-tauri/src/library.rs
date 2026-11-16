@@ -76,7 +76,10 @@ fn keep_unreadable(path: &Path, what: &str, reason: &str) {
         .and_then(|ext| ext.to_str())
         .unwrap_or("json");
     let backup = path.with_extension(format!("{extension}.corrupt"));
-    crate::logging::warn(&format!("{what} unreadable ({reason}); keeping {}", backup.display()));
+    crate::logging::warn(&format!(
+        "{what} unreadable ({reason}); keeping {}",
+        backup.display()
+    ));
     let _ = std::fs::rename(path, &backup);
 }
 

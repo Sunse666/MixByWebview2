@@ -1,4 +1,4 @@
-﻿use std::time::Duration;
+use std::time::Duration;
 
 use tauri::{
     webview::WebviewBuilder, AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, Webview,
@@ -24,8 +24,6 @@ pub fn set_bounds(webview: &Webview, x: f64, y: f64, w: f64, h: f64) -> tauri::R
 }
 
 pub const PRIMARY: &str = "w1";
-
-
 
 /// Rebuilds the tab groups a session recorded.
 fn apply_groups(app: &AppHandle, label: &str, groups: &[crate::session::SessionGroup]) {
@@ -149,8 +147,10 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
 
     let shell_urls = initial_urls();
     if !shell_urls.is_empty() {
-        let tabs: Vec<(String, f64, bool)> =
-            shell_urls.into_iter().map(|url| (url, 0.0, false)).collect();
+        let tabs: Vec<(String, f64, bool)> = shell_urls
+            .into_iter()
+            .map(|url| (url, 0.0, false))
+            .collect();
         open_window(app.handle(), PRIMARY, tabs, 0, None)?;
         crate::downloads::start_progress_watch(app.handle().clone());
         crate::persist::spawn_history_flusher(app.handle().clone());
@@ -162,7 +162,8 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
     // The window that closed last wins: every process leaves its final state behind,
     // and the newest of those is what the user was looking at when they quit.
     let restored = if restore {
-        crate::session::latest_closed(&user_data).or_else(|| crate::session::Session::load(&session_file))
+        crate::session::latest_closed(&user_data)
+            .or_else(|| crate::session::Session::load(&session_file))
     } else {
         None
     };
@@ -171,7 +172,11 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
         Some(session) => crate::logging::info(&format!(
             "session restore: {} window(s), {} tab(s)",
             session.windows.len(),
-            session.windows.iter().map(|window| window.tabs.len()).sum::<usize>()
+            session
+                .windows
+                .iter()
+                .map(|window| window.tabs.len())
+                .sum::<usize>()
         )),
         None => crate::logging::info("session restore: nothing to restore"),
     }
@@ -198,7 +203,13 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
             apply_groups(app.handle(), PRIMARY, &keep.groups);
         }
         None => {
-            open_window(app.handle(), PRIMARY, vec![(start_url, 0.0, false)], 0, None)?;
+            open_window(
+                app.handle(),
+                PRIMARY,
+                vec![(start_url, 0.0, false)],
+                0,
+                None,
+            )?;
         }
     }
 
@@ -355,8 +366,6 @@ pub fn open_window(
         }
     }
 
-
-
     for (index, (url, _scroll, _pinned)) in urls.iter().enumerate() {
         let id = crate::ipc::tab_label(label, index + 1);
         tabs::create(&win, &id, url, width, height - chrome_h, &opts, false)?;
@@ -508,7 +517,13 @@ fn show_failed_load(app: &AppHandle, id: &str) {
     let Some(state) = app.try_state::<AppState>() else {
         return;
     };
-    let failed = state.nav.read().pending.get(id).cloned().unwrap_or_default();
+    let failed = state
+        .nav
+        .read()
+        .pending
+        .get(id)
+        .cloned()
+        .unwrap_or_default();
     if !failed.is_empty() {
         crate::ipc::show_error_page(app, id, &failed);
     }
@@ -601,4 +616,3 @@ pub fn relayout(app: &AppHandle, label: &str) -> Result<(), tauri::Error> {
     let _ = app.emit_to(label, "layout:changed", (width, height));
     Ok(())
 }
-

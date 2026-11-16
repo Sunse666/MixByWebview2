@@ -78,7 +78,12 @@ pub fn cache_path(dir: &Path, host: &str) -> Option<std::path::PathBuf> {
 }
 
 /// Writes the icon bytes and returns the file it landed in.
-pub fn store_icon(dir: &Path, host: &str, bytes: &[u8], content_type: &str) -> Option<std::path::PathBuf> {
+pub fn store_icon(
+    dir: &Path,
+    host: &str,
+    bytes: &[u8],
+    content_type: &str,
+) -> Option<std::path::PathBuf> {
     if bytes.is_empty() || bytes.len() > 256 * 1024 {
         return None;
     }
@@ -109,7 +114,10 @@ pub fn data_url(path: &Path) -> Option<String> {
         Some("webp") => "image/webp",
         _ => "image/png",
     };
-    Some(format!("data:{mime};base64,{}", crate::extensions::base64(&bytes)))
+    Some(format!(
+        "data:{mime};base64,{}",
+        crate::extensions::base64(&bytes)
+    ))
 }
 
 /// Host part of a url, without a leading "www." so both forms share an entry.

@@ -153,22 +153,22 @@ impl Default for Settings {
             start_url: "https://example.com".into(),
             restore_session: true,
             chrome_height: 86.0,
-        show_bookmarks: false,
-        proxy_mode: default_proxy_mode(),
-        proxy_server: String::new(),
-        sidebar: default_sidebar(),
-        sidebar_width: default_sidebar_width(),
-        sidebar_views: default_sidebar_views(),
-        toolbar: vec![
-            "translate".into(),
-            "zoom".into(),
-            "bookmark".into(),
-            "extensions".into(),
-            "downloads".into(),
-        ],
-        hidden_extensions: Vec::new(),
-        disabled_extensions: Vec::new(),
-        extension_state: std::collections::BTreeMap::new(),
+            show_bookmarks: false,
+            proxy_mode: default_proxy_mode(),
+            proxy_server: String::new(),
+            sidebar: default_sidebar(),
+            sidebar_width: default_sidebar_width(),
+            sidebar_views: default_sidebar_views(),
+            toolbar: vec![
+                "translate".into(),
+                "zoom".into(),
+                "bookmark".into(),
+                "extensions".into(),
+                "downloads".into(),
+            ],
+            hidden_extensions: Vec::new(),
+            disabled_extensions: Vec::new(),
+            extension_state: std::collections::BTreeMap::new(),
             translate_to: "zh".into(),
             gestures: true,
             super_drag: true,
@@ -252,10 +252,12 @@ impl Settings {
             "right" => "right".to_string(),
             _ => default_sidebar(),
         };
-        self.sidebar_width = finite(self.sidebar_width, default_sidebar_width()).clamp(180.0, 640.0);
+        self.sidebar_width =
+            finite(self.sidebar_width, default_sidebar_width()).clamp(180.0, 640.0);
         // Only the panels this build knows, in their standard order, and never none.
         let known = default_sidebar_views();
-        if self.sidebar_views.is_empty() || self.sidebar_views.iter().any(|id| !known.contains(id)) {
+        if self.sidebar_views.is_empty() || self.sidebar_views.iter().any(|id| !known.contains(id))
+        {
             let asked = std::mem::take(&mut self.sidebar_views);
             self.sidebar_views = known
                 .into_iter()
@@ -318,7 +320,11 @@ impl Settings {
             "ddg" => "ddg".to_string(),
             _ => "baidu".to_string(),
         };
-        self.language = if self.language == "zh" { "zh".to_string() } else { "en".to_string() };
+        self.language = if self.language == "zh" {
+            "zh".to_string()
+        } else {
+            "en".to_string()
+        };
         self.translate_to = match self.translate_to.trim() {
             "" => "zh".to_string(),
             value => value.to_string(),
@@ -350,7 +356,9 @@ impl Settings {
                 value
             }
             Err(err) => {
-                crate::logging::warn(&format!("settings.json unreadable ({err}); keeping a backup"));
+                crate::logging::warn(&format!(
+                    "settings.json unreadable ({err}); keeping a backup"
+                ));
                 let _ = std::fs::rename(path, path.with_extension("json.bak"));
                 Self::default()
             }
@@ -426,7 +434,10 @@ mod tests {
             r#"{"schema_version":1,"toolbar":["zoom","bookmark"]}"#,
         );
         let settings = Settings::load(&file);
-        assert_eq!(settings.toolbar, vec!["zoom".to_string(), "bookmark".to_string()]);
+        assert_eq!(
+            settings.toolbar,
+            vec!["zoom".to_string(), "bookmark".to_string()]
+        );
     }
 
     #[test]

@@ -7,255 +7,260 @@
 /// answers late or not at all.
 #[cfg(windows)]
 fn processes(webview: &tauri::Webview) -> Vec<(i32, u32)> {
-  use webview2_com::Microsoft::Web::WebView2::Win32::{
-    ICoreWebView2Environment8, ICoreWebView2_2,
-  };
-  use windows_core::Interface;
+    use webview2_com::Microsoft::Web::WebView2::Win32::{
+        ICoreWebView2Environment8, ICoreWebView2_2,
+    };
+    use windows_core::Interface;
 
-  crate::com::call(webview, std::time::Duration::from_millis(600), |platform, out| unsafe {
-    let found = (|| -> windows_core::Result<Vec<(i32, u32)>> {
-      let controller = platform.controller();
-      let core = controller.CoreWebView2()?;
-      let env = core.cast::<ICoreWebView2_2>()?.Environment()?;
-      let env = env.cast::<ICoreWebView2Environment8>()?;
-      let infos = env.GetProcessInfos()?;
-      let mut count = 0u32;
-      infos.Count(&mut count)?;
-      let mut found = Vec::with_capacity(count as usize);
-      for index in 0..count {
-        let info = infos.GetValueAtIndex(index)?;
-        let mut pid = 0i32;
-        let mut kind = Default::default();
-        info.ProcessId(&mut pid)?;
-        info.Kind(&mut kind)?;
-        if pid > 0 {
-          found.push((kind.0, pid as u32));
-        }
-      }
-      Ok(found)
-    })()
-    .unwrap_or_default();
-    let _ = out.send(found);
-  })
-  .unwrap_or_default()
+    crate::com::call(
+        webview,
+        std::time::Duration::from_millis(600),
+        |platform, out| unsafe {
+            let found = (|| -> windows_core::Result<Vec<(i32, u32)>> {
+                let controller = platform.controller();
+                let core = controller.CoreWebView2()?;
+                let env = core.cast::<ICoreWebView2_2>()?.Environment()?;
+                let env = env.cast::<ICoreWebView2Environment8>()?;
+                let infos = env.GetProcessInfos()?;
+                let mut count = 0u32;
+                infos.Count(&mut count)?;
+                let mut found = Vec::with_capacity(count as usize);
+                for index in 0..count {
+                    let info = infos.GetValueAtIndex(index)?;
+                    let mut pid = 0i32;
+                    let mut kind = Default::default();
+                    info.ProcessId(&mut pid)?;
+                    info.Kind(&mut kind)?;
+                    if pid > 0 {
+                        found.push((kind.0, pid as u32));
+                    }
+                }
+                Ok(found)
+            })()
+            .unwrap_or_default();
+            let _ = out.send(found);
+        },
+    )
+    .unwrap_or_default()
 }
 
 /// Memory of the browser's own processes, leaving the gpu out.
 #[cfg(windows)]
 pub fn total(webview: &tauri::Webview) -> Option<u64> {
-  let processes = processes(webview);
-  if processes.is_empty() {
-    return None;
-  }
-  let mut pages = 0u64;
-  for (kind, pid) in processes {
-    // COREWEBVIEW2_PROCESS_KIND_GPU is 4.
-    if kind != 4 {
-      pages += working_set(pid).unwrap_or(0);
+    let processes = processes(webview);
+    if processes.is_empty() {
+        return None;
     }
-  }
-  if pages == 0 {
-    None
-  } else {
-    Some(pages)
-  }
+    let mut pages = 0u64;
+    for (kind, pid) in processes {
+        // COREWEBVIEW2_PROCESS_KIND_GPU is 4.
+        if kind != 4 {
+            pages += working_set(pid).unwrap_or(0);
+        }
+    }
+    if pages == 0 {
+        None
+    } else {
+        Some(pages)
+    }
 }
 
 #[cfg(not(windows))]
 pub fn total(_webview: &tauri::Webview) -> Option<u64> {
-  None
+    None
 }
 
 /// Private working set of one process: what the task manager's memory column shows.
 #[cfg(windows)]
 fn working_set(pid: u32) -> Option<u64> {
-  private_counters(pid).map(|(private, _)| private)
+    private_counters(pid).map(|(private, _)| private)
 }
 
 /// Both memory numbers Windows reports for a process.
 #[cfg(windows)]
 fn private_counters(pid: u32) -> Option<(u64, u64)> {
-  use windows::Win32::System::ProcessStatus::{
-    K32GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS, PROCESS_MEMORY_COUNTERS_EX2,
-  };
-  use windows::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION};
+    use windows::Win32::System::ProcessStatus::{
+        K32GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS, PROCESS_MEMORY_COUNTERS_EX2,
+    };
+    use windows::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION};
 
-  unsafe {
-    let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid).ok()?;
-    let mut counters = PROCESS_MEMORY_COUNTERS_EX2::default();
-    let size = std::mem::size_of::<PROCESS_MEMORY_COUNTERS_EX2>() as u32;
-    let ok = K32GetProcessMemoryInfo(
-      handle,
-      &mut counters as *mut PROCESS_MEMORY_COUNTERS_EX2 as *mut PROCESS_MEMORY_COUNTERS,
-      size,
-    );
-    let _ = windows::Win32::Foundation::CloseHandle(handle);
-    if ok.as_bool() {
-      Some((
-        counters.PrivateWorkingSetSize as u64,
-        counters.PrivateUsage as u64,
-      ))
-    } else {
-      None
+    unsafe {
+        let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid).ok()?;
+        let mut counters = PROCESS_MEMORY_COUNTERS_EX2::default();
+        let size = std::mem::size_of::<PROCESS_MEMORY_COUNTERS_EX2>() as u32;
+        let ok = K32GetProcessMemoryInfo(
+            handle,
+            &mut counters as *mut PROCESS_MEMORY_COUNTERS_EX2 as *mut PROCESS_MEMORY_COUNTERS,
+            size,
+        );
+        let _ = windows::Win32::Foundation::CloseHandle(handle);
+        if ok.as_bool() {
+            Some((
+                counters.PrivateWorkingSetSize as u64,
+                counters.PrivateUsage as u64,
+            ))
+        } else {
+            None
+        }
     }
-  }
 }
 
 /// The page's own javascript heap, read through the protocol.
 #[cfg(windows)]
 pub fn tab_heap(webview: &tauri::Webview) -> Option<u64> {
-  const EXPR: &str = r#"JSON.stringify({heap: performance.memory ? performance.memory.usedJSHeapSize : 0})"#;
-  let params = format!(
-    r#"{{"expression":{},"returnByValue":true}}"#,
-    serde_json::to_string(EXPR).ok()?
-  );
-  let json = crate::screenshot::call_timeout(
-    webview,
-    "Runtime.evaluate",
-    &params,
-    std::time::Duration::from_millis(600),
-  )?;
-  let value: serde_json::Value = serde_json::from_str(&json).ok()?;
-  let text = value
-    .get("result")
-    .and_then(|result| result.get("value"))
-    .and_then(|value| value.as_str())?;
-  let inner: serde_json::Value = serde_json::from_str(text).ok()?;
-  let heap = inner.get("heap")?.as_f64()?;
-  if heap <= 0.0 {
-    None
-  } else {
-    Some(heap as u64)
-  }
+    const EXPR: &str =
+        r#"JSON.stringify({heap: performance.memory ? performance.memory.usedJSHeapSize : 0})"#;
+    let params = format!(
+        r#"{{"expression":{},"returnByValue":true}}"#,
+        serde_json::to_string(EXPR).ok()?
+    );
+    let json = crate::screenshot::call_timeout(
+        webview,
+        "Runtime.evaluate",
+        &params,
+        std::time::Duration::from_millis(600),
+    )?;
+    let value: serde_json::Value = serde_json::from_str(&json).ok()?;
+    let text = value
+        .get("result")
+        .and_then(|result| result.get("value"))
+        .and_then(|value| value.as_str())?;
+    let inner: serde_json::Value = serde_json::from_str(text).ok()?;
+    let heap = inner.get("heap")?.as_f64()?;
+    if heap <= 0.0 {
+        None
+    } else {
+        Some(heap as u64)
+    }
 }
 
 #[cfg(not(windows))]
 pub fn tab_heap(_webview: &tauri::Webview) -> Option<u64> {
-  None
+    None
 }
 
 /// What one page is made of, in counts rather than bytes.
 #[derive(Clone, Copy, Default, serde::Serialize)]
 pub struct TabMetrics {
-  pub documents: u64,
-  pub nodes: u64,
-  pub listeners: u64,
+    pub documents: u64,
+    pub nodes: u64,
+    pub listeners: u64,
 }
 
 /// Reads the page's DOM counters through the protocol.
 #[cfg(windows)]
 pub fn tab_metrics(webview: &tauri::Webview) -> Option<TabMetrics> {
-  let json = crate::screenshot::call_timeout(
-    webview,
-    "Memory.getDOMCounters",
-    "{}",
-    std::time::Duration::from_millis(600),
-  )?;
-  let value: serde_json::Value = serde_json::from_str(&json).ok()?;
-  let number = |key: &str| value.get(key).and_then(|item| item.as_u64()).unwrap_or(0);
-  let metrics = TabMetrics {
-    documents: number("documents"),
-    nodes: number("nodes"),
-    listeners: number("jsEventListeners"),
-  };
-  if metrics.nodes == 0 && metrics.documents == 0 {
-    None
-  } else {
-    Some(metrics)
-  }
+    let json = crate::screenshot::call_timeout(
+        webview,
+        "Memory.getDOMCounters",
+        "{}",
+        std::time::Duration::from_millis(600),
+    )?;
+    let value: serde_json::Value = serde_json::from_str(&json).ok()?;
+    let number = |key: &str| value.get(key).and_then(|item| item.as_u64()).unwrap_or(0);
+    let metrics = TabMetrics {
+        documents: number("documents"),
+        nodes: number("nodes"),
+        listeners: number("jsEventListeners"),
+    };
+    if metrics.nodes == 0 && metrics.documents == 0 {
+        None
+    } else {
+        Some(metrics)
+    }
 }
 
 #[cfg(not(windows))]
 pub fn tab_metrics(_webview: &tauri::Webview) -> Option<TabMetrics> {
-  None
+    None
 }
 
 /// One line per environment, broken down by process kind, written to the log.
 pub fn report(app: &tauri::AppHandle) {
-  use std::sync::atomic::{AtomicU64, Ordering};
-  use tauri::Manager;
-  static LAST: AtomicU64 = AtomicU64::new(0);
-  let now = crate::library::now();
-  let last = LAST.load(Ordering::Relaxed);
-  if now.saturating_sub(last) < 30 {
-    return;
-  }
-  LAST.store(now, Ordering::Relaxed);
+    use std::sync::atomic::{AtomicU64, Ordering};
+    use tauri::Manager;
+    static LAST: AtomicU64 = AtomicU64::new(0);
+    let now = crate::library::now();
+    let last = LAST.load(Ordering::Relaxed);
+    if now.saturating_sub(last) < 30 {
+        return;
+    }
+    LAST.store(now, Ordering::Relaxed);
 
-  let all = app.webviews();
-  let page = all
-    .iter()
-    .find(|(label, _)| label.starts_with('w') && !label.contains("chrome"))
-    .map(|(_, webview)| webview.clone());
-  if let Some(webview) = page {
-    if let Some(line) = breakdown(&webview) {
-      crate::logging::info(&format!("mem pages: {line}"));
+    let all = app.webviews();
+    let page = all
+        .iter()
+        .find(|(label, _)| label.starts_with('w') && !label.contains("chrome"))
+        .map(|(_, webview)| webview.clone());
+    if let Some(webview) = page {
+        if let Some(line) = breakdown(&webview) {
+            crate::logging::info(&format!("mem pages: {line}"));
+        }
     }
-  }
-  let chrome = all
-    .iter()
-    .find(|(label, _)| label.ends_with("-chrome"))
-    .map(|(_, webview)| webview.clone());
-  if let Some(chrome) = chrome {
-    if let Some(line) = breakdown(&chrome) {
-      crate::logging::info(&format!("mem ui:    {line}"));
+    let chrome = all
+        .iter()
+        .find(|(label, _)| label.ends_with("-chrome"))
+        .map(|(_, webview)| webview.clone());
+    if let Some(chrome) = chrome {
+        if let Some(line) = breakdown(&chrome) {
+            crate::logging::info(&format!("mem ui:    {line}"));
+        }
     }
-  }
 }
 
 /// Count and working set per process kind inside one environment.
 #[cfg(windows)]
 fn breakdown(webview: &tauri::Webview) -> Option<String> {
-  let processes = processes(webview);
-  if processes.is_empty() {
-    return None;
-  }
+    let processes = processes(webview);
+    if processes.is_empty() {
+        return None;
+    }
 
-  let mut groups: std::collections::BTreeMap<i32, (u32, u64)> = std::collections::BTreeMap::new();
-  let mut detail = Vec::new();
-  let mut commit_total = 0u64;
-  for (kind, pid) in processes {
-    let counters = private_counters(pid);
-    let bytes = counters.map(|(private, _)| private).unwrap_or(0);
-    commit_total += counters.map(|(_, commit)| commit).unwrap_or(0);
-    detail.push(format!("{}:{}/{}MB", pid, kind, bytes / (1024 * 1024)));
-    let entry = groups.entry(kind).or_insert((0, 0));
-    entry.0 += 1;
-    entry.1 += bytes;
-  }
-  // COREWEBVIEW2_PROCESS_KIND: the order is not the one the names suggest, gpu is 4.
-  let name = |kind: i32| match kind {
-    0 => "browser",
-    1 => "renderer",
-    2 => "utility",
-    3 => "sandbox",
-    4 => "gpu",
-    5 => "plugin",
-    6 => "broker",
-    _ => "other",
-  };
-  let mut total = 0u64;
-  let mut parts = Vec::new();
-  for (kind, (count, bytes)) in groups {
-    total += bytes;
+    let mut groups: std::collections::BTreeMap<i32, (u32, u64)> = std::collections::BTreeMap::new();
+    let mut detail = Vec::new();
+    let mut commit_total = 0u64;
+    for (kind, pid) in processes {
+        let counters = private_counters(pid);
+        let bytes = counters.map(|(private, _)| private).unwrap_or(0);
+        commit_total += counters.map(|(_, commit)| commit).unwrap_or(0);
+        detail.push(format!("{}:{}/{}MB", pid, kind, bytes / (1024 * 1024)));
+        let entry = groups.entry(kind).or_insert((0, 0));
+        entry.0 += 1;
+        entry.1 += bytes;
+    }
+    // COREWEBVIEW2_PROCESS_KIND: the order is not the one the names suggest, gpu is 4.
+    let name = |kind: i32| match kind {
+        0 => "browser",
+        1 => "renderer",
+        2 => "utility",
+        3 => "sandbox",
+        4 => "gpu",
+        5 => "plugin",
+        6 => "broker",
+        _ => "other",
+    };
+    let mut total = 0u64;
+    let mut parts = Vec::new();
+    for (kind, (count, bytes)) in groups {
+        total += bytes;
+        parts.push(format!(
+            "{}({})={}MB",
+            name(kind),
+            count,
+            bytes / (1024 * 1024)
+        ));
+    }
     parts.push(format!(
-      "{}({})={}MB",
-      name(kind),
-      count,
-      bytes / (1024 * 1024)
+        "total={}MB commit={}MB",
+        total / (1024 * 1024),
+        commit_total / (1024 * 1024)
     ));
-  }
-  parts.push(format!(
-    "total={}MB commit={}MB",
-    total / (1024 * 1024),
-    commit_total / (1024 * 1024)
-  ));
-  // pid:kind/mb, so a line can be matched against Task Manager.
-  parts.push(format!("[{}]", detail.join(" ")));
-  Some(parts.join(" "))
+    // pid:kind/mb, so a line can be matched against Task Manager.
+    parts.push(format!("[{}]", detail.join(" ")));
+    Some(parts.join(" "))
 }
 
 #[cfg(not(windows))]
 fn breakdown(_webview: &tauri::Webview) -> Option<String> {
-  None
+    None
 }

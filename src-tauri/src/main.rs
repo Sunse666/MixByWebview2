@@ -6,35 +6,35 @@ mod com;
 #[cfg(debug_assertions)]
 mod debug;
 mod diag;
-mod zoom;
 mod downloads;
 mod ext_live;
 mod extensions;
 mod favicons;
 mod fetch;
+mod freeze;
 mod ipc;
 mod library;
-mod net;
-mod freeze;
 mod logging;
 mod mem;
+mod net;
 mod overlay;
 mod paths;
 mod permissions;
 mod persist;
 mod platform;
+mod screenshot;
 mod session;
 mod sidebar;
-mod screenshot;
 mod snap;
-mod translate;
-mod tray;
-mod userscripts;
 mod state;
 mod tabs;
 mod theme;
 mod thumbs;
+mod translate;
+mod tray;
+mod userscripts;
 mod window;
+mod zoom;
 
 use tauri::Manager;
 
@@ -66,7 +66,8 @@ fn main() {
                     let Some(window) = handle.get_window(crate::window::PRIMARY) else {
                         return;
                     };
-                    let _ = ipc::tab_new(handle.clone(), window, state, Some(url), None, None).await;
+                    let _ =
+                        ipc::tab_new(handle.clone(), window, state, Some(url), None, None).await;
                 });
             }
         }))
@@ -88,7 +89,9 @@ fn main() {
                 }
                 settings.reset_extensions = false;
                 if let Err(err) = settings.save(&dirs.settings_file) {
-                    logging::warn(&format!("cannot save settings after extension reset: {err}"));
+                    logging::warn(&format!(
+                        "cannot save settings after extension reset: {err}"
+                    ));
                 }
             }
             let proxy_args = match settings.proxy_mode.as_str() {
@@ -187,7 +190,6 @@ fn main() {
             ipc::tab_scroll,
             ipc::url_type,
             ipc::url_key,
-
             ipc::tab_move,
             ipc::tab_icon,
             ipc::tab_reopen,
@@ -237,7 +239,6 @@ fn main() {
             ipc::download_list,
             ipc::download_open,
             ipc::download_clear,
-
             ipc::custom_css_open,
             ipc::open_dir,
         ])

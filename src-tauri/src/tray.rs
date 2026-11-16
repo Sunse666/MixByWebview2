@@ -1,4 +1,4 @@
-﻿use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
+use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Emitter};
 
@@ -8,12 +8,7 @@ pub fn install(app: &AppHandle) -> tauri::Result<()> {
     let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
     let menu = Menu::with_items(
         app,
-        &[
-            &show,
-            &new_tab,
-            &PredefinedMenuItem::separator(app)?,
-            &quit,
-        ],
+        &[&show, &new_tab, &PredefinedMenuItem::separator(app)?, &quit],
     )?;
 
     let mut builder = TrayIconBuilder::with_id("main")

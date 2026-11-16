@@ -90,11 +90,11 @@ static NEXT_ID: AtomicU64 = AtomicU64::new(1);
 pub mod ops {
     use std::collections::HashMap;
     use std::sync::{Mutex, OnceLock};
+    use tauri::Manager;
+    use webview2_com::DownloadStartingEventHandler;
     use webview2_com::Microsoft::Web::WebView2::Win32::{
         ICoreWebView2DownloadOperation, ICoreWebView2_4,
     };
-    use webview2_com::DownloadStartingEventHandler;
-    use tauri::Manager;
     use windows_core::{Interface, PWSTR};
 
     /// The file name the browser would have used, taken from its chosen path.
@@ -127,7 +127,9 @@ pub mod ops {
     }
 
     /// Remembers the operation under the url it fetches.
-    fn remember(args: &webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2DownloadStartingEventArgs) -> Option<String> {
+    fn remember(
+        args: &webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2DownloadStartingEventArgs,
+    ) -> Option<String> {
         let operation = unsafe { args.DownloadOperation().ok()? };
         let mut uri = PWSTR::null();
         unsafe { operation.Uri(&mut uri).ok()? };
@@ -187,9 +189,13 @@ pub mod ops {
         run: impl FnOnce(&ICoreWebView2DownloadOperation) -> windows_core::Result<()>,
     ) -> Result<String, String> {
         let map = ops().0.lock().map_err(|_| "lock poisoned".to_string())?;
-        let operation = map.get(url).ok_or_else(|| "no operation for that url".to_string())?;
+        let operation = map
+            .get(url)
+            .ok_or_else(|| "no operation for that url".to_string())?;
         let state = unsafe {
-            let mut state = webview2_com::Microsoft::Web::WebView2::Win32::COREWEBVIEW2_DOWNLOAD_STATE::default();
+            let mut state =
+                webview2_com::Microsoft::Web::WebView2::Win32::COREWEBVIEW2_DOWNLOAD_STATE::default(
+                );
             operation.State(&mut state).map(|_| state.0).unwrap_or(-1)
         };
         // 0 created, 1 in progress, 2 interrupted, 3 completed.
@@ -291,8 +297,6 @@ pub fn handle(webview: Webview, event: DownloadEvent<'_>) -> bool {
     }
 }
 
-
-
 /// Where the download list is kept between runs.
 fn history_file(dirs: &crate::paths::AppDirs) -> std::path::PathBuf {
     dirs.root.join("downloads.json")
@@ -328,7 +332,6 @@ pub fn load_history(dirs: &crate::paths::AppDirs) -> Vec<DownloadTask> {
     }
     tasks
 }
-
 
 /// Marks rows that claim to be running when nothing is.
 pub fn reconcile(app: &tauri::AppHandle) {
@@ -447,10 +450,7 @@ pub fn start_with_engine(app: &tauri::AppHandle, url: &str, path: &Path) -> u64 
     let (id, path) = match existing {
         Some((id, held, held_state)) if !held.is_empty() => {
             let held = Path::new(&held);
-            crate::logging::info(&format!(
-                "download {id} continued for {}",
-                held.display()
-            ));
+            crate::logging::info(&format!("download {id} continued for {}", held.display()));
             set_state(app, id, retry_phase(Phase::parse(&held_state)).as_str());
             (id, held.to_path_buf())
         }
@@ -577,7 +577,9 @@ pub fn start_progress_watch(app: tauri::AppHandle) {
                 .iter_mut()
                 .filter(|task| task.state == "started" || task.state == "interrupted")
             {
-                let size = std::fs::metadata(&task.path).map(|meta| meta.len()).unwrap_or(0);
+                let size = std::fs::metadata(&task.path)
+                    .map(|meta| meta.len())
+                    .unwrap_or(0);
                 if size != task.bytes {
                     let delta = size.saturating_sub(task.bytes);
                     task.speed = delta.saturating_mul(2);
@@ -698,7 +700,11 @@ mod tests {
     #[test]
     fn prefers_the_suggested_name() {
         let dir = scratch("suggested");
-        let path = target_for(&dir, "https://example.com/download?id=7", "Mozilla Installer.exe");
+        let path = target_for(
+            &dir,
+            "https://example.com/download?id=7",
+            "Mozilla Installer.exe",
+        );
         assert_eq!(path.file_name().unwrap(), "Mozilla Installer.exe");
     }
 

@@ -69,8 +69,17 @@ fn mix(a: &str, b: &str, t: f64) -> String {
     let (Some(a), Some(b)) = (parse_hex(a), parse_hex(b)) else {
         return a.to_string();
     };
-    let blend = |x: u8, y: u8| (x as f64 + (y as f64 - x as f64) * t).round().clamp(0.0, 255.0) as u8;
-    format!("#{:02X}{:02X}{:02X}", blend(a.0, b.0), blend(a.1, b.1), blend(a.2, b.2))
+    let blend = |x: u8, y: u8| {
+        (x as f64 + (y as f64 - x as f64) * t)
+            .round()
+            .clamp(0.0, 255.0) as u8
+    };
+    format!(
+        "#{:02X}{:02X}{:02X}",
+        blend(a.0, b.0),
+        blend(a.1, b.1),
+        blend(a.2, b.2)
+    )
 }
 
 fn parse_hex(value: &str) -> Option<(u8, u8, u8)> {
@@ -187,7 +196,10 @@ mod tests {
             font_family: "x; }".to_string(),
             ..Theme::default()
         };
-        assert_eq!(theme.sanitized().font_family, "Segoe UI, system-ui, sans-serif");
+        assert_eq!(
+            theme.sanitized().font_family,
+            "Segoe UI, system-ui, sans-serif"
+        );
     }
 
     #[test]

@@ -1,4 +1,4 @@
-﻿//! Tab lifecycle: creating, closing, selecting, ordering and the per-tab state the strip reads.
+//! Tab lifecycle: creating, closing, selecting, ordering and the per-tab state the strip reads.
 
 use super::*;
 
@@ -30,18 +30,22 @@ fn spawn_tab(
     Ok(webview)
 }
 
-
-
-
-
 #[tauri::command]
-pub async fn tab_list(window: tauri::Window, state: State<'_, AppState>) -> Result<TabList, AppError> {
+pub async fn tab_list(
+    window: tauri::Window,
+    state: State<'_, AppState>,
+) -> Result<TabList, AppError> {
     let core = state.read_core(window.label());
     Ok(snapshot(&core, window.label()))
 }
 
 #[tauri::command]
-pub async fn tab_select(app: AppHandle, window: tauri::Window, state: State<'_, AppState>, id: String) -> Result<(), AppError> {
+pub async fn tab_select(
+    app: AppHandle,
+    window: tauri::Window,
+    state: State<'_, AppState>,
+    id: String,
+) -> Result<(), AppError> {
     let exists = {
         let core = state.read_core(window.label());
         core.tabs.iter().any(|tab| tab.id == id)
@@ -73,7 +77,12 @@ pub async fn tab_select(app: AppHandle, window: tauri::Window, state: State<'_, 
         let _ = webview.set_focus();
         let scroll = state
             .try_read_core(window.label())
-            .and_then(|core| core.tabs.iter().find(|tab| tab.id == id).map(|tab| tab.scroll))
+            .and_then(|core| {
+                core.tabs
+                    .iter()
+                    .find(|tab| tab.id == id)
+                    .map(|tab| tab.scroll)
+            })
             .unwrap_or(0.0);
         if scroll > 0.0 {
             let _ = webview.eval(format!("window.scrollTo(0, {scroll});"));
@@ -86,7 +95,8 @@ pub async fn tab_select(app: AppHandle, window: tauri::Window, state: State<'_, 
 #[tauri::command]
 pub async fn tab_new(
     app: AppHandle,
-    window: tauri::Window, state: State<'_, AppState>,
+    window: tauri::Window,
+    state: State<'_, AppState>,
     url: Option<String>,
     incognito: Option<bool>,
     background: Option<bool>,
@@ -94,25 +104,28 @@ pub async fn tab_new(
     let (id, target, selection_before) = {
         let mut core = state.write_core(window.label());
         core.next_tab_id += 1;
-    let id = tab_label(window.label(), core.next_tab_id);
+        let id = tab_label(window.label(), core.next_tab_id);
         let target = match url {
-        Some(input) => {
-            if crate::tabs::parse_url(&input).is_none() {
-                return Err(AppError::new("bad_url", format!("not a web address: {input}")));
+            Some(input) => {
+                if crate::tabs::parse_url(&input).is_none() {
+                    return Err(AppError::new(
+                        "bad_url",
+                        format!("not a web address: {input}"),
+                    ));
+                }
+                input
             }
-            input
-        }
-        None => {
-            let settings = state.settings.read();
-            if !settings.newtab_url.is_empty() {
-                settings.newtab_url.clone()
-            } else if settings.new_tab_page {
-                "http://tauri.localhost/pages/newtab.html".to_string()
-            } else {
-                settings.start_url.clone()
+            None => {
+                let settings = state.settings.read();
+                if !settings.newtab_url.is_empty() {
+                    settings.newtab_url.clone()
+                } else if settings.new_tab_page {
+                    "http://tauri.localhost/pages/newtab.html".to_string()
+                } else {
+                    settings.start_url.clone()
+                }
             }
-        }
-    };
+        };
         core.tick += 1;
         let tick = core.tick;
         let previous = core.selected.clone();
@@ -136,7 +149,13 @@ pub async fn tab_new(
         (id, target, previous)
     };
 
-    let created = spawn_tab(&app, window.label(), &id, &target, incognito.unwrap_or(false))?;
+    let created = spawn_tab(
+        &app,
+        window.label(),
+        &id,
+        &target,
+        incognito.unwrap_or(false),
+    )?;
     crate::tabs::apply_default_zoom(&app, &id);
 
     if background.unwrap_or(false) {
@@ -191,7 +210,12 @@ pub async fn tab_pin(
     Ok(())
 }
 #[tauri::command]
-pub async fn tab_close(app: AppHandle, window: tauri::Window, state: State<'_, AppState>, id: String) -> Result<(), AppError> {
+pub async fn tab_close(
+    app: AppHandle,
+    window: tauri::Window,
+    state: State<'_, AppState>,
+    id: String,
+) -> Result<(), AppError> {
     if window_of_tab(&id) != window.label() {
         crate::logging::warn(&format!(
             "refused to close {id} from window {}",
@@ -272,7 +296,10 @@ pub async fn tab_screenshot(
         crate::screenshot::capture(&webview)
     };
     let Some(bytes) = shot else {
-        return Err(AppError::new("capture", "the page did not answer with an image"));
+        return Err(AppError::new(
+            "capture",
+            "the page did not answer with an image",
+        ));
     };
     let name = format!("Mix-shot-{}.png", crate::library::now());
     let target = crate::downloads::target_for(&state.dirs.downloads, "mix://screenshot", &name);
@@ -340,7 +367,8 @@ pub async fn thumb_show(
     crate::overlay::open_sized(&app, &window, &kind, left, top, (width, height))
         .map_err(|err| AppError::new("overlay", err))?;
     app.state::<AppState>()
-        .windows.overlay_thumb
+        .windows
+        .overlay_thumb
         .write()
         .insert(window.label().to_string());
     Ok(true)
@@ -425,7 +453,9 @@ pub async fn thumb_stats(
     })
     .await
     .map_err(|err| AppError::new("stats", err.to_string()))?;
-    let metrics = app.get_webview(&id).and_then(|webview| crate::mem::tab_metrics(&webview));
+    let metrics = app
+        .get_webview(&id)
+        .and_then(|webview| crate::mem::tab_metrics(&webview));
     Ok(ThumbStats {
         memory_average: stats.memory_total.map(|total| total / live.max(1)),
         nodes: metrics.map(|m| m.nodes).unwrap_or(0),
@@ -470,7 +500,12 @@ pub async fn tab_mute(
 }
 
 #[tauri::command]
-pub async fn tab_navigate(app: AppHandle, window: tauri::Window, state: State<'_, AppState>, url: String) -> Result<(), AppError> {
+pub async fn tab_navigate(
+    app: AppHandle,
+    window: tauri::Window,
+    state: State<'_, AppState>,
+    url: String,
+) -> Result<(), AppError> {
     if url.starts_with("http") && !trusted_url(&url) {
         let reach = state.nav.read().reachability.clone();
         let probe_url = url.clone();
@@ -493,7 +528,10 @@ pub async fn tab_navigate(app: AppHandle, window: tauri::Window, state: State<'_
         if !id.is_empty() {
             show_error_page(&app, &id, url.trim());
         }
-        return Err(AppError::new("bad_url", format!("not a web address: {url}")));
+        return Err(AppError::new(
+            "bad_url",
+            format!("not a web address: {url}"),
+        ));
     };
     let label = selected_label(&state, &window);
     if label.is_empty() {
@@ -626,15 +664,13 @@ pub async fn tab_icon(
         let changed = {
             let state = app.try_state::<AppState>();
             match state {
-                Some(state) => state.favicons_mut()
-                    .set(&host, &icon),
+                Some(state) => state.favicons_mut().set(&host, &icon),
                 None => false,
             }
         };
         if changed {
             if let Some(state) = app.try_state::<AppState>() {
-                state.favicons()
-                    .save(&state.dirs.favicons_file);
+                state.favicons().save(&state.dirs.favicons_file);
             }
         }
         cache_icon(&app, &host, &icon);
@@ -646,7 +682,14 @@ pub async fn tab_icon(
             tab.icon = Some(icon.clone());
         }
     }
-    let _ = app.emit_to(owner, "tab:icon", IconPayload { id, icon: Some(icon) });
+    let _ = app.emit_to(
+        owner,
+        "tab:icon",
+        IconPayload {
+            id,
+            icon: Some(icon),
+        },
+    );
     Ok(())
 }
 /// Reopens the most recently closed tab of this window.
@@ -657,7 +700,8 @@ pub async fn tab_reopen(
     state: State<'_, AppState>,
 ) -> Result<bool, AppError> {
     let Some((url, _title)) = state
-        .windows.closed_tabs
+        .windows
+        .closed_tabs
         .write()
         .get_mut(window.label())
         .and_then(|list| list.pop())
@@ -667,7 +711,6 @@ pub async fn tab_reopen(
     tab_new(app, window, state, Some(url), None, None).await?;
     Ok(true)
 }
-
 
 /// Freezes a tab once it has been off screen for a while.
 ///
@@ -965,7 +1008,8 @@ pub(crate) fn sync_visibility(app: &AppHandle, label: &str) {
                 let _ = webview.show();
                 if let Some(state) = app.try_state::<AppState>() {
                     state
-                        .windows.shown_at
+                        .windows
+                        .shown_at
                         .write()
                         .insert(id.clone(), crate::library::now());
                 }

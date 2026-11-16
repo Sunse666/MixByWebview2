@@ -17,7 +17,9 @@ pub fn parse(bytes: &[u8]) -> Result<Crx, String> {
         return Err("file is too small to be a crx".into());
     }
     if &bytes[0..4] != b"Cr24" {
-        return Err("missing Cr24 magic; unpack the zip manually and drop the folder instead".into());
+        return Err(
+            "missing Cr24 magic; unpack the zip manually and drop the folder instead".into(),
+        );
     }
 
     let version = u32::from_le_bytes(bytes[4..8].try_into().expect("4 bytes"));
@@ -29,9 +31,7 @@ pub fn parse(bytes: &[u8]) -> Result<Crx, String> {
         2 => {
             let pubkey_len = u32::from_le_bytes(bytes[8..12].try_into().expect("4 bytes")) as usize;
             let sig_len = u32::from_le_bytes(bytes[12..16].try_into().expect("4 bytes")) as usize;
-            16usize
-                .saturating_add(pubkey_len)
-                .saturating_add(sig_len)
+            16usize.saturating_add(pubkey_len).saturating_add(sig_len)
         }
         other => return Err(format!("unsupported crx version {other}")),
     };
@@ -158,6 +158,9 @@ mod tests {
         let dir = scratch("traversal");
         let zip = zip_with(&[("../evil.txt", b"nope")]);
         let err = extract(&zip, &dir).expect_err("must reject");
-        assert!(err.contains("unsafe") || err.contains("escapes"), "got: {err}");
+        assert!(
+            err.contains("unsafe") || err.contains("escapes"),
+            "got: {err}"
+        );
     }
 }

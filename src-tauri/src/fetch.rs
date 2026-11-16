@@ -1,12 +1,10 @@
 //! A download engine with working pause, resume and cancel.
 
+use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::io::Write;
 use std::sync::atomic::{AtomicBool, Ordering};
-use parking_lot::Mutex;
 use std::sync::{Arc, OnceLock};
-
-
 
 /// One transfer, whether it is running, paused or finished.
 pub struct Job {
@@ -97,7 +95,7 @@ pub fn start(app: tauri::AppHandle, id: u64, url: String, path: std::path::PathB
             .build();
         let Ok(client) = client else {
             crate::downloads::set_state(&app, id, "failed");
-                release(&path);
+            release(&path);
             return;
         };
 
@@ -115,7 +113,7 @@ pub fn start(app: tauri::AppHandle, id: u64, url: String, path: std::path::PathB
                 Err(err) => {
                     crate::logging::warn(&format!("fetch {id} failed: {err}"));
                     crate::downloads::set_state(&app, id, "failed");
-                release(&path);
+                    release(&path);
                     return;
                 }
             };
@@ -137,9 +135,12 @@ pub fn start(app: tauri::AppHandle, id: u64, url: String, path: std::path::PathB
             {
                 Ok(file) => file,
                 Err(err) => {
-                    crate::logging::warn(&format!("fetch {id}: cannot write {}: {err}", path.display()));
+                    crate::logging::warn(&format!(
+                        "fetch {id}: cannot write {}: {err}",
+                        path.display()
+                    ));
                     crate::downloads::set_state(&app, id, "failed");
-                release(&path);
+                    release(&path);
                     return;
                 }
             };
@@ -155,7 +156,7 @@ pub fn start(app: tauri::AppHandle, id: u64, url: String, path: std::path::PathB
                     drop(file);
                     let _ = std::fs::remove_file(&path);
                     crate::downloads::set_state(&app, id, "failed");
-                release(&path);
+                    release(&path);
                     return;
                 }
                 if paused.load(Ordering::Relaxed) || !running.load(Ordering::Relaxed) {
@@ -167,13 +168,14 @@ pub fn start(app: tauri::AppHandle, id: u64, url: String, path: std::path::PathB
                 if let Err(err) = file.write_all(&chunk) {
                     crate::logging::warn(&format!("fetch {id}: write failed: {err}"));
                     crate::downloads::set_state(&app, id, "failed");
-                release(&path);
+                    release(&path);
                     return;
                 }
                 written += chunk.len() as u64;
                 if last_report.elapsed() >= std::time::Duration::from_millis(250) {
                     let speed = ((written - last_bytes) as f64
-                        / last_report.elapsed().as_secs_f64()) as u64;
+                        / last_report.elapsed().as_secs_f64())
+                        as u64;
                     crate::downloads::set_progress(&app, id, written, speed);
                     last_report = std::time::Instant::now();
                     last_bytes = written;

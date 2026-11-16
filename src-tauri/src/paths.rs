@@ -55,9 +55,7 @@ impl AppDirs {
 
     fn under(root: &Path) -> Self {
         let user_data = root.join("UserData");
-        let suffix = instance_id()
-            .map(|id| format!("-{id}"))
-            .unwrap_or_default();
+        let suffix = instance_id().map(|id| format!("-{id}")).unwrap_or_default();
         Self {
             root: root.to_path_buf(),
             profile: user_data.join(format!("profile{suffix}")),
@@ -74,8 +72,8 @@ impl AppDirs {
             bookmarks_file: user_data.join("bookmarks.json"),
             zoom_file: user_data.join("zoom.json"),
             crx: root.join("crx"),
-        favicons_file: user_data.join("favicons.json"),
-        favicons_dir: user_data.join("favicons"),
+            favicons_file: user_data.join("favicons.json"),
+            favicons_dir: user_data.join("favicons"),
             scripts: root.join("javascript"),
             fell_back: false,
             user_data,
@@ -149,7 +147,10 @@ fn app_root() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from("."));
 
     #[cfg(target_os = "macos")]
-    if let Some(bundle) = dir.parent().filter(|p| p.extension().is_some_and(|e| e == "app")) {
+    if let Some(bundle) = dir
+        .parent()
+        .filter(|p| p.extension().is_some_and(|e| e == "app"))
+    {
         if let Some(parent) = bundle.parent() {
             return parent.to_path_buf();
         }

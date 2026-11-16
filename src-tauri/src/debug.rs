@@ -1,4 +1,4 @@
-﻿//! Debug hooks: the things only a debug build can be asked to do.
+//! Debug hooks: the things only a debug build can be asked to do.
 //!
 //! Every one of them is armed by an environment variable and starts a thread that waits
 //! a second or two. They exist because this machine cannot be driven from a script: the
@@ -22,19 +22,19 @@ pub fn install(app: &mut tauri::App) {
     gesture_test(app.handle());
     if armed() {
         if let Ok(kind) = std::env::var("MIX_OPEN_ON_START") {
-        let handle = app.handle().clone();
-        std::thread::spawn(move || {
-            std::thread::sleep(std::time::Duration::from_millis(1500));
-            let target = handle.clone();
-            let _ = handle.run_on_main_thread(move || {
-                let Some(win) = target.get_window(PRIMARY) else {
-                    return;
-                };
-                if let Err(err) = crate::overlay::open(&target, &win, &kind) {
-                    crate::logging::warn(&format!("debug overlay failed: {err}"));
-                }
+            let handle = app.handle().clone();
+            std::thread::spawn(move || {
+                std::thread::sleep(std::time::Duration::from_millis(1500));
+                let target = handle.clone();
+                let _ = handle.run_on_main_thread(move || {
+                    let Some(win) = target.get_window(PRIMARY) else {
+                        return;
+                    };
+                    if let Err(err) = crate::overlay::open(&target, &win, &kind) {
+                        crate::logging::warn(&format!("debug overlay failed: {err}"));
+                    }
+                });
             });
-        });
         }
     }
 
@@ -88,7 +88,11 @@ pub fn install(app: &mut tauri::App) {
                 .and_then(|value| value.parse().ok())
                 .unwrap_or(1);
             for round in 0..repeats {
-                std::thread::sleep(std::time::Duration::from_millis(if round == 0 { 0 } else { 5000 }));
+                std::thread::sleep(std::time::Duration::from_millis(if round == 0 {
+                    0
+                } else {
+                    5000
+                }));
                 let target = handle.clone();
                 let _ = handle.run_on_main_thread(move || {
                     let Some(win) = target.get_window(PRIMARY) else {
@@ -98,7 +102,10 @@ pub fn install(app: &mut tauri::App) {
                     let call = crate::ipc::translate_page_inplace(target.clone(), win, state);
                     match tauri::async_runtime::block_on(call) {
                         Ok(()) => crate::logging::info("debug translate: started"),
-                        Err(err) => crate::logging::warn(&format!("debug translate failed: {}", err.message)),
+                        Err(err) => crate::logging::warn(&format!(
+                            "debug translate failed: {}",
+                            err.message
+                        )),
                     }
                 });
             }
@@ -150,7 +157,9 @@ pub fn install(app: &mut tauri::App) {
                 let patch = serde_json::json!({ "hidden_extensions": [name] });
                 match crate::ipc::apply_settings_patch(&state, patch) {
                     Ok(_) => crate::logging::info("debug: settings patched"),
-                    Err(err) => crate::logging::warn(&format!("debug patch failed: {}", err.message)),
+                    Err(err) => {
+                        crate::logging::warn(&format!("debug patch failed: {}", err.message))
+                    }
                 }
             });
         });
@@ -158,19 +167,21 @@ pub fn install(app: &mut tauri::App) {
 
     if armed() {
         if let Ok(url) = std::env::var("MIX_SAVE_URL") {
-        let handle = app.handle().clone();
-        std::thread::spawn(move || {
-            std::thread::sleep(std::time::Duration::from_millis(2500));
-            let target = handle.clone();
-            let _ = handle.run_on_main_thread(move || {
-                let state = target.state::<AppState>();
-                let call = crate::ipc::save_url(target.clone(), &state, url, None);
-                match tauri::async_runtime::block_on(call) {
-                    Ok(path) => crate::logging::info(&format!("debug save: {path}")),
-                    Err(err) => crate::logging::warn(&format!("debug save failed: {}", err.message)),
-                }
+            let handle = app.handle().clone();
+            std::thread::spawn(move || {
+                std::thread::sleep(std::time::Duration::from_millis(2500));
+                let target = handle.clone();
+                let _ = handle.run_on_main_thread(move || {
+                    let state = target.state::<AppState>();
+                    let call = crate::ipc::save_url(target.clone(), &state, url, None);
+                    match tauri::async_runtime::block_on(call) {
+                        Ok(path) => crate::logging::info(&format!("debug save: {path}")),
+                        Err(err) => {
+                            crate::logging::warn(&format!("debug save failed: {}", err.message))
+                        }
+                    }
+                });
             });
-        });
         }
     }
 
@@ -222,12 +233,7 @@ pub fn install(app: &mut tauri::App) {
                     return;
                 };
                 let state = target.state::<AppState>();
-                let call = crate::ipc::shortcut(
-                    target.clone(),
-                    win,
-                    state,
-                    "devtools".to_string(),
-                );
+                let call = crate::ipc::shortcut(target.clone(), win, state, "devtools".to_string());
                 let _ = tauri::async_runtime::block_on(call);
             });
         });
@@ -254,7 +260,10 @@ fn ext_toggle(app: &tauri::AppHandle) {
             return;
         };
         let ok = crate::ext_live::set_enabled(&webview, &target.id, !target.enabled);
-        crate::logging::info(&format!("ext toggle {} -> {}: {ok}", target.name, !target.enabled));
+        crate::logging::info(&format!(
+            "ext toggle {} -> {}: {ok}",
+            target.name, !target.enabled
+        ));
         let after = crate::ext_live::list(&webview);
         if let Some(seen) = after.iter().find(|item| item.id == target.id) {
             crate::logging::info(&format!("ext toggle after: enabled={}", seen.enabled));

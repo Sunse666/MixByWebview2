@@ -1,10 +1,8 @@
-﻿//! The sidebar: a column beside the page holding bookmarks, downloads and history.
+//! The sidebar: a column beside the page holding bookmarks, downloads and history.
 
 use crate::ipc::AppState;
 use crate::window::{logical_size, set_bounds};
-use tauri::{
-    AppHandle, LogicalPosition, LogicalSize, Manager, WebviewBuilder, WebviewUrl,
-};
+use tauri::{AppHandle, LogicalPosition, LogicalSize, Manager, WebviewBuilder, WebviewUrl};
 
 /// Which side the sidebar is on, and how wide it should be, for this window.
 pub struct Plan {
@@ -26,7 +24,11 @@ impl Plan {
 
     /// Where the pages start, and how much room they have.
     pub fn page(&self, width: f64) -> (f64, f64) {
-        let x = if self.side == "left" { self.reserve } else { 0.0 };
+        let x = if self.side == "left" {
+            self.reserve
+        } else {
+            0.0
+        };
         (x, (width - self.reserve).max(1.0))
     }
 
@@ -97,10 +99,7 @@ pub fn ensure(app: &AppHandle, label: &str) {
     match win.add_child(
         builder,
         LogicalPosition::new(plan.panel_x(width_px), chrome_h),
-        LogicalSize::new(
-            plan.reserve.max(1.0),
-            (height - chrome_h).max(1.0),
-        ),
+        LogicalSize::new(plan.reserve.max(1.0), (height - chrome_h).max(1.0)),
     ) {
         Ok(_) => crate::logging::info("sidebar created"),
         Err(err) => crate::logging::warn(&format!("sidebar refused: {err}")),

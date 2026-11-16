@@ -1,4 +1,4 @@
-﻿//! Page translation: in-place replacement and the proxy page fallback.
+//! Page translation: in-place replacement and the proxy page fallback.
 
 use super::*;
 
@@ -130,7 +130,12 @@ pub async fn translate_page(
             let id = selected_label(&state, &window);
             state
                 .try_read_core(window.label())
-                .and_then(|core| core.tabs.iter().find(|tab| tab.id == id).map(|tab| tab.url.clone()))
+                .and_then(|core| {
+                    core.tabs
+                        .iter()
+                        .find(|tab| tab.id == id)
+                        .map(|tab| tab.url.clone())
+                })
                 .unwrap_or_default()
         }
     };

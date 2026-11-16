@@ -1,4 +1,4 @@
-﻿use std::time::{Duration, Instant};
+use std::time::{Duration, Instant};
 
 use tauri::{AppHandle, Manager, PhysicalPosition, PhysicalSize};
 
@@ -148,7 +148,9 @@ fn next_cell(current: Option<Cell>, direction: Direction) -> Option<Cell> {
 
 /// Global hotkeys are the primary trigger; window keys still work.
 pub fn install_hotkeys(app: &AppHandle) -> bool {
-    use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
+    use tauri_plugin_global_shortcut::{
+        Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState,
+    };
 
     let bindings = [
         (Code::ArrowLeft, Direction::Left),
@@ -161,13 +163,15 @@ pub fn install_hotkeys(app: &AppHandle) -> bool {
     for (code, direction) in bindings {
         let shortcut = Shortcut::new(Some(Modifiers::ALT | Modifiers::SHIFT), code);
         let label = format!("{shortcut:?}");
-        let result = app.global_shortcut().on_shortcut(shortcut, move |app, _shortcut, event| {
-            if event.state() == ShortcutState::Pressed {
-                if let Err(err) = cycle(app, direction) {
-                    crate::logging::warn(&format!("snap failed: {err}"));
+        let result = app
+            .global_shortcut()
+            .on_shortcut(shortcut, move |app, _shortcut, event| {
+                if event.state() == ShortcutState::Pressed {
+                    if let Err(err) = cycle(app, direction) {
+                        crate::logging::warn(&format!("snap failed: {err}"));
+                    }
                 }
-            }
-        });
+            });
         match result {
             Ok(()) => crate::logging::info(&format!("hotkey registered: {label}")),
             Err(err) => {
@@ -190,22 +194,40 @@ mod tests {
     #[test]
     fn left_cycles_half_then_corners() {
         assert_eq!(next_cell(None, Direction::Left), Some(Cell::LeftHalf));
-        assert_eq!(next_cell(Some(Cell::LeftHalf), Direction::Left), Some(Cell::TopLeft));
-        assert_eq!(next_cell(Some(Cell::TopLeft), Direction::Left), Some(Cell::BottomLeft));
-        assert_eq!(next_cell(Some(Cell::BottomLeft), Direction::Left), Some(Cell::LeftHalf));
+        assert_eq!(
+            next_cell(Some(Cell::LeftHalf), Direction::Left),
+            Some(Cell::TopLeft)
+        );
+        assert_eq!(
+            next_cell(Some(Cell::TopLeft), Direction::Left),
+            Some(Cell::BottomLeft)
+        );
+        assert_eq!(
+            next_cell(Some(Cell::BottomLeft), Direction::Left),
+            Some(Cell::LeftHalf)
+        );
     }
 
     #[test]
     fn right_cycles_half_then_corners() {
         assert_eq!(next_cell(None, Direction::Right), Some(Cell::RightHalf));
-        assert_eq!(next_cell(Some(Cell::RightHalf), Direction::Right), Some(Cell::TopRight));
-        assert_eq!(next_cell(Some(Cell::BottomRight), Direction::Right), Some(Cell::RightHalf));
+        assert_eq!(
+            next_cell(Some(Cell::RightHalf), Direction::Right),
+            Some(Cell::TopRight)
+        );
+        assert_eq!(
+            next_cell(Some(Cell::BottomRight), Direction::Right),
+            Some(Cell::RightHalf)
+        );
     }
 
     #[test]
     fn up_toggles_full_and_top_half() {
         assert_eq!(next_cell(None, Direction::Up), Some(Cell::Full));
-        assert_eq!(next_cell(Some(Cell::Full), Direction::Up), Some(Cell::TopHalf));
+        assert_eq!(
+            next_cell(Some(Cell::Full), Direction::Up),
+            Some(Cell::TopHalf)
+        );
     }
 
     #[test]

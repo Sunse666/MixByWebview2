@@ -1,4 +1,4 @@
-﻿use serde::Serialize;
+use serde::Serialize;
 use tauri::{
     webview::WebviewBuilder, Emitter, LogicalPosition, LogicalSize, Manager, Url, Webview,
     WebviewUrl, Window,
@@ -17,10 +17,7 @@ pub fn set_shortcuts(map: std::collections::BTreeMap<String, String>) {
 }
 
 fn shortcut_map() -> std::collections::BTreeMap<String, String> {
-    SHORTCUTS
-        .read()
-        .clone()
-        .unwrap_or_default()
+    SHORTCUTS.read().clone().unwrap_or_default()
 }
 
 /// Right button gestures.
@@ -41,10 +38,7 @@ pub fn set_gestures(setup: GestureSetup) {
 }
 
 fn gesture_setup() -> GestureSetup {
-    GESTURES
-        .read()
-        .clone()
-        .unwrap_or_default()
+    GESTURES.read().clone().unwrap_or_default()
 }
 
 /// Contents of UserData/custom.css, applied to every page.
@@ -55,10 +49,7 @@ pub fn set_custom_css(css: String) {
 }
 
 fn custom_css() -> String {
-    CUSTOM_CSS
-        .read()
-        .clone()
-        .unwrap_or_default()
+    CUSTOM_CSS.read().clone().unwrap_or_default()
 }
 
 /// Wraps the user stylesheet so pages pick it up without a round trip.
@@ -192,19 +183,13 @@ pub fn default_gestures() -> std::collections::BTreeMap<String, String> {
 }
 /// Default drag directions: left opens, up copies, right searches.
 pub fn default_drag() -> std::collections::BTreeMap<String, String> {
-    [
-        ("L", "open"),
-        ("R", "search"),
-        ("U", "copy"),
-        ("D", "save"),
-    ]
-    .iter()
-    .map(|(dir, action)| (dir.to_string(), action.to_string()))
-    .collect()
+    [("L", "open"), ("R", "search"), ("U", "copy"), ("D", "save")]
+        .iter()
+        .map(|(dir, action)| (dir.to_string(), action.to_string()))
+        .collect()
 }
 
 const SHORTCUT_FORWARDER: &str = include_str!("injected/forwarder.js");
-
 
 /// Where the webview keeps its profile and, on Windows, its extensions.
 #[derive(Clone, Debug, Default)]
@@ -375,7 +360,9 @@ pub fn create(
             move |url| {
                 if let Some(state) = app.try_state::<crate::ipc::AppState>() {
                     state
-                        .nav.write().pending
+                        .nav
+                        .write()
+                        .pending
                         .insert(tab_id.clone(), url.to_string());
                 }
                 true
@@ -390,7 +377,12 @@ pub fn create(
                 if let Some(state) = app.try_state::<crate::ipc::AppState>() {
                     let scroll = state
                         .try_read_core(crate::ipc::window_of_tab(&id))
-                        .and_then(|core| core.tabs.iter().find(|tab| tab.id == id).map(|tab| tab.scroll))
+                        .and_then(|core| {
+                            core.tabs
+                                .iter()
+                                .find(|tab| tab.id == id)
+                                .map(|tab| tab.scroll)
+                        })
                         .unwrap_or(0.0);
                     if scroll > 0.0 {
                         let _ = webview.eval(format!("window.scrollTo(0, {scroll});"));
@@ -405,10 +397,7 @@ pub fn create(
                     let level = state.zoom().level_for(payload.url().as_str());
                     if (level - 1.0).abs() > f64::EPSILON {
                         let _ = webview.set_zoom(level);
-                        crate::logging::info(&format!(
-                            "zoom {level:.1} for {}",
-                            payload.url()
-                        ));
+                        crate::logging::info(&format!("zoom {level:.1} for {}", payload.url()));
                         if let Ok(mut core) = state
                             .try_write_core(crate::ipc::window_of_tab(&id))
                             .ok_or(())
@@ -441,7 +430,12 @@ pub fn create(
                 .and_then(|state| {
                     state
                         .try_read_core(crate::ipc::window_of_tab(&payload.id))
-                        .and_then(|core| core.tabs.iter().find(|t| t.id == payload.id).map(|t| t.url.clone()))
+                        .and_then(|core| {
+                            core.tabs
+                                .iter()
+                                .find(|t| t.id == payload.id)
+                                .map(|t| t.url.clone())
+                        })
                 })
                 .unwrap_or_default();
             if !tab_url.is_empty() {
@@ -457,9 +451,11 @@ pub fn create(
             }
             let owner = crate::ipc::window_of_tab(&payload.id).to_string();
 
-            let selected = app
-                .try_state::<crate::ipc::AppState>()
-                .and_then(|state| state.try_read_core(&owner).and_then(|core| core.selected.clone()));
+            let selected = app.try_state::<crate::ipc::AppState>().and_then(|state| {
+                state
+                    .try_read_core(&owner)
+                    .and_then(|core| core.selected.clone())
+            });
             if selected.as_deref() == Some(payload.id.as_str()) {
                 if let Some(win) = app.get_window(&owner) {
                     let _ = win.set_title(&format!("{} - Mix", payload.title));
@@ -479,7 +475,10 @@ pub fn create(
 
     let top = win
         .inner_size()
-        .map(|size| size.to_logical::<f64>(win.scale_factor().unwrap_or(1.0)).height)
+        .map(|size| {
+            size.to_logical::<f64>(win.scale_factor().unwrap_or(1.0))
+                .height
+        })
         .map(|full| (full - height).max(0.0))
         .unwrap_or(0.0);
     let webview = win.add_child(

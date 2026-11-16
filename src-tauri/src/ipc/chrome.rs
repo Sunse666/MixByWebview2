@@ -19,7 +19,12 @@ pub async fn window_control(
             }
         }
         "close" => win.close()?,
-        other => return Err(AppError::new("bad_action", format!("unknown action {other}"))),
+        other => {
+            return Err(AppError::new(
+                "bad_action",
+                format!("unknown action {other}"),
+            ))
+        }
     }
     Ok(())
 }
@@ -31,7 +36,11 @@ pub async fn window_drag(_app: AppHandle, window: tauri::Window) -> Result<(), A
 }
 
 #[tauri::command]
-pub async fn window_resize(_app: AppHandle, direction: String, window: tauri::Window) -> Result<(), AppError> {
+pub async fn window_resize(
+    _app: AppHandle,
+    direction: String,
+    window: tauri::Window,
+) -> Result<(), AppError> {
     let dir = match direction.as_str() {
         "n" => ResizeDirection::North,
         "s" => ResizeDirection::South,
@@ -69,7 +78,8 @@ pub async fn chrome_menu(
 #[tauri::command]
 pub async fn context_menu(
     app: AppHandle,
-    window: tauri::Window, state: State<'_, AppState>,
+    window: tauri::Window,
+    state: State<'_, AppState>,
     request: MenuRequest,
 ) -> Result<(), AppError> {
     if request.dismiss.unwrap_or(false) {
@@ -128,7 +138,10 @@ pub async fn tab_menu(
 }
 
 #[tauri::command]
-pub async fn menu_context_get(_window: tauri::Window, state: State<'_, AppState>) -> Result<MenuContext, AppError> {
+pub async fn menu_context_get(
+    _window: tauri::Window,
+    state: State<'_, AppState>,
+) -> Result<MenuContext, AppError> {
     Ok(state.ui.read().menu_context.clone())
 }
 
@@ -307,7 +320,9 @@ pub async fn page_failed(
 ) -> Result<(), AppError> {
     let id = webview.label().to_string();
     let failed = state
-        .nav.read().pending
+        .nav
+        .read()
+        .pending
         .get(&id)
         .cloned()
         .unwrap_or_default();
@@ -389,12 +404,19 @@ pub async fn tab_pop_out(
     let (url, scroll, pinned, only_tab) = {
         let core = state.read_core(window.label());
         match core.tabs.iter().find(|tab| tab.id == id) {
-            Some(tab) => (tab.url.clone(), tab.scroll, tab.pinned, core.tabs.len() == 1),
+            Some(tab) => (
+                tab.url.clone(),
+                tab.scroll,
+                tab.pinned,
+                core.tabs.len() == 1,
+            ),
             None => return Ok(()),
         }
     };
     let scale = window.scale_factor().unwrap_or(1.0);
-    let size = window.inner_size().unwrap_or(tauri::PhysicalSize::new(1100, 760));
+    let size = window
+        .inner_size()
+        .unwrap_or(tauri::PhysicalSize::new(1100, 760));
     let geometry = crate::session::WindowGeometry {
         x: (x * scale) as i32 - 80,
         y: (y * scale) as i32 - 16,
@@ -442,7 +464,8 @@ pub async fn overlay_toggle(
 ) -> Result<bool, AppError> {
     let open = app
         .state::<AppState>()
-        .windows.overlay
+        .windows
+        .overlay
         .read()
         .contains_key(window.label());
     if open {
@@ -477,11 +500,10 @@ pub async fn overlay_resize(
     require_trusted(&webview)?;
     let label = webview.label().to_string();
     if !label.starts_with("overlay-") {
-        return Err(AppError::new("untrusted", "only an overlay panel may size itself"));
+        return Err(AppError::new(
+            "untrusted",
+            "only an overlay panel may size itself",
+        ));
     }
-    crate::overlay::resize(&app, &label, height)
-        .map_err(|err| AppError::new("overlay", err))
+    crate::overlay::resize(&app, &label, height).map_err(|err| AppError::new("overlay", err))
 }
-
-
-

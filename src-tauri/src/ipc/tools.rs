@@ -3,13 +3,19 @@
 use super::*;
 
 #[tauri::command]
-pub async fn download_list(_window: tauri::Window, state: State<'_, AppState>) -> Result<Vec<crate::downloads::DownloadTask>, AppError> {
+pub async fn download_list(
+    _window: tauri::Window,
+    state: State<'_, AppState>,
+) -> Result<Vec<crate::downloads::DownloadTask>, AppError> {
     Ok(state.downloads.read().clone())
 }
 
 /// Drops finished entries from the list; files on disk stay.
 #[tauri::command]
-pub async fn download_clear(webview: tauri::Webview, state: State<'_, AppState>) -> Result<(), AppError> {
+pub async fn download_clear(
+    webview: tauri::Webview,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
     require_trusted(&webview)?;
     let mut tasks = state.downloads.write();
     tasks.retain(|task| task.state == "started");
@@ -68,7 +74,11 @@ pub(crate) fn shell_open(path: &std::path::Path) -> Result<(), AppError> {
     }
     #[cfg(not(windows))]
     {
-        let opener = if cfg!(target_os = "macos") { "open" } else { "xdg-open" };
+        let opener = if cfg!(target_os = "macos") {
+            "open"
+        } else {
+            "xdg-open"
+        };
         std::process::Command::new(opener)
             .arg(path)
             .spawn()
@@ -78,7 +88,10 @@ pub(crate) fn shell_open(path: &std::path::Path) -> Result<(), AppError> {
 }
 /// Zips the whole profile so it can be restored on another machine.
 #[tauri::command]
-pub async fn backup_export(webview: tauri::Webview, state: State<'_, AppState>) -> Result<String, AppError> {
+pub async fn backup_export(
+    webview: tauri::Webview,
+    state: State<'_, AppState>,
+) -> Result<String, AppError> {
     require_trusted(&webview)?;
     let default_name = format!(
         "Mix-backup-{}.zip",
@@ -95,12 +108,20 @@ pub async fn backup_export(webview: tauri::Webview, state: State<'_, AppState>) 
         return Err(AppError::new("cancelled", "no file chosen"));
     };
 
-    let file = std::fs::File::create(&target).map_err(|err| AppError::new("backup", err.to_string()))?;
+    let file =
+        std::fs::File::create(&target).map_err(|err| AppError::new("backup", err.to_string()))?;
     let mut zip = zip::ZipWriter::new(file);
     let options = zip::write::SimpleFileOptions::default()
         .compression_method(zip::CompressionMethod::Deflated);
 
-    let skip = ["profile", "profile-ui", "logs", "diag", "extensions", "downloads"];
+    let skip = [
+        "profile",
+        "profile-ui",
+        "logs",
+        "diag",
+        "extensions",
+        "downloads",
+    ];
     let mut count = 0;
     let mut stack = vec![state.dirs.user_data.clone()];
 
@@ -110,7 +131,10 @@ pub async fn backup_export(webview: tauri::Webview, state: State<'_, AppState>) 
         };
         for entry in entries.flatten() {
             let path = entry.path();
-            let name = path.file_name().and_then(|value| value.to_str()).unwrap_or_default();
+            let name = path
+                .file_name()
+                .and_then(|value| value.to_str())
+                .unwrap_or_default();
             if path.is_dir() {
                 if dir == state.dirs.user_data && skip.contains(&name) {
                     continue;
@@ -133,14 +157,21 @@ pub async fn backup_export(webview: tauri::Webview, state: State<'_, AppState>) 
         }
     }
 
-    zip.finish().map_err(|err| AppError::new("backup", err.to_string()))?;
-    crate::logging::info(&format!("backup written: {} ({count} files)", target.display()));
+    zip.finish()
+        .map_err(|err| AppError::new("backup", err.to_string()))?;
+    crate::logging::info(&format!(
+        "backup written: {} ({count} files)",
+        target.display()
+    ));
     Ok(target.display().to_string())
 }
 
 /// Restores a backup over the current profile; the app restarts afterwards.
 #[tauri::command]
-pub async fn backup_import(webview: tauri::Webview, state: State<'_, AppState>) -> Result<String, AppError> {
+pub async fn backup_import(
+    webview: tauri::Webview,
+    state: State<'_, AppState>,
+) -> Result<String, AppError> {
     require_trusted(&webview)?;
     let Some(source) = rfd::FileDialog::new()
         .add_filter("zip", &["zip"])
@@ -149,8 +180,10 @@ pub async fn backup_import(webview: tauri::Webview, state: State<'_, AppState>) 
         return Err(AppError::new("cancelled", "no file chosen"));
     };
 
-    let file = std::fs::File::open(&source).map_err(|err| AppError::new("backup", err.to_string()))?;
-    let mut archive = zip::ZipArchive::new(file).map_err(|err| AppError::new("backup", err.to_string()))?;
+    let file =
+        std::fs::File::open(&source).map_err(|err| AppError::new("backup", err.to_string()))?;
+    let mut archive =
+        zip::ZipArchive::new(file).map_err(|err| AppError::new("backup", err.to_string()))?;
 
     let mut restored = 0;
     for index in 0..archive.len() {
@@ -230,7 +263,14 @@ pub async fn extension_live_list(
     let listed = crate::ext_live::list(&webview);
     let described: Vec<String> = listed
         .iter()
-        .map(|ext| format!("{}={} ({})", ext.name, ext.enabled, &ext.id[..ext.id.len().min(8)]))
+        .map(|ext| {
+            format!(
+                "{}={} ({})",
+                ext.name,
+                ext.enabled,
+                &ext.id[..ext.id.len().min(8)]
+            )
+        })
         .collect();
     crate::logging::info(&format!(
         "live extensions ({}): {}",
@@ -240,7 +280,6 @@ pub async fn extension_live_list(
     reconcile(&state, &listed);
     Ok(listed)
 }
-
 
 /// Marks the profile for a clean extension reload on the next start.
 fn reconcile(state: &AppState, listed: &[crate::ext_live::LiveExtension]) {
@@ -289,9 +328,7 @@ fn request_extension_reset(state: &AppState) {
 /// Remembers the state the browser confirmed for each extension.
 fn remember_extension_state(state: &AppState, dir: &str, enabled: bool) {
     let mut settings = state.settings.write();
-    settings
-        .extension_state
-        .insert(dir.to_string(), enabled);
+    settings.extension_state.insert(dir.to_string(), enabled);
     if let Err(err) = settings.save(&state.dirs.settings_file) {
         crate::logging::warn(&format!("cannot save extension state: {err}"));
     }
@@ -403,7 +440,10 @@ pub async fn extension_live_set(
     Ok(ok)
 }
 #[tauri::command]
-pub async fn ext_list(_window: tauri::Window, state: State<'_, AppState>) -> Result<Vec<ExtInfo>, AppError> {
+pub async fn ext_list(
+    _window: tauri::Window,
+    state: State<'_, AppState>,
+) -> Result<Vec<ExtInfo>, AppError> {
     Ok(state.extensions.clone())
 }
 
@@ -442,7 +482,9 @@ pub async fn app_restart(app: AppHandle, webview: tauri::Webview) -> Result<(), 
     if let Ok(dir) = std::env::current_dir() {
         command.current_dir(dir);
     }
-    command.spawn().map_err(|err| AppError::new("restart", err.to_string()))?;
+    command
+        .spawn()
+        .map_err(|err| AppError::new("restart", err.to_string()))?;
     save_sessions(&app);
     flush_history(&app);
     app.exit(0);
@@ -478,7 +520,9 @@ fn on_main<T: Send + 'static>(
         let _ = sender.send(run());
     })
     .ok()?;
-    receiver.recv_timeout(std::time::Duration::from_secs(4)).ok()
+    receiver
+        .recv_timeout(std::time::Duration::from_secs(4))
+        .ok()
 }
 
 /// Pauses or resumes a download, whichever engine owns it.
@@ -525,7 +569,11 @@ pub async fn download_reconcile(app: AppHandle) -> Result<(), AppError> {
 
 /// Fetches this download again with the engine, from whatever is on disk.
 #[tauri::command]
-pub async fn download_retry(app: AppHandle, state: State<'_, AppState>, id: u64) -> Result<u64, AppError> {
+pub async fn download_retry(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: u64,
+) -> Result<u64, AppError> {
     let Some((url, path)) = task_parts(&state, id) else {
         return Err(AppError::new("bad_download", "unknown download"));
     };
@@ -576,7 +624,10 @@ fn script_path_inside(state: &AppState, path: &str) -> Result<std::path::PathBuf
         .unwrap_or_else(|_| state.dirs.scripts.clone());
     if !resolved.starts_with(&root) {
         crate::logging::warn(&format!("script path outside the scripts folder: {path}"));
-        return Err(AppError::new("bad_script", "script is outside the scripts folder"));
+        return Err(AppError::new(
+            "bad_script",
+            "script is outside the scripts folder",
+        ));
     }
     Ok(resolved)
 }
@@ -614,9 +665,14 @@ pub async fn script_set_enabled(
     };
 
     if target != source {
-        std::fs::rename(&source, &target).map_err(|err| AppError::new("script", err.to_string()))?;
+        std::fs::rename(&source, &target)
+            .map_err(|err| AppError::new("script", err.to_string()))?;
     }
-    crate::logging::info(&format!("userscript {} -> {}", source.display(), target.display()));
+    crate::logging::info(&format!(
+        "userscript {} -> {}",
+        source.display(),
+        target.display()
+    ));
     Ok(target.display().to_string())
 }
 
@@ -634,13 +690,19 @@ pub async fn script_remove(
 }
 
 #[tauri::command]
-pub async fn script_list(_window: tauri::Window, state: State<'_, AppState>) -> Result<Vec<crate::userscripts::ScriptInfo>, AppError> {
+pub async fn script_list(
+    _window: tauri::Window,
+    state: State<'_, AppState>,
+) -> Result<Vec<crate::userscripts::ScriptInfo>, AppError> {
     Ok(state.scripts.clone())
 }
 
 /// Creates the user stylesheet if missing, then reveals the folder.
 #[tauri::command]
-pub async fn custom_css_open(webview: tauri::Webview, state: State<'_, AppState>) -> Result<String, AppError> {
+pub async fn custom_css_open(
+    webview: tauri::Webview,
+    state: State<'_, AppState>,
+) -> Result<String, AppError> {
     require_trusted(&webview)?;
     let path = state.dirs.user_data.join("custom.css");
     if !path.exists() {
@@ -651,7 +713,11 @@ pub async fn custom_css_open(webview: tauri::Webview, state: State<'_, AppState>
     Ok(path.display().to_string())
 }
 #[tauri::command]
-pub async fn open_dir(webview: tauri::Webview, state: State<'_, AppState>, which: String) -> Result<(), AppError> {
+pub async fn open_dir(
+    webview: tauri::Webview,
+    state: State<'_, AppState>,
+    which: String,
+) -> Result<(), AppError> {
     require_trusted(&webview)?;
     let dirs = &state.dirs;
     let path = match which.as_str() {
@@ -693,15 +759,21 @@ pub(crate) fn reveal(path: &std::path::Path) -> std::io::Result<()> {
 #[tauri::command]
 pub async fn clipboard_read(webview: tauri::Webview) -> Result<String, AppError> {
     require_trusted(&webview)?;
-    let mut board = arboard::Clipboard::new().map_err(|err| AppError::new("clipboard", err.to_string()))?;
-    board.get_text().map_err(|err| AppError::new("clipboard", err.to_string()))
+    let mut board =
+        arboard::Clipboard::new().map_err(|err| AppError::new("clipboard", err.to_string()))?;
+    board
+        .get_text()
+        .map_err(|err| AppError::new("clipboard", err.to_string()))
 }
 
 #[tauri::command]
 pub async fn clipboard_write(webview: tauri::Webview, text: String) -> Result<(), AppError> {
     require_trusted(&webview)?;
-    let mut board = arboard::Clipboard::new().map_err(|err| AppError::new("clipboard", err.to_string()))?;
-    board.set_text(text).map_err(|err| AppError::new("clipboard", err.to_string()))
+    let mut board =
+        arboard::Clipboard::new().map_err(|err| AppError::new("clipboard", err.to_string()))?;
+    board
+        .set_text(text)
+        .map_err(|err| AppError::new("clipboard", err.to_string()))
 }
 
 /// The page-side entry point for super drag and gestures.
@@ -729,7 +801,15 @@ pub async fn drag_action(
             let window = app
                 .get_window(&window_label)
                 .ok_or_else(|| AppError::new("no_window", window_label.clone()))?;
-            tab_new(app, window, state, Some(url), None, Some(background.unwrap_or(false))).await?;
+            tab_new(
+                app,
+                window,
+                state,
+                Some(url),
+                None,
+                Some(background.unwrap_or(false)),
+            )
+            .await?;
         }
         "search" => {
             let text = text.unwrap_or_default();
@@ -814,7 +894,11 @@ pub(crate) async fn save_url(
 
 /// Wipes cookies, storage and caches for every webview we own.
 #[tauri::command]
-pub async fn app_clear_data(app: AppHandle, window: tauri::Window, _state: State<'_, AppState>) -> Result<(), AppError> {
+pub async fn app_clear_data(
+    app: AppHandle,
+    window: tauri::Window,
+    _state: State<'_, AppState>,
+) -> Result<(), AppError> {
     let labels: Vec<String> = {
         let state = app.state::<AppState>();
         let core = state.read_core(window.label());

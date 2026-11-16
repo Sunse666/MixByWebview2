@@ -76,10 +76,16 @@ fn collect(dir: &Path, depth: usize, out: &mut Vec<Userscript>) {
                         out.push(script);
                         continue;
                     }
-                    crate::logging::info(&format!("userscript {} ({})", script.name, script.run_at));
+                    crate::logging::info(&format!(
+                        "userscript {} ({})",
+                        script.name, script.run_at
+                    ));
                     out.push(script);
                 }
-                None => crate::logging::warn(&format!("userscript without a header: {}", path.display())),
+                None => crate::logging::warn(&format!(
+                    "userscript without a header: {}",
+                    path.display()
+                )),
             },
             Err(err) => crate::logging::warn(&format!("cannot read {}: {err}", path.display())),
         }
@@ -368,7 +374,10 @@ mod tests {
         let fragment = glob_fragment("/*");
         assert!(!fragment.contains('^') && !fragment.contains('$'));
 
-        assert_eq!(match_to_regex("*://*/*").unwrap(), "^(?:https?)://[^/]+/.*$");
+        assert_eq!(
+            match_to_regex("*://*/*").unwrap(),
+            "^(?:https?)://[^/]+/.*$"
+        );
         let site = match_to_regex("https://example.com/docs/*").unwrap();
         assert!(site.starts_with("^https://example"), "got {site}");
         assert!(site.ends_with("/docs/.*$"), "got {site}");

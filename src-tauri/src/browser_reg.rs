@@ -35,11 +35,33 @@ pub fn register() -> Result<String, AppError> {
             "",
             Some(&format!("\"{exe}\" \"%1\"")),
         )?;
-        write("Software\\Classes\\MixHTML\\DefaultIcon", "", Some(&format!("\"{exe}\",0")))?;
-        write("Software\\Clients\\StartMenuInternet\\Mix\\shell\\open\\command", "", Some(&format!("\"{exe}\"")))?;
-        write("Software\\Clients\\StartMenuInternet\\Mix\\Capabilities", "ApplicationName", Some(CLIENT))?;
-        write("Software\\Clients\\StartMenuInternet\\Mix\\Capabilities", "ApplicationIcon", Some(&format!("\"{exe}\",0")))?;
-        write("Software\\RegisteredApplications", CLIENT, Some(&format!("Software\\Clients\\StartMenuInternet\\{CLIENT}\\Capabilities")))?;
+        write(
+            "Software\\Classes\\MixHTML\\DefaultIcon",
+            "",
+            Some(&format!("\"{exe}\",0")),
+        )?;
+        write(
+            "Software\\Clients\\StartMenuInternet\\Mix\\shell\\open\\command",
+            "",
+            Some(&format!("\"{exe}\"")),
+        )?;
+        write(
+            "Software\\Clients\\StartMenuInternet\\Mix\\Capabilities",
+            "ApplicationName",
+            Some(CLIENT),
+        )?;
+        write(
+            "Software\\Clients\\StartMenuInternet\\Mix\\Capabilities",
+            "ApplicationIcon",
+            Some(&format!("\"{exe}\",0")),
+        )?;
+        write(
+            "Software\\RegisteredApplications",
+            CLIENT,
+            Some(&format!(
+                "Software\\Clients\\StartMenuInternet\\{CLIENT}\\Capabilities"
+            )),
+        )?;
         crate::logging::info(&format!("registered as a browser candidate: {exe}"));
         Ok(exe)
     }

@@ -1,7 +1,7 @@
 use crate::ipc::AppState;
+use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
-use parking_lot::Mutex;
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Manager};
 
@@ -35,32 +35,20 @@ pub fn key(origin: &str, kind: &str) -> String {
 
 pub fn remembered(app: &AppHandle, key: &str) -> Option<bool> {
     let state = app.state::<AppState>();
-    let decisions = state
-        .permissions
-        .decisions
-        .lock()
-        ;
+    let decisions = state.permissions.decisions.lock();
     decisions.get(key).copied()
 }
 
 pub fn remember(app: &AppHandle, key: &str, allow: bool) {
     let state = app.state::<AppState>();
-    let mut decisions = state
-        .permissions
-        .decisions
-        .lock()
-        ;
+    let mut decisions = state.permissions.decisions.lock();
     decisions.insert(key.to_string(), allow);
 }
 
 pub fn open_prompt(app: &AppHandle, window: &str, key: &str) -> u64 {
     let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
     let state = app.state::<AppState>();
-    let mut pending = state
-        .permissions
-        .pending
-        .lock()
-        ;
+    let mut pending = state.permissions.pending.lock();
     pending.retain(|_, prompt| prompt.at.elapsed() < PROMPT_TTL);
     pending.insert(
         id,
@@ -77,11 +65,7 @@ pub fn open_prompt(app: &AppHandle, window: &str, key: &str) -> u64 {
 /// Records the answer; the page collects it on its next poll.
 pub fn answer(app: &AppHandle, id: u64, allow: bool) -> bool {
     let state = app.state::<AppState>();
-    let mut pending = state
-        .permissions
-        .pending
-        .lock()
-        ;
+    let mut pending = state.permissions.pending.lock();
     match pending.get_mut(&id) {
         Some(prompt) => {
             prompt.answer = Some(allow);
@@ -95,11 +79,7 @@ pub fn answer(app: &AppHandle, id: u64, allow: bool) -> bool {
 pub fn poll(app: &AppHandle, id: u64) -> Option<bool> {
     let (answer, key) = {
         let state = app.state::<AppState>();
-        let pending = state
-            .permissions
-            .pending
-            .lock()
-            ;
+        let pending = state.permissions.pending.lock();
         match pending.get(&id) {
             None => return Some(false),
             Some(prompt) => (prompt.answer?, prompt.key.clone()),
@@ -107,22 +87,14 @@ pub fn poll(app: &AppHandle, id: u64) -> Option<bool> {
     };
     remember(app, &key, answer);
     let state = app.state::<AppState>();
-    state
-        .permissions
-        .pending
-        .lock()
-        .remove(&id);
+    state.permissions.pending.lock().remove(&id);
     Some(answer)
 }
 
 /// A prompt whose overlay closed without an answer counts as denied.
 pub fn cancel_window(app: &AppHandle, window: &str) -> usize {
     let state = app.state::<AppState>();
-    let mut pending = state
-        .permissions
-        .pending
-        .lock()
-        ;
+    let mut pending = state.permissions.pending.lock();
     let mut cancelled = 0;
     for prompt in pending.values_mut() {
         if prompt.window == window && prompt.answer.is_none() {
@@ -152,7 +124,10 @@ mod tests {
     #[test]
     fn keys_are_origin_scoped() {
         assert_eq!(key("https://a.test", "camera"), "https://a.test|camera");
-        assert_ne!(key("https://a.test", "camera"), key("https://b.test", "camera"));
+        assert_ne!(
+            key("https://a.test", "camera"),
+            key("https://b.test", "camera")
+        );
     }
 
     #[test]

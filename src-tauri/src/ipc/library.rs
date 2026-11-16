@@ -132,7 +132,9 @@ pub(crate) fn flush_history(app: &AppHandle) {
 
 /// host -> icon url, used by the bookmarks and new tab pages.
 #[tauri::command]
-pub async fn favicon_map(state: State<'_, AppState>) -> Result<std::collections::BTreeMap<String, String>, AppError> {
+pub async fn favicon_map(
+    state: State<'_, AppState>,
+) -> Result<std::collections::BTreeMap<String, String>, AppError> {
     let icons = state.favicons();
     let mut out = std::collections::BTreeMap::new();
     for (host, remote) in icons.hosts.iter() {
@@ -145,7 +147,11 @@ pub async fn favicon_map(state: State<'_, AppState>) -> Result<std::collections:
 }
 
 #[tauri::command]
-pub async fn history_list(_window: tauri::Window, state: State<'_, AppState>, limit: Option<usize>) -> Result<Vec<Visit>, AppError> {
+pub async fn history_list(
+    _window: tauri::Window,
+    state: State<'_, AppState>,
+    limit: Option<usize>,
+) -> Result<Vec<Visit>, AppError> {
     let library = state.library.read();
     let take = limit.unwrap_or(500).min(library.history.len());
     Ok(library
@@ -215,8 +221,7 @@ pub async fn clear_data(
     }
 
     if kinds.iter().any(|kind| kind == "favicons") {
-        state.favicons_mut()
-            .clear();
+        state.favicons_mut().clear();
         let _ = std::fs::remove_dir_all(&state.dirs.favicons_dir);
         let empty = state.favicons().clone();
         empty.save(&state.dirs.favicons_file);
@@ -240,7 +245,10 @@ pub async fn clear_data(
 }
 
 #[tauri::command]
-pub async fn history_clear(webview: tauri::Webview, state: State<'_, AppState>) -> Result<(), AppError> {
+pub async fn history_clear(
+    webview: tauri::Webview,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
     require_trusted(&webview)?;
     {
         let mut visits = state.history_mut();
@@ -252,13 +260,20 @@ pub async fn history_clear(webview: tauri::Webview, state: State<'_, AppState>) 
 }
 
 #[tauri::command]
-pub async fn bookmark_list(_window: tauri::Window, state: State<'_, AppState>) -> Result<Vec<Bookmark>, AppError> {
+pub async fn bookmark_list(
+    _window: tauri::Window,
+    state: State<'_, AppState>,
+) -> Result<Vec<Bookmark>, AppError> {
     Ok(state.bookmarks().clone())
 }
 
 /// Toggles the selected tab and reports whether it is bookmarked now.
 #[tauri::command]
-pub async fn bookmark_toggle(app: AppHandle, window: tauri::Window, state: State<'_, AppState>) -> Result<bool, AppError> {
+pub async fn bookmark_toggle(
+    app: AppHandle,
+    window: tauri::Window,
+    state: State<'_, AppState>,
+) -> Result<bool, AppError> {
     let (url, title) = {
         let core = state.read_core(window.label());
         match core
@@ -411,7 +426,8 @@ pub async fn bookmark_update(
 #[tauri::command]
 pub async fn bookmark_remove(
     app: AppHandle,
-    webview: tauri::Webview, state: State<'_, AppState>,
+    webview: tauri::Webview,
+    state: State<'_, AppState>,
     url: String,
 ) -> Result<(), AppError> {
     require_trusted(&webview)?;

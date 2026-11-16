@@ -1,4 +1,4 @@
-﻿use std::io::Write;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 /// Everything that goes into a support bundle.
@@ -58,9 +58,9 @@ pub fn write_bundle(diag_dir: &Path, bundle: &Bundle<'_>) -> std::io::Result<Pat
     Ok(path)
 }
 
-const README: &str = "Mix support bundle. Nothing here is uploaded anywhere; send this zip yourself. \
+const README: &str =
+    "Mix support bundle. Nothing here is uploaded anywhere; send this zip yourself. \
 It contains settings, tabs and the tail of the log. Page content and cookies are not included.";
-
 
 /// Replaces the user profile path so a bundle can be shared without leaking a name.
 pub fn redact(input: &str) -> String {
