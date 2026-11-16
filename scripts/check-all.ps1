@@ -5,10 +5,16 @@ $failed = @()
 
 # rustup can report the clippy and rustfmt components as installed for a toolchain while
 # the binaries are not on disk, and cargo then refuses them with "not applicable to the
-# toolchain". Take the first installed toolchain that actually ships the binary, so the
-# gate runs here instead of being skipped.
+# toolchain". So the toolchain is chosen by looking at the files - but the default one
+# comes first, because the checks have to run with the same compiler `cargo test` used.
+# A machine that also has a newer stable with clippy must not lint this code with lints the
+# pinned version does not have; that is exactly what broke the first CI run.
 function Find-ToolchainWith($binary) {
-  foreach ($name in (& rustup toolchain list 2>$null | ForEach-Object { ($_ -split '\s+')[0] })) {
+  $listed = & rustup toolchain list 2>$null
+  $names = @($listed | ForEach-Object { ($_ -split '\s+')[0] })
+  $default = @($listed | Where-Object { $_ -match '\(default\)' } | ForEach-Object { ($_ -split '\s+')[0] })
+  $ordered = $default + @($names | Where-Object { $default -notcontains $_ })
+  foreach ($name in $ordered) {
     $root = & rustup run $name rustc --print sysroot 2>$null
     if ($root -and (Test-Path (Join-Path $root "bin\$binary"))) { return $name }
   }
@@ -27,7 +33,9 @@ if ($clippy) {
   if ($LASTEXITCODE -ne 0) {
     ($out -split "`n" | Select-String -Pattern "^error|^warning" | Select-Object -First 20) |
       ForEach-Object { $_.Line }
-    $failed += "cargo clippy"
+    # Naming the toolchain here matters: a failure looks identical whether the code has a
+    # problem or the gate picked a different clippy than the one the tree was cleaned with.
+    $failed += "cargo clippy ($clippy)"
   } else {
     Write-Host "ok   clippy ($clippy)"
   }

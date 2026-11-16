@@ -50,6 +50,14 @@ jobs:
         run: rustup toolchain install 1.97.1 --profile minimal --component clippy,rustfmt
       - name: Make it the default, so cargo below picks it up
         run: rustup default 1.97.1
+      # The gate names the toolchain it used, but only in the middle of its output. This
+      # puts it at the top, where a failed run gets read from: "which clippy even ran" is
+      # the first question when a lint fails here and not on the machine.
+      - name: Show what will run the checks
+        run: |
+          rustup show active-toolchain
+          cargo --version
+          cargo clippy --version
       # After the toolchain is pinned, so the cache is keyed on the version that will
       # actually compile.
       - uses: Swatinem/rust-cache@v2
