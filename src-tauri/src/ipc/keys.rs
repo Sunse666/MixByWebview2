@@ -9,9 +9,10 @@ pub async fn shortcut(
     state: State<'_, AppState>,
     action: String,
 ) -> Result<(), AppError> {
-    if action != "dismiss" {
-        crate::logging::info(&format!("shortcut {action}"));
-    }
+    // No log line here on purpose: every shortcut would write one, and the logger flushes
+    // each line to disk, so this used to be a file write per keystroke. The actions that
+    // are worth knowing about (a developer tools window, a failed navigation) log
+    // themselves.
     match action.as_str() {
         "new_tab" => {
             tab_new(app, window.clone(), state, None, None, None).await?;
