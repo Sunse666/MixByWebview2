@@ -8,26 +8,71 @@ fn spawn_tab(
     id: &str,
     url: &str,
     incognito: bool,
+    visible: bool,
 ) -> Result<tauri::Webview, AppError> {
     let win = app
         .get_window(label)
         .ok_or_else(|| AppError::new("no_window", "window is missing"))?;
     let opts = app.state::<AppState>().opts.clone();
     let (width, height) = crate::window::logical_size(&win)?;
-    let webview = crate::tabs::create(
-        &win,
-        id,
-        url,
-        width,
-        (height - chrome_height(app)).max(1.0),
-        &opts,
-        incognito,
-    )
-    .map_err(AppError::from)?;
+    let tab_height = (height - chrome_height(app)).max(1.0);
+    // A webview that is not the one on screen is created as small as a webview gets and
+    // hidden before anything resizes it: WebviewBuilder has no "start hidden", and at full
+    // size it would paint over the page the user is looking at for a frame.
+    let (created_w, created_h) = if visible {
+        (width, tab_height)
+    } else {
+        (1.0, 1.0)
+    };
+    let webview = crate::tabs::create(&win, id, url, created_w, created_h, &opts, incognito)
+        .map_err(AppError::from)?;
+    if !visible {
+        let _ = webview.hide();
+    }
     // A new tab is created at the full window width, so it would cover the sidebar
     // until something resizes the window. Put everything back where the plan says.
     let _ = crate::window::relayout(app, label);
     Ok(webview)
+}
+
+/// Brings a tab's webview back after it was dropped to save memory.
+///
+/// Suspending a tab closes its webview and keeps the url; nothing used to create it again,
+/// so a tab parked by `max_live_tabs` came back as an empty page - and an address typed
+/// into it updated the strip and went nowhere. Returns whether the tab has a webview
+/// afterwards.
+pub(crate) fn ensure_live(app: &AppHandle, label: &str, id: &str) -> bool {
+    if app.get_webview(id).is_some() {
+        return true;
+    }
+    let (url, incognito, visible) = {
+        let state = app.state::<AppState>();
+        let core = state.read_core(label);
+        match core.tabs.iter().find(|tab| tab.id == id) {
+            Some(tab) if !tab.url.is_empty() => (
+                tab.url.clone(),
+                tab.incognito,
+                core.selected.as_deref() == Some(id),
+            ),
+            _ => return false,
+        }
+    };
+    match spawn_tab(app, label, id, &url, incognito, visible) {
+        Ok(_) => {
+            let state = app.state::<AppState>();
+            if let Some(mut core) = state.try_write_core(label) {
+                if let Some(tab) = core.tabs.iter_mut().find(|tab| tab.id == id) {
+                    tab.alive = true;
+                }
+            }
+            crate::logging::info(&format!("tab {id} revived"));
+            true
+        }
+        Err(err) => {
+            crate::logging::warn(&format!("tab {id} not revived: {}", err.message));
+            false
+        }
+    }
 }
 
 #[tauri::command]
@@ -72,6 +117,10 @@ pub async fn tab_select(
         touch_mru(&mut core.mru, &id);
     }
 
+    // A tab can have no webview: it was suspended to save memory, or this window has not
+    // finished restoring it. Selecting it has to bring it back, otherwise the page area
+    // stays empty and nothing says why.
+    ensure_live(&app, window.label(), &id);
     sync_visibility(&app, window.label());
     if let Some(webview) = app.get_webview(&id) {
         let _ = webview.set_focus();
@@ -155,6 +204,9 @@ pub async fn tab_new(
         &id,
         &target,
         incognito.unwrap_or(false),
+        // A tab opening in the background is hidden from the start, so it never paints
+        // over the page the user is on.
+        !background.unwrap_or(false),
     )?;
     crate::tabs::apply_default_zoom(&app, &id);
 
@@ -546,6 +598,8 @@ pub async fn tab_navigate(
             tab.url = target.to_string();
         }
     }
+    // Same as selecting it: a suspended tab has to exist again before it can go somewhere.
+    ensure_live(&app, window.label(), &label);
     if let Some(webview) = app.get_webview(&label) {
         webview.navigate(target)?;
         let _ = webview.set_focus();

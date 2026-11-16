@@ -289,6 +289,11 @@ pub fn open_window(
 
     let (width, height) = logical_size(&win)?;
 
+    // The tab the window opens on. The others are created once it is on screen: building a
+    // webview per restored tab before showing anything made the first paint wait for all of
+    // them, and the baseline says that is about 60 ms each.
+    let opening = selected.min(urls.len().saturating_sub(1));
+
     {
         let state = app.state::<AppState>();
         let mut core = state.write_core(label);
@@ -311,7 +316,7 @@ pub fn open_window(
                 last_active: index as u64,
             })
             .collect();
-        core.selected = Some(crate::ipc::tab_label(label, selected + 1));
+        core.selected = Some(crate::ipc::tab_label(label, opening + 1));
         core.mru = core.tabs.iter().map(|tab| tab.id.clone()).collect();
         if let Some(id) = core.selected.clone() {
             core.mru.retain(|entry| entry != &id);
@@ -366,10 +371,15 @@ pub fn open_window(
         }
     }
 
+    let mut later: Vec<String> = Vec::new();
     for (index, (url, _scroll, _pinned)) in urls.iter().enumerate() {
         let id = crate::ipc::tab_label(label, index + 1);
-        tabs::create(&win, &id, url, width, height - chrome_h, &opts, false)?;
-        crate::tabs::apply_default_zoom(&app.clone(), &id);
+        if index == opening {
+            tabs::create(&win, &id, url, width, height - chrome_h, &opts, false)?;
+            crate::tabs::apply_default_zoom(app, &id);
+        } else {
+            later.push(id);
+        }
     }
 
     crate::sidebar::ensure(app, label);
@@ -413,7 +423,6 @@ pub fn open_window(
         _ => {}
     });
 
-    crate::logging::info(&format!("tabs ready: {} in {label}", urls.len()));
     crate::ipc::enforce_live_limit(app, label);
     crate::ipc::sync_visibility(app, label);
     crate::ipc::emit_tabs(app, label);
@@ -426,7 +435,35 @@ pub fn open_window(
     crate::logging::info(&format!("window {label} focused"));
     crate::ipc::save_sessions(app);
     crate::logging::info(&format!("window {label} ready"));
+
+    if !later.is_empty() {
+        restore_later(app.clone(), label.to_string(), later);
+    }
     Ok(win)
+}
+
+/// Creates the webviews a restored window did not wait for.
+///
+/// Runs off the window's own thread so the page it opened on can paint and answer first;
+/// each tab is created hidden and only shown when it is the selected one. `ensure_live`
+/// skips a tab the user already opened in the meantime, which is the more urgent path and
+/// must not be undone here.
+fn restore_later(app: AppHandle, label: String, pending: Vec<String>) {
+    std::thread::spawn(move || {
+        for id in pending {
+            if app.get_window(&label).is_none() {
+                return;
+            }
+            crate::ipc::ensure_live(&app, &label, &id);
+        }
+        crate::ipc::enforce_live_limit(&app, &label);
+        crate::ipc::sync_visibility(&app, &label);
+        crate::ipc::emit_tabs(&app, &label);
+        crate::logging::info(&format!(
+            "tabs ready: rest in {label}, startup+ {} ms",
+            crate::logging::elapsed_ms()
+        ));
+    });
 }
 
 /// Keeps the address bar in step with the webviews.
