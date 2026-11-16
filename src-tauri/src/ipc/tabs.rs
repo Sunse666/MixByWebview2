@@ -583,11 +583,25 @@ pub async fn tab_print(
 }
 
 /// Moves a tab to a new index; the strip calls this after a drag.
+///
+/// `to` is where the tab should sit once it has been lifted out of the list, which is what
+/// the strip measures: it finds the slot under the pointer, and a slot after the dragged
+/// tab has already moved one to the left by then.
+///
+/// Pinned tabs own the front of the strip - `tab_pin` sorts them there - so the target is
+/// kept on its own side of that line: a drag reorders within a section, never across it.
 pub(crate) fn move_tab(tabs: &mut Vec<Tab>, id: &str, to: usize) -> bool {
     let Some(from) = tabs.iter().position(|tab| tab.id == id) else {
         return false;
     };
-    let target = to.min(tabs.len().saturating_sub(1));
+    let last = tabs.len().saturating_sub(1);
+    let pinned = tabs.iter().filter(|tab| tab.pinned).count();
+    let mut target = to.min(last);
+    target = if tabs[from].pinned {
+        target.min(pinned.saturating_sub(1))
+    } else {
+        target.max(pinned.min(last))
+    };
     if from == target {
         return false;
     }

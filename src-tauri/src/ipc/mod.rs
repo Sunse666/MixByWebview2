@@ -778,6 +778,36 @@ mod tab_order_tests {
         assert!(!move_tab(&mut tabs, "a", 0));
         assert_eq!(ids(&tabs), vec!["a", "b"]);
     }
+
+    fn pinned_tab(id: &str) -> Tab {
+        Tab {
+            pinned: true,
+            ..tab(id)
+        }
+    }
+
+    #[test]
+    fn a_pinned_tab_cannot_be_dragged_out_of_the_pinned_front() {
+        let mut tabs = vec![pinned_tab("a"), tab("b"), tab("c")];
+        // Nothing to do: the target is past the pinned section, and the only legal slot
+        // left for a pinned tab is where it already is.
+        assert!(!move_tab(&mut tabs, "a", 2));
+        assert_eq!(ids(&tabs), vec!["a", "b", "c"]);
+    }
+
+    #[test]
+    fn an_unpinned_tab_cannot_be_dropped_ahead_of_the_pinned_ones() {
+        let mut tabs = vec![pinned_tab("a"), tab("b"), tab("c")];
+        assert!(move_tab(&mut tabs, "c", 0));
+        assert_eq!(ids(&tabs), vec!["a", "c", "b"]);
+    }
+
+    #[test]
+    fn pinned_tabs_reorder_among_themselves() {
+        let mut tabs = vec![pinned_tab("a"), pinned_tab("b"), tab("c")];
+        assert!(move_tab(&mut tabs, "b", 0));
+        assert_eq!(ids(&tabs), vec!["b", "a", "c"]);
+    }
 }
 
 #[cfg(test)]

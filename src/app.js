@@ -322,6 +322,10 @@ function onDragEnd(event) {
       }
     }
     const current = tabs.findIndex((tab) => tab.id === held.id);
+    // The slot found above is an index in the list as it stands. The backend takes out the
+    // dragged tab first, so a slot after it has moved one to the left by then - without
+    // this, dragging to the right landed a position too far.
+    if (to > current) to -= 1;
     if (to !== current) invoke("tab_move", { id: held.id, to }).catch(() => {});
     return;
   }
