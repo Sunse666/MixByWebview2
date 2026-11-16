@@ -1,7 +1,7 @@
 // The chrome strip: tabs, address bar, toolbar, bookmarks and the key bridge the page forwards.
 const { invoke } = window.__TAURI__.core;
 const PAGE = Math.random().toString(36).slice(2, 6);
-import { setLanguage, t } from "./i18n.js";
+import { applyStatic, setLanguage, t } from "./i18n.js";
 const { listen } = window.__TAURI__.event;
 
 const root = document.documentElement;
@@ -1081,6 +1081,7 @@ async function boot() {
   applyTheme(await invoke("theme_get"));
   settings = await invoke("settings_get");
   setLanguage(settings.language || "en");
+  applyStatic();
 
   await listen("tabs:changed", (event) => {
     setTabs(event.payload);
@@ -1105,6 +1106,11 @@ async function boot() {
   });
   await listen("settings:changed", async () => {
     settings = await invoke("settings_get");
+    // The language is a setting like any other: switching it has to reach the strip
+    // without a restart.
+    setLanguage(settings.language || "en");
+    applyStatic();
+    renderTabs();
     renderBookmarks(await invoke("bookmark_list"));
     renderToolbar(await invoke("ext_list"));
 

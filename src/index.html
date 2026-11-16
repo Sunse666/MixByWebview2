@@ -10,32 +10,34 @@
     <div id="drag">
       <div class="brand"></div>
       <div id="tabs"></div>
-      <button class="icon" id="tab-new" title="New tab">+</button>
+      <button class="icon" id="tab-new" title="New tab" data-i18n-title="New tab">+</button>
     </div>
     <div class="win-buttons">
-      <button class="win" data-window="min" title="Minimize">-</button>
-      <button class="win" data-window="max" title="Maximize">O</button>
-      <button class="win danger" data-window="close" title="Close">x</button>
+      <button class="win" data-window="min" title="Minimize" data-i18n-title="Minimize">-</button>
+      <button class="win" data-window="max" title="Maximize" data-i18n-title="Maximize">O</button>
+      <button class="win danger" data-window="close" title="Close" data-i18n-title="Close">x</button>
     </div>
   </div>
 
   <div id="addressbar">
     <div class="nav">
-      <button class="icon" data-nav="back" title="Back">&lt;</button>
-      <button class="icon" data-nav="forward" title="Forward">&gt;</button>
-      <button class="icon" data-nav="reload" title="Reload">R</button>
+      <button class="icon" data-nav="back" title="Back" data-i18n-title="Back">&lt;</button>
+      <button class="icon" data-nav="forward" title="Forward" data-i18n-title="Forward">&gt;</button>
+      <button class="icon" data-nav="reload" title="Reload" data-i18n-title="Reload">R</button>
     </div>
 
     <div id="url-wrap">
       <img id="url-icon" alt="" hidden />
-      <input id="url" spellcheck="false" placeholder="Search or enter address" />
+      <input id="url" spellcheck="false" placeholder="Search or enter address"
+             data-i18n-placeholder="Search or enter address" />
       <div id="url-actions" class="url-actions"></div>
     </div>
 
     <div id="progress" aria-hidden="true"></div>
-    <button class="pill" id="download" title="Open downloads folder" hidden></button>
+    <button class="pill" id="download" title="Open downloads folder"
+            data-i18n-title="Open downloads folder" hidden></button>
     <div id="toolbar" class="toolbar"></div>
-    <button class="icon" id="theme-btn" title="Menu">=</button>
+    <button class="icon" id="theme-btn" title="Menu" data-i18n-title="Menu">=</button>
   </div>
 
   <div id="bookmarks" class="bookmarks" hidden></div>

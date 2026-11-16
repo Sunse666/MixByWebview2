@@ -69,6 +69,18 @@ for (const file of files) {
   for (const raw of strings) {
     literals.add(unescape(raw.slice(1, -1)));
   }
+
+  // Markup names its static text in an attribute (see applyStatic in i18n.js) instead of
+  // calling t(), so a name without an entry is the same silent gap as a missing t() call.
+  if (file.endsWith(".html")) {
+    const attr = /data-i18n(?:-title|-placeholder)?="([^"]+)"/g;
+    while ((match = attr.exec(text))) {
+      const key = unescape(match[1]);
+      if (!key) continue;
+      if (!calls.has(key)) calls.set(key, new Set());
+      calls.get(key).add(path.relative(root, file));
+    }
+  }
 }
 
 for (const file of rustFiles) {

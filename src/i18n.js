@@ -400,6 +400,9 @@ const DICT = {
     "Home address": "主页地址",
     "Opened by the home button; empty uses the start page": "主页按钮打开的地址，留空则用起始页面",
     "Choose the language of the interface": "选择界面语言",
+    "Minimize": "最小化",
+    "Maximize": "最大化",
+    "Menu": "菜单",
   },
 };
 
@@ -414,4 +417,25 @@ export function t(text) {
   if (language === "en" || !text) return text;
   const table = DICT[language];
   return (table && table[text]) || text;
+}
+
+/**
+ * Translates the text an html file carries in its attributes.
+ *
+ * Markup cannot call t(), so it names the English text instead and this walks the
+ * document once the language is known: `data-i18n` sets the text, `data-i18n-title` the
+ * tooltip and `data-i18n-placeholder` the hint inside a field. A name that is not in the
+ * dictionary keeps the English it shipped with, which is also what scripts/check-i18n.js
+ * reports.
+ */
+export function applyStatic(root = document) {
+  for (const node of root.querySelectorAll("[data-i18n]")) {
+    node.textContent = t(node.dataset.i18n);
+  }
+  for (const node of root.querySelectorAll("[data-i18n-title]")) {
+    node.title = t(node.dataset.i18nTitle);
+  }
+  for (const node of root.querySelectorAll("[data-i18n-placeholder]")) {
+    node.placeholder = t(node.dataset.i18nPlaceholder);
+  }
 }
