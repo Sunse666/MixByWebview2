@@ -161,5 +161,6 @@ async function check(name) {
   await import("./check-strings.mjs");
   await import("./check-dom.mjs");
   await import("./check-invoke.mjs");
+  await import("./check-events.mjs");
   process.exit(failures ? 1 : 0);
 })();
