@@ -101,7 +101,10 @@ pub fn start(app: tauri::AppHandle, id: u64, url: String, path: std::path::PathB
             return;
         };
 
-        loop {
+        // One transfer, continuing from whatever byte the file already holds. This is a
+        // block rather than a loop because every way out of it is a return: the resume
+        // path is a second call to start(), not a second pass here.
+        {
             let offset = std::fs::metadata(&path).map(|meta| meta.len()).unwrap_or(0);
             let mut request = client.get(&url);
             if offset > 0 {
@@ -180,10 +183,17 @@ pub fn start(app: tauri::AppHandle, id: u64, url: String, path: std::path::PathB
             let _ = file.flush();
             drop(file);
             crate::downloads::set_progress(&app, id, written, 0);
-            crate::downloads::set_state(&app, id, "finished");
+            // A connection that drops ends the chunk stream without an error, so the byte
+            // count is what says whether the file is whole. Calling a short file finished
+            // is how a truncated download used to look like a good one.
+            if total.map(|size| written >= size).unwrap_or(true) {
+                crate::downloads::set_state(&app, id, "finished");
+            } else {
+                crate::logging::warn(&format!("fetch {id}: stopped at {written} of {total:?}"));
+                crate::downloads::set_state(&app, id, "interrupted");
+            }
             release(&path);
             active_guard.store(false, Ordering::Relaxed);
-            return;
         }
     });
     if let Some(job) = jobs().lock().get_mut(&id) {
