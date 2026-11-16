@@ -274,6 +274,9 @@ async function boot() {
   renderButtons();
   await listen("bookmarks:changed", () => paint()).catch(() => {});
   await listen("download:changed", () => paint()).catch(() => {});
+  // The list this panel shows is a snapshot, so a deletion made in the history page has
+  // to reach it: without this, it kept showing rows that no longer existed.
+  await listen("history:changed", () => paint()).catch(() => {});
   await paint();
 }
 

@@ -130,6 +130,15 @@ pub(crate) fn flush_history(app: &AppHandle) {
     }
 }
 
+/// Tells the views that were handed a history list that it no longer matches.
+///
+/// Only a deletion announces itself. A visit is not announced on purpose: the history page
+/// polls for those on its own (it has to notice a visit recorded in another window), while
+/// a list that re-sorts itself under the pointer is worse than one row appearing late.
+fn history_changed(app: &AppHandle) {
+    let _ = app.emit("history:changed", ());
+}
+
 /// host -> icon url, used by the bookmarks and new tab pages.
 #[tauri::command]
 pub async fn favicon_map(
@@ -172,6 +181,7 @@ pub async fn history_list(
 /// Removes the rows the history page has selected.
 #[tauri::command]
 pub async fn history_remove(
+    app: AppHandle,
     webview: tauri::Webview,
     state: State<'_, AppState>,
     entries: Vec<(String, u64)>,
@@ -192,6 +202,7 @@ pub async fn history_remove(
     };
     let snapshot = state.history().clone();
     crate::library::save_visits(&state.dirs.history_file, &snapshot)?;
+    history_changed(&app);
     crate::logging::info(&format!("history: removed {removed} entries"));
     Ok(removed)
 }
@@ -210,6 +221,7 @@ pub async fn clear_data(
     if kinds.iter().any(|kind| kind == "history") {
         state.history_mut().clear();
         crate::library::save_visits(&state.dirs.history_file, &[])?;
+        history_changed(&app);
         done.push("history".to_string());
     }
 
@@ -246,6 +258,7 @@ pub async fn clear_data(
 
 #[tauri::command]
 pub async fn history_clear(
+    app: AppHandle,
     webview: tauri::Webview,
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
@@ -255,6 +268,7 @@ pub async fn history_clear(
         visits.clear();
     }
     crate::library::save_visits(&state.dirs.history_file, &[])?;
+    history_changed(&app);
     crate::logging::info("history cleared");
     Ok(())
 }
