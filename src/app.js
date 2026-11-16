@@ -218,13 +218,12 @@ function groupChip(group) {
   const label = document.createElement("span");
   label.className = "tab-title";
   label.textContent = group.name;
-  el.append(dot, label);
-  if (group.collapsed) {
-    const count = document.createElement("span");
-    count.className = "group-count";
-    count.textContent = String(group.members.length);
-    el.append(count);
-  }
+  // The badge is always there and only shown while the group is closed: adding and
+  // removing it would pop, and the chip would jump as the strip reflows around it.
+  const count = document.createElement("span");
+  count.className = "group-count" + (group.collapsed ? " on" : "");
+  count.textContent = String(group.members.length);
+  el.append(dot, label, count);
   el.addEventListener("click", () => invoke("group_toggle", { id: group.id }).catch(() => {}));
   el.addEventListener("contextmenu", (event) => {
     event.preventDefault();
@@ -534,7 +533,49 @@ function syncLoading() {
   }
 }
 
+/**
+ * Slides the tabs that a re-render moved, so a collapse, a close or a reorder is not a jump.
+ *
+ * The strip is rebuilt by moving the same elements around, which the browser does in one
+ * paint: nothing can be transitioned between "before" and "after" unless the distance is
+ * turned into a transform first. `before` holds where each element sat, so this plays the
+ * difference back — and clears it again, so a leftover transform can never outlive a frame.
+ */
+function slideFrom(before) {
+  if (document.body.classList.contains("tab-dragging")) return;
+  if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const moves = [];
+  for (const [key, el] of tabNodes) {
+    const was = before.get(key);
+    if (was === undefined) continue;
+    const dx = was - el.getBoundingClientRect().left;
+    if (Math.abs(dx) < 1) continue;
+    el.style.transition = "none";
+    el.style.transform = `translateX(${dx}px)`;
+    moves.push(el);
+  }
+  if (!moves.length) return;
+  // Read something back to commit that start state. Without it both writes land in the
+  // same style pass, the browser only keeps the last one, and there is no distance left
+  // to animate over - which looks exactly like the animation never ran.
+  void document.body.offsetWidth;
+  for (const el of moves) {
+    el.style.transition = "transform 120ms ease";
+    el.style.transform = "";
+    el.addEventListener("transitionend", () => { el.style.transition = ""; }, { once: true });
+  }
+}
+
 function renderTabs() {
+  // Where every live element sits before the list is rebuilt under it, with any animation
+  // from last time cleared first.
+  const before = new Map();
+  for (const [key, el] of tabNodes) {
+    el.style.transition = "";
+    el.style.transform = "";
+    before.set(key, el.getBoundingClientRect().left);
+  }
+
   const order = [];
   const placed = new Set();
   for (const tab of tabs) {
@@ -573,16 +614,10 @@ function renderTabs() {
         el.style.setProperty("--group", group.color || "#4c8dff");
         const title = el.querySelector(".tab-title");
         if (title) title.textContent = group.name;
-        let count = el.querySelector(".group-count");
-        if (group.collapsed) {
-          if (!count) {
-            count = document.createElement("span");
-            count.className = "group-count";
-            el.append(count);
-          }
+        const count = el.querySelector(".group-count");
+        if (count) {
           count.textContent = String(group.members.length);
-        } else if (count) {
-          count.remove();
+          count.classList.toggle("on", group.collapsed);
         }
       }
       tabStrip.append(el);
@@ -621,6 +656,8 @@ function renderTabs() {
       tabNodes.delete(key);
     }
   }
+
+  slideFrom(before);
 }
 
 let translateOn = false;

@@ -495,6 +495,7 @@ body.incognito #tab-strip::after {
   border-left: 3px solid var(--group, #4c8dff);
   background: color-mix(in srgb, var(--group, #4c8dff) 22%, transparent);
   gap: 6px;
+  transition: background-color 120ms ease;
 }
 .group-chip.closed {
   background: color-mix(in srgb, var(--group, #4c8dff) 32%, transparent);
@@ -506,10 +507,22 @@ body.incognito #tab-strip::after {
   background: var(--group, #4c8dff);
   flex: 0 0 auto;
 }
+/* The count of a closed group rides in instead of appearing, so closing a group reads as
+   one movement together with the tabs sliding out from under the chip. The negative margin
+   cancels the chip's gap while the badge is hidden, so an open chip keeps its old width. */
 .group-count {
   font-size: 10px;
-  opacity: 0.75;
   flex: 0 0 auto;
+  max-width: 0;
+  margin-left: -6px;
+  opacity: 0;
+  overflow: hidden;
+  transition: max-width 120ms ease, margin-left 120ms ease, opacity 120ms ease;
+}
+.group-count.on {
+  max-width: 3em;
+  margin-left: 0;
+  opacity: 0.75;
 }
 
 /* Manual tab dragging --------------------------------------------------- */

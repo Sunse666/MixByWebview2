@@ -59,6 +59,11 @@ class El {
   select() {}
   setSelectionRange() {}
   scrollTo() {}
+  // The strip measures where tabs sat before a render and plays the difference back; a
+  // page that moves things must not fall over because the stub cannot measure.
+  getBoundingClientRect() {
+    return { x: 0, y: 0, left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0 };
+  }
   closest() { return null; }
   click() {}
   replaceChildren(...n) { this.children = n.filter(Boolean); }
@@ -110,6 +115,13 @@ function installDom() {
   globalThis.document = document;
   globalThis.location = { hash: "", origin: "http://tauri.localhost", reload() {} };
   globalThis.matchMedia = () => ({ matches: false, addEventListener() {} });
+  // The pages animate a few things; running the callback immediately keeps the stub
+  // synchronous, and lets a render that moves tabs run the code that follows it.
+  globalThis.requestAnimationFrame = (run) => {
+    run(0);
+    return 1;
+  };
+  globalThis.cancelAnimationFrame = () => {};
   globalThis.window = globalThis;
   // Pages register window listeners; the stub only has to accept them.
   globalThis.addEventListener = () => {};
