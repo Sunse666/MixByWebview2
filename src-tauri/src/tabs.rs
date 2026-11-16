@@ -396,6 +396,9 @@ pub fn create(
                         let _ = webview.eval(&format!("window.scrollTo(0, {scroll});"));
                     }
                 }
+                // The address bar hears about a finished load from here, not from the
+                // poll: this is the one moment the url is known to be the document's.
+                crate::window::publish_loaded(&app, &id, payload.url().as_str());
             }
             if loading {
                 if let Some(state) = app.try_state::<crate::ipc::AppState>() {

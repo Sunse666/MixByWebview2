@@ -65,6 +65,10 @@ pub struct WindowMaps {
     /// The geometry each window's overlay was opened with. The page reports a new
     /// height for it once it has rendered, and that has to be measured against it.
     pub overlay_frame: parking_lot::RwLock<std::collections::HashMap<String, crate::overlay::Frame>>,
+    /// Tab id -> the url the address bar was last told about. A finished page load
+    /// reports its own url and the fallback poll reads it, so both paths have to agree on
+    /// what counts as a change.
+    pub url_published: parking_lot::RwLock<std::collections::HashMap<String, String>>,
     /// Last time each tab was on screen, in seconds.
     pub shown_at: parking_lot::RwLock<std::collections::HashMap<String, u64>>,
     /// What is typed in each window's address bar, by window label.

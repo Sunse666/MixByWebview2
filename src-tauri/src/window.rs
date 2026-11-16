@@ -1,4 +1,3 @@
-﻿use std::collections::HashMap;
 use std::time::Duration;
 
 use tauri::{
@@ -422,67 +421,98 @@ pub fn open_window(
     Ok(win)
 }
 
-/// Keeps the address bar in step by polling the selected webviews.
+/// Keeps the address bar in step with the webviews.
+///
+/// A finished page load reports its own url (see `publish_loaded`), so this thread only
+/// catches what no event covers: a route change inside a single-page app, and the
+/// browser's own error page. Both are rare and only worth noticing in a window the user is
+/// looking at, so it runs once a second and only for the focused window - a poll that
+/// reads every tab's url is a COM call per tab, per tick, per window.
 pub fn start_url_watch(app: AppHandle, label: String) {
-    std::thread::spawn(move || {
-        let mut last: HashMap<String, String> = HashMap::new();
-        loop {
-            std::thread::sleep(Duration::from_millis(400));
-            if app.get_window(&label).is_none() {
-                return;
-            }
+    std::thread::spawn(move || loop {
+        std::thread::sleep(Duration::from_millis(1000));
+        let Some(window) = app.get_window(&label) else {
+            return;
+        };
 
-            if let Some(state) = app.try_state::<AppState>() {
-                if state.nav.read().app_base.is_empty() {
-                    if let Some(chrome) = app.get_webview(&format!("{label}-chrome")) {
-                        if let Ok(url) = chrome.url() {
-                            let origin = url.origin().ascii_serialization();
-                            if origin.starts_with("http") {
-                                state.nav.write().app_base = format!("{origin}/");
-                                crate::logging::info(&format!("app base {origin}/"));
-                            }
+        // The pages the app serves itself live at an origin only known at run time.
+        if let Some(state) = app.try_state::<AppState>() {
+            if state.nav.read().app_base.is_empty() {
+                if let Some(chrome) = app.get_webview(&format!("{label}-chrome")) {
+                    if let Ok(url) = chrome.url() {
+                        let origin = url.origin().ascii_serialization();
+                        if origin.starts_with("http") {
+                            state.nav.write().app_base = format!("{origin}/");
+                            crate::logging::info(&format!("app base {origin}/"));
                         }
                     }
                 }
-            }
-
-            let ids: Vec<String> = match app.try_state::<AppState>() {
-                Some(state) => match state.try_read_core(&label) {
-                    Some(core) => core.tabs.iter().map(|tab| tab.id.clone()).collect(),
-                    None => return,
-                },
-                None => return,
-            };
-
-            for id in ids {
-                let Some(webview) = app.get_webview(&id) else {
-                    continue;
-                };
-                let Ok(url) = webview.url() else {
-                    continue;
-                };
-                let current = url.to_string();
-                if current.starts_with("chrome-error://") {
-                    if let Some(state) = app.try_state::<AppState>() {
-                        let failed = state
-                            .nav.read().pending
-                            .get(&id)
-                            .cloned()
-                            .unwrap_or_default();
-                        if !failed.is_empty() {
-                            crate::ipc::show_error_page(&app, &id, &failed);
-                        }
-                    }
-                    continue;
-                }
-                if last.get(&id).map(String::as_str) == Some(current.as_str()) {
-                    continue;
-                }
-                last.insert(id.clone(), current.clone());
-                publish_url(&app, &id, &current);
             }
         }
+
+        // Only the window the user is in needs a live address bar. When in doubt - the
+        // platform refused the question - keep syncing rather than stop.
+        if !window.is_focused().unwrap_or(true) {
+            continue;
+        }
+
+        let ids: Vec<String> = match app.try_state::<AppState>() {
+            Some(state) => match state.try_read_core(&label) {
+                Some(core) => core.tabs.iter().map(|tab| tab.id.clone()).collect(),
+                None => return,
+            },
+            None => return,
+        };
+
+        for id in ids {
+            let Some(webview) = app.get_webview(&id) else {
+                continue;
+            };
+            let Ok(url) = webview.url() else {
+                continue;
+            };
+            publish_loaded(&app, &id, url.as_str());
+        }
     });
+}
+
+/// Records the url a tab is showing.
+///
+/// Two callers: the webview, as soon as a document has finished loading, and the fallback
+/// poll. Both go through the same "is this new?" answer, which is kept per tab rather than
+/// per caller - a tab's own url field is already set when it is created, so it cannot be
+/// the thing that decides whether the address bar has been told.
+pub(crate) fn publish_loaded(app: &AppHandle, id: &str, url: &str) {
+    if url.starts_with("chrome-error://") {
+        show_failed_load(app, id);
+        return;
+    }
+    let Some(state) = app.try_state::<AppState>() else {
+        return;
+    };
+    let known = state.windows.url_published.read().get(id).cloned();
+    if known.as_deref() == Some(url) {
+        return;
+    }
+    {
+        let mut published = state.windows.url_published.write();
+        if published.len() > 200 {
+            published.retain(|tab, _| app.get_webview(tab).is_some());
+        }
+        published.insert(id.to_string(), url.to_string());
+    }
+    publish_url(app, id, url);
+}
+
+/// Puts our error page where the browser put its own, for the url that failed.
+fn show_failed_load(app: &AppHandle, id: &str) {
+    let Some(state) = app.try_state::<AppState>() else {
+        return;
+    };
+    let failed = state.nav.read().pending.get(id).cloned().unwrap_or_default();
+    if !failed.is_empty() {
+        crate::ipc::show_error_page(app, id, &failed);
+    }
 }
 
 fn publish_url(app: &AppHandle, id: &str, url: &str) {
