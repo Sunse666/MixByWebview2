@@ -174,5 +174,6 @@ async function check(name) {
   await import("./check-dom.mjs");
   await import("./check-invoke.mjs");
   await import("./check-events.mjs");
+  await import("./check-args.mjs");
   process.exit(failures ? 1 : 0);
 })();
