@@ -1,15 +1,18 @@
 //! Memory numbers for the tab card.
 
-/// Memory of the browser's own processes, leaving the gpu out.
+/// The processes of one webview's environment, as (kind, pid).
+///
+/// Both numbers below start from this list, and asking for it is the expensive part: one
+/// call onto the webview's thread, with a deadline, because a tab that is not on screen
+/// answers late or not at all.
 #[cfg(windows)]
-pub fn total(webview: &tauri::Webview) -> Option<u64> {
+fn processes(webview: &tauri::Webview) -> Vec<(i32, u32)> {
   use webview2_com::Microsoft::Web::WebView2::Win32::{
     ICoreWebView2Environment8, ICoreWebView2_2,
   };
   use windows_core::Interface;
 
-  let (sender, receiver) = std::sync::mpsc::channel::<Vec<(i32, u32)>>();
-  let _ = webview.with_webview(move |platform| unsafe {
+  crate::com::call(webview, std::time::Duration::from_millis(600), |platform, out| unsafe {
     let found = (|| -> windows_core::Result<Vec<(i32, u32)>> {
       let controller = platform.controller();
       let core = controller.CoreWebView2()?;
@@ -18,7 +21,7 @@ pub fn total(webview: &tauri::Webview) -> Option<u64> {
       let infos = env.GetProcessInfos()?;
       let mut count = 0u32;
       infos.Count(&mut count)?;
-      let mut out = Vec::with_capacity(count as usize);
+      let mut found = Vec::with_capacity(count as usize);
       for index in 0..count {
         let info = infos.GetValueAtIndex(index)?;
         let mut pid = 0i32;
@@ -26,17 +29,21 @@ pub fn total(webview: &tauri::Webview) -> Option<u64> {
         info.ProcessId(&mut pid)?;
         info.Kind(&mut kind)?;
         if pid > 0 {
-          out.push((kind.0, pid as u32));
+          found.push((kind.0, pid as u32));
         }
       }
-      Ok(out)
+      Ok(found)
     })()
     .unwrap_or_default();
-    let _ = sender.send(found);
-  });
-  let processes = receiver
-    .recv_timeout(std::time::Duration::from_millis(600))
-    .unwrap_or_default();
+    let _ = out.send(found);
+  })
+  .unwrap_or_default()
+}
+
+/// Memory of the browser's own processes, leaving the gpu out.
+#[cfg(windows)]
+pub fn total(webview: &tauri::Webview) -> Option<u64> {
+  let processes = processes(webview);
   if processes.is_empty() {
     return None;
   }
@@ -199,38 +206,7 @@ pub fn report(app: &tauri::AppHandle) {
 /// Count and working set per process kind inside one environment.
 #[cfg(windows)]
 fn breakdown(webview: &tauri::Webview) -> Option<String> {
-  use webview2_com::Microsoft::Web::WebView2::Win32::{
-    ICoreWebView2Environment8, ICoreWebView2_2,
-  };
-  use windows_core::Interface;
-
-  let (sender, receiver) = std::sync::mpsc::channel::<Vec<(i32, u32)>>();
-  let _ = webview.with_webview(move |platform| unsafe {
-    let found = (|| -> windows_core::Result<Vec<(i32, u32)>> {
-      let controller = platform.controller();
-      let core = controller.CoreWebView2()?;
-      let env = core.cast::<ICoreWebView2_2>()?.Environment()?;
-      let env = env.cast::<ICoreWebView2Environment8>()?;
-      let infos = env.GetProcessInfos()?;
-      let mut count = 0u32;
-      infos.Count(&mut count)?;
-      let mut out = Vec::with_capacity(count as usize);
-      for index in 0..count {
-        let info = infos.GetValueAtIndex(index)?;
-        let mut pid = 0i32;
-        let mut kind = Default::default();
-        info.ProcessId(&mut pid)?;
-        info.Kind(&mut kind)?;
-        out.push((kind.0, pid.max(0) as u32));
-      }
-      Ok(out)
-    })()
-    .unwrap_or_default();
-    let _ = sender.send(found);
-  });
-  let processes = receiver
-    .recv_timeout(std::time::Duration::from_millis(600))
-    .unwrap_or_default();
+  let processes = processes(webview);
   if processes.is_empty() {
     return None;
   }

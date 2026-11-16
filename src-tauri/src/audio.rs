@@ -18,9 +18,7 @@ fn read(webview: &tauri::Webview) -> Option<Audio> {
   use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2_8;
   use windows_core::Interface;
 
-  let (sender, receiver) = std::sync::mpsc::channel();
-  let done = sender.clone();
-  let request = webview.with_webview(move |platform| unsafe {
+  crate::com::call(webview, Duration::from_millis(500), |platform, out| unsafe {
     let result = (|| -> windows_core::Result<Audio> {
       let controller = platform.controller();
       let core = controller.CoreWebView2()?;
@@ -34,15 +32,9 @@ fn read(webview: &tauri::Webview) -> Option<Audio> {
         muted: muted.as_bool(),
       })
     })();
-    let _ = std::sync::mpsc::Sender::send(&done, result.ok());
-  });
-  if request.is_err() {
-    return None;
-  }
-  receiver
-    .recv_timeout(Duration::from_millis(500))
-    .ok()
-    .flatten()
+    let _ = out.send(result.ok());
+  })
+  .flatten()
 }
 
 #[cfg(not(windows))]
@@ -61,9 +53,7 @@ pub fn set_muted(webview: &tauri::Webview, muted: bool) -> bool {
   use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2_8;
   use windows_core::Interface;
 
-  let (sender, receiver) = std::sync::mpsc::channel();
-  let done = sender.clone();
-  let request = webview.with_webview(move |platform| unsafe {
+  crate::com::call(webview, Duration::from_millis(500), move |platform, out| unsafe {
     let result = (|| -> windows_core::Result<()> {
       let controller = platform.controller();
       let core = controller.CoreWebView2()?;
@@ -71,14 +61,9 @@ pub fn set_muted(webview: &tauri::Webview, muted: bool) -> bool {
       core8.SetIsMuted(muted)?;
       Ok(())
     })();
-    let _ = std::sync::mpsc::Sender::send(&done, result.is_ok());
-  });
-  if request.is_err() {
-    return false;
-  }
-  receiver
-    .recv_timeout(Duration::from_millis(500))
-    .unwrap_or(false)
+    let _ = out.send(result.is_ok());
+  })
+  .unwrap_or(false)
 }
 
 #[cfg(not(windows))]

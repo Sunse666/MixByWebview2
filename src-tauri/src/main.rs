@@ -2,6 +2,7 @@
 
 mod audio;
 mod browser_reg;
+mod com;
 mod diag;
 mod zoom;
 mod downloads;

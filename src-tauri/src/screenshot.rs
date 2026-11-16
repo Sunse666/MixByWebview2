@@ -18,38 +18,30 @@ pub fn call_timeout(
 
   let method = windows_core::HSTRING::from(method);
   let params = windows_core::HSTRING::from(params);
-  let (sender, receiver) = std::sync::mpsc::channel();
-  let done = sender.clone();
-  let request = webview.with_webview(move |platform| unsafe {
+  crate::com::call(webview, wait, move |platform, out| unsafe {
     let result = (|| -> windows_core::Result<()> {
       let controller = platform.controller();
       let core = controller.CoreWebView2()?;
       let core: &ICoreWebView2 = &core;
-      let sender_for_handler = std::sync::mpsc::Sender::clone(&done);
+      let answer = std::sync::mpsc::Sender::clone(&out);
       let handler = webview2_com::CallDevToolsProtocolMethodCompletedHandler::create(Box::new(
         move |status, json| {
-          let answer = if status.is_ok() {
+          let text = if status.is_ok() {
             Some(json.to_string())
           } else {
             None
           };
-          let _ = sender_for_handler.send(answer);
+          let _ = answer.send(text);
           Ok(())
         },
       ));
       core.CallDevToolsProtocolMethod(&method, &params, &handler)
     })();
     if result.is_err() {
-      let _ = std::sync::mpsc::Sender::send(&done, None);
+      let _ = out.send(None);
     }
-  });
-  if request.is_err() {
-    return None;
-  }
-  receiver
-    .recv_timeout(wait)
-    .ok()
-    .flatten()
+  })
+  .flatten()
 }
 
 #[cfg(not(windows))]

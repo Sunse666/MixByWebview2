@@ -45,114 +45,107 @@ unsafe fn read_extension(extension: &ICoreWebView2BrowserExtension) -> LiveExten
 /// Lists the extensions the running browser actually loaded.
 #[cfg(windows)]
 pub fn list(webview: &tauri::Webview) -> Vec<LiveExtension> {
-    let (sender, receiver) = std::sync::mpsc::channel();
-    let fallback = sender.clone();
-    let request = webview.with_webview(move |platform| unsafe {
-        let result = (|| -> windows_core::Result<()> {
-            let controller = platform.controller();
-            let core = controller.CoreWebView2()?;
-            let profile = core.cast::<ICoreWebView2_13>()?.Profile()?;
-            let profile7 = profile.cast::<ICoreWebView2Profile7>()?;
-            let handler = ProfileGetBrowserExtensionsCompletedHandler::create(Box::new(
-                move |error, list| {
-                    let mut found = Vec::new();
-                    if error.is_ok() {
-                        if let Some(list) = list {
-                            let mut count = 0u32;
-                            if list.Count(&mut count).is_ok() {
-                                for index in 0..count {
-                                    if let Ok(extension) = list.GetValueAtIndex(index) {
-                                        found.push(read_extension(&extension));
+    crate::com::call(
+        webview,
+        std::time::Duration::from_secs(4),
+        move |platform, out| unsafe {
+            let result = (|| -> windows_core::Result<()> {
+                let controller = platform.controller();
+                let core = controller.CoreWebView2()?;
+                let profile = core.cast::<ICoreWebView2_13>()?.Profile()?;
+                let profile7 = profile.cast::<ICoreWebView2Profile7>()?;
+                let answer = std::sync::mpsc::Sender::clone(&out);
+                let handler = ProfileGetBrowserExtensionsCompletedHandler::create(Box::new(
+                    move |error, list| {
+                        let mut found = Vec::new();
+                        if error.is_ok() {
+                            if let Some(list) = list {
+                                let mut count = 0u32;
+                                if list.Count(&mut count).is_ok() {
+                                    for index in 0..count {
+                                        if let Ok(extension) = list.GetValueAtIndex(index) {
+                                            found.push(read_extension(&extension));
+                                        }
                                     }
                                 }
                             }
                         }
-                    }
-                    let _ = sender.send(found);
-                    Ok(())
-                },
-            ));
-            profile7.GetBrowserExtensions(&handler)
-        })();
-        if result.is_err() {
-            let _ = std::sync::mpsc::Sender::send(&fallback, Vec::new());
-        }
-    });
-
-    if request.is_err() {
-        return Vec::new();
-    }
-    receiver
-        .recv_timeout(std::time::Duration::from_secs(4))
-        .unwrap_or_default()
+                        let _ = answer.send(found);
+                        Ok(())
+                    },
+                ));
+                profile7.GetBrowserExtensions(&handler)
+            })();
+            if result.is_err() {
+                let _ = out.send(Vec::new());
+            }
+        },
+    )
+    .unwrap_or_default()
 }
 
 /// Turns one extension on or off without a restart.
 #[cfg(windows)]
 pub fn set_enabled(webview: &tauri::Webview, id: &str, enabled: bool) -> bool {
     let target = id.to_string();
-    let (sender, receiver) = std::sync::mpsc::channel();
-    let request = webview.with_webview(move |platform| unsafe {
-        let done = std::sync::mpsc::Sender::clone(&sender);
-        let result = (|| -> windows_core::Result<()> {
-            let controller = platform.controller();
-            let core = controller.CoreWebView2()?;
-            let profile = core.cast::<ICoreWebView2_13>()?.Profile()?;
-            let profile7 = profile.cast::<ICoreWebView2Profile7>()?;
-            let sender_for_list = std::sync::mpsc::Sender::clone(&done);
-            let wanted = target.clone();
-            let handler = ProfileGetBrowserExtensionsCompletedHandler::create(Box::new(
-                move |error, list| {
-                    if error.is_err() {
-                        let _ = sender_for_list.send(false);
-                        return Ok(());
-                    }
-                    let Some(list) = list else {
-                        let _ = sender_for_list.send(false);
-                        return Ok(());
-                    };
-                    let mut count = 0u32;
-                    if list.Count(&mut count).is_err() {
-                        let _ = sender_for_list.send(false);
-                        return Ok(());
-                    }
-                    for index in 0..count {
-                        let Ok(extension) = list.GetValueAtIndex(index) else {
-                            continue;
+    crate::com::call(
+        webview,
+        std::time::Duration::from_secs(4),
+        move |platform, out| unsafe {
+            let result = (|| -> windows_core::Result<()> {
+                let controller = platform.controller();
+                let core = controller.CoreWebView2()?;
+                let profile = core.cast::<ICoreWebView2_13>()?.Profile()?;
+                let profile7 = profile.cast::<ICoreWebView2Profile7>()?;
+                let answer = std::sync::mpsc::Sender::clone(&out);
+                let wanted = target.clone();
+                let handler = ProfileGetBrowserExtensionsCompletedHandler::create(Box::new(
+                    move |error, list| {
+                        if error.is_err() {
+                            let _ = answer.send(false);
+                            return Ok(());
+                        }
+                        let Some(list) = list else {
+                            let _ = answer.send(false);
+                            return Ok(());
                         };
-                        let current = read_extension(&extension);
-                        if current.id != wanted {
-                            continue;
+                        let mut count = 0u32;
+                        if list.Count(&mut count).is_err() {
+                            let _ = answer.send(false);
+                            return Ok(());
                         }
-                        let sender_for_enable = std::sync::mpsc::Sender::clone(&sender_for_list);
-                        let enable = webview2_com::BrowserExtensionEnableCompletedHandler::create(
-                            Box::new(move |status| {
-                                let _ = sender_for_enable.send(status.is_ok());
-                                Ok(())
-                            }),
-                        );
-                        if extension.Enable(enabled, &enable).is_err() {
-                            let _ = sender_for_list.send(false);
+                        for index in 0..count {
+                            let Ok(extension) = list.GetValueAtIndex(index) else {
+                                continue;
+                            };
+                            let current = read_extension(&extension);
+                            if current.id != wanted {
+                                continue;
+                            }
+                            let done = std::sync::mpsc::Sender::clone(&answer);
+                            let enable = webview2_com::BrowserExtensionEnableCompletedHandler::create(
+                                Box::new(move |status| {
+                                    let _ = done.send(status.is_ok());
+                                    Ok(())
+                                }),
+                            );
+                            if extension.Enable(enabled, &enable).is_err() {
+                                let _ = answer.send(false);
+                            }
+                            return Ok(());
                         }
-                        return Ok(());
-                    }
-                    let _ = sender_for_list.send(false);
-                    Ok(())
-                },
-            ));
-            profile7.GetBrowserExtensions(&handler)
-        })();
-        if result.is_err() {
-            let _ = std::sync::mpsc::Sender::send(&done, false);
-        }
-    });
-
-    if request.is_err() {
-        return false;
-    }
-    receiver
-        .recv_timeout(std::time::Duration::from_secs(4))
-        .unwrap_or(false)
+                        let _ = answer.send(false);
+                        Ok(())
+                    },
+                ));
+                profile7.GetBrowserExtensions(&handler)
+            })();
+            if result.is_err() {
+                let _ = out.send(false);
+            }
+        },
+    )
+    .unwrap_or(false)
 }
 
 #[cfg(not(windows))]
@@ -233,67 +226,66 @@ pub fn add(webview: &tauri::Webview, dir: &str) -> Result<bool, String> {
   use windows_core::Interface;
 
   let path = windows_core::HSTRING::from(dir);
-  let (sender, receiver) = std::sync::mpsc::channel::<Result<String, String>>();
-  let fallback = sender.clone();
-  let request = webview.with_webview(move |platform| unsafe {
-    let done = std::sync::mpsc::Sender::clone(&sender);
-    let result = (|| -> windows_core::Result<()> {
-      let controller = platform.controller();
-      let core = controller.CoreWebView2()?;
-      let profile = core.cast::<ICoreWebView2_13>()?.Profile()?;
-      let profile7 = profile.cast::<ICoreWebView2Profile7>()?;
-      let sender_for_handler = std::sync::mpsc::Sender::clone(&done);
-      let handler = ProfileAddBrowserExtensionCompletedHandler::create(Box::new(
-        move |error, extension| {
-          let Some(extension) = extension else {
-            let _ = sender_for_handler
-              .send(Err(format!("the browser did not return an extension ({error:?})")));
-            return Ok(());
-          };
-          if error.is_err() {
-            let _ = sender_for_handler.send(Err(format!("{error:?}")));
-            return Ok(());
-          }
-          let mut enabled = windows_core::BOOL(0);
-          let _ = extension.IsEnabled(&mut enabled);
-          if enabled.as_bool() {
-            let _ = sender_for_handler.send(Ok("already enabled".into()));
-            return Ok(());
-          }
-          let sender_for_enable = std::sync::mpsc::Sender::clone(&sender_for_handler);
-          let probe = extension.clone();
-          let handler = BrowserExtensionEnableCompletedHandler::create(Box::new(move |status| {
-            if let Err(err) = status {
-              let _ = sender_for_enable.send(Err(format!("enable refused: {err:?}")));
+  let answer = crate::com::call(
+    webview,
+    std::time::Duration::from_secs(5),
+    move |platform, out| unsafe {
+      let result = (|| -> windows_core::Result<()> {
+        let controller = platform.controller();
+        let core = controller.CoreWebView2()?;
+        let profile = core.cast::<ICoreWebView2_13>()?.Profile()?;
+        let profile7 = profile.cast::<ICoreWebView2Profile7>()?;
+        let sender = std::sync::mpsc::Sender::clone(&out);
+        let handler = ProfileAddBrowserExtensionCompletedHandler::create(Box::new(
+          move |error, extension| {
+            let Some(extension) = extension else {
+              let _ = sender
+                .send(Err(format!("the browser did not return an extension ({error:?})")));
+              return Ok(());
+            };
+            if error.is_err() {
+              let _ = sender.send(Err(format!("{error:?}")));
               return Ok(());
             }
-            let mut now = windows_core::BOOL(0);
-            let _ = probe.IsEnabled(&mut now);
-            let _ = sender_for_enable.send(if now.as_bool() {
-              Ok("enabled".to_string())
-            } else {
-              Err("the browser reports it as still off".to_string())
-            });
+            let mut enabled = windows_core::BOOL(0);
+            let _ = extension.IsEnabled(&mut enabled);
+            if enabled.as_bool() {
+              let _ = sender.send(Ok("already enabled".into()));
+              return Ok(());
+            }
+            let sender_for_enable = std::sync::mpsc::Sender::clone(&sender);
+            let probe = extension.clone();
+            let handler = BrowserExtensionEnableCompletedHandler::create(Box::new(move |status| {
+              if let Err(err) = status {
+                let _ = sender_for_enable.send(Err(format!("enable refused: {err:?}")));
+                return Ok(());
+              }
+              let mut now = windows_core::BOOL(0);
+              let _ = probe.IsEnabled(&mut now);
+              let _ = sender_for_enable.send(if now.as_bool() {
+                Ok("enabled".to_string())
+              } else {
+                Err("the browser reports it as still off".to_string())
+              });
+              Ok(())
+            }));
+            if let Err(err) = extension.Enable(true, &handler) {
+              let _ = sender.send(Err(format!("enable failed: {err:?}")));
+            }
             Ok(())
-          }));
-          if let Err(err) = extension.Enable(true, &handler) {
-            let _ = sender_for_handler.send(Err(format!("enable failed: {err:?}")));
-          }
-          Ok(())
-        },
-      ));
-      profile7.AddBrowserExtension(&path, &handler)
-    })();
-    if result.is_err() {
-      let _ = std::sync::mpsc::Sender::send(&fallback, Err("the call did not start".into()));
-    }
-  });
-  if request.is_err() {
-    return Err("the webview did not answer".into());
-  }
-  match receiver.recv_timeout(std::time::Duration::from_secs(5)) {
-    Ok(answer) => answer.map(|_| true),
-    Err(_) => Err("the browser did not answer in time".into()),
+          },
+        ));
+        profile7.AddBrowserExtension(&path, &handler)
+      })();
+      if result.is_err() {
+        let _ = out.send(Err("the call did not start".into()));
+      }
+    },
+  );
+  match answer {
+    Some(Ok(_)) => Ok(true),
+    Some(Err(message)) => Err(message),
+    None => Err("the browser did not answer".into()),
   }
 }
 

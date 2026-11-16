@@ -99,16 +99,19 @@ unsafe fn edge_code(hwnd: HWND, lparam: LPARAM) -> Option<u32> {
 fn child_hwnd(webview: &tauri::Webview) -> Option<HWND> {
     use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2Controller;
 
-    let (sender, receiver) = std::sync::mpsc::channel::<isize>();
-    let _ = webview.with_webview(move |platform| unsafe {
-        let controller = platform.controller();
-        let controller: &ICoreWebView2Controller = &controller;
-        let mut hwnd = HWND::default();
-        if controller.ParentWindow(&mut hwnd).is_ok() && !hwnd.0.is_null() {
-            let _ = sender.send(hwnd.0 as isize);
-        }
-    });
-    let raw = receiver.recv_timeout(std::time::Duration::from_millis(500)).unwrap_or(0);
+    let raw = crate::com::call(
+        webview,
+        std::time::Duration::from_millis(500),
+        |platform, out| unsafe {
+            let controller = platform.controller();
+            let controller: &ICoreWebView2Controller = &controller;
+            let mut hwnd = HWND::default();
+            if controller.ParentWindow(&mut hwnd).is_ok() && !hwnd.0.is_null() {
+                let _ = out.send(hwnd.0 as isize);
+            }
+        },
+    )
+    .unwrap_or(0);
     if raw == 0 {
         None
     } else {
