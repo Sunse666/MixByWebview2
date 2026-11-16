@@ -495,7 +495,7 @@ body.incognito #tab-strip::after {
   border-left: 3px solid var(--group, #4c8dff);
   background: color-mix(in srgb, var(--group, #4c8dff) 22%, transparent);
   gap: 6px;
-  transition: background-color 120ms ease;
+  transition: background-color 240ms ease;
 }
 .group-chip.closed {
   background: color-mix(in srgb, var(--group, #4c8dff) 32%, transparent);
@@ -517,7 +517,7 @@ body.incognito #tab-strip::after {
   margin-left: -6px;
   opacity: 0;
   overflow: hidden;
-  transition: max-width 120ms ease, margin-left 120ms ease, opacity 120ms ease;
+  transition: max-width 240ms ease, margin-left 240ms ease, opacity 240ms ease;
 }
 .group-count.on {
   max-width: 3em;

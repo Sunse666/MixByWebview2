@@ -560,7 +560,9 @@ function slideFrom(before) {
   // to animate over - which looks exactly like the animation never ran.
   void document.body.offsetWidth;
   for (const el of moves) {
-    el.style.transition = "transform 120ms ease";
+    // Kept in step with the two group transitions in style.css: a collapse moves the tabs
+    // and the chip at once, and different durations make it look like two events.
+    el.style.transition = "transform 240ms ease";
     el.style.transform = "";
     el.addEventListener("transitionend", () => { el.style.transition = ""; }, { once: true });
   }
