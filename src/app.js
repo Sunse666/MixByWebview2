@@ -568,16 +568,10 @@ function slideFrom(before) {
   }
 }
 
-function renderTabs() {
-  // Where every live element sits before the list is rebuilt under it, with any animation
-  // from last time cleared first.
-  const before = new Map();
-  for (const [key, el] of tabNodes) {
-    el.style.transition = "";
-    el.style.transform = "";
-    before.set(key, el.getBoundingClientRect().left);
-  }
+/** What the strip held last time, to tell a reorder from a repaint. */
+let stripSignature = "";
 
+function renderTabs() {
   const order = [];
   const placed = new Set();
   for (const tab of tabs) {
@@ -598,6 +592,22 @@ function renderTabs() {
         order.push({ kind: "tab", id: member });
       }
     }
+  }
+
+  // Only a different order can have moved anything, and measuring is the expensive part of
+  // this function: it forces a layout. Switching tabs changes what is inside them, not
+  // where they are, which is the common case; a reorder, a collapse or a close is not.
+  const signature = order.map((item) => item.kind + ":" + item.id).join("|");
+  const moved = signature !== stripSignature;
+  stripSignature = signature;
+
+  // Where every live element sits before the list is rebuilt under it, with any animation
+  // from last time cleared first.
+  const before = new Map();
+  for (const [key, el] of tabNodes) {
+    el.style.transition = "";
+    el.style.transform = "";
+    if (moved) before.set(key, el.getBoundingClientRect().left);
   }
 
   const keep = new Set();
@@ -659,7 +669,7 @@ function renderTabs() {
     }
   }
 
-  slideFrom(before);
+  if (moved) slideFrom(before);
 }
 
 let translateOn = false;
