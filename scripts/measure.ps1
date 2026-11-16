@@ -51,6 +51,35 @@ function Get-TreeMemory([int]$RootId) {
     }
 }
 
+<#
+Stops the instances this script started, and only those.
+
+An earlier version ran `Get-Process mix, msedgewebview2 | Stop-Process -Force` before every
+run, which takes down every WebView2 host on the machine - Teams, Outlook, anything else
+embedding one - as collateral. The sandbox lives in its own directory, so the executable
+path is enough to tell our processes from everyone else's; the children are killed first
+because killing a parent on Windows leaves them behind.
+#>
+function Stop-Sandbox([string]$Dir) {
+    $own = @()
+    foreach ($proc in (Get-Process mix -ErrorAction SilentlyContinue)) {
+        try {
+            if ($proc.Path -and $proc.Path.StartsWith($Dir, [StringComparison]::OrdinalIgnoreCase)) {
+                $own += $proc
+            }
+        } catch {
+            # A process whose path cannot be read is not ours to kill.
+        }
+    }
+    foreach ($proc in $own) {
+        $children = Get-Descendants $proc.Id
+        if ($children.Count -gt 0) {
+            Stop-Process -Id $children -Force -ErrorAction SilentlyContinue
+        }
+        Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+    }
+}
+
 function New-Sandbox([string]$Name, [int]$Tabs) {
     $dir = Join-Path $env:TEMP "mix-baseline-$Name"
     Remove-Item -Recurse -Force $dir -ErrorAction SilentlyContinue
@@ -78,7 +107,7 @@ function New-Sandbox([string]$Name, [int]$Tabs) {
 }
 
 function Invoke-Run([string]$Dir, [int]$SettleSeconds, [int]$Expected) {
-    Get-Process mix, msedgewebview2 -ErrorAction SilentlyContinue | Stop-Process -Force
+    Stop-Sandbox $Dir
     Start-Sleep -Milliseconds 600
     $log = Join-Path $Dir 'UserData\logs\mix.log'
     Remove-Item $log -Force -ErrorAction SilentlyContinue
@@ -104,7 +133,7 @@ function Invoke-Run([string]$Dir, [int]$SettleSeconds, [int]$Expected) {
     $memory = Get-TreeMemory $proc.Id
     $procs = 1 + (Get-Descendants $proc.Id).Count
     Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
-    Get-Process mix -ErrorAction SilentlyContinue | Stop-Process -Force
+    Stop-Sandbox $Dir
     return [pscustomobject]@{ Startup = $startup; PrivateMB = $memory.PrivateMB; WorkingMB = $memory.WorkingMB; Processes = $procs }
 }
 
