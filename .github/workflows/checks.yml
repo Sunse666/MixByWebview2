@@ -1,11 +1,24 @@
-# Static checks that need no window.
+# Everything that has to pass before a build is worth shipping.
+#
+# The static checks need neither a window nor a toolchain, so they run on the cheapest
+# runner for the fastest signal. The Rust half needs a compiler, the Windows SDK and the
+# WebView2 link libraries, and the crate is Windows-only anyway (webview2-com, winreg,
+# WM_NCHITTEST), so that half runs on Windows.
 name: checks
 
 on:
   push:
   pull_request:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  # Seconds: the three lists no compiler can check for us.
   static:
     runs-on: ubuntu-latest
     steps:
@@ -19,3 +32,34 @@ jobs:
         run: node scripts/check-pages.js
       - name: i18n coverage
         run: node scripts/check-i18n.js
+
+  # The same script the machine runs before a build: tests, clippy, rustfmt, then the
+  # three checks above.
+  rust:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # The version the checks were last run with on the machine. clippy gains lints with
+      # every release, so a newer stable would fail this gate on findings the local build
+      # does not have; bump this together with the toolchain on the machine.
+      - name: Install the toolchain the checks were written for
+        run: rustup toolchain install 1.97.1 --profile minimal --component clippy,rustfmt
+      - name: Make it the default, so cargo below picks it up
+        run: rustup default 1.97.1
+      # After the toolchain is pinned, so the cache is keyed on the version that will
+      # actually compile.
+      - uses: Swatinem/rust-cache@v2
+      # check-all runs cargo with --offline, which is right on a machine that already has
+      # the crates and wrong on a fresh runner. One scoped fetch fills the cache for it;
+      # the scope matters, because the lockfile also carries the linux-only crates tauri
+      # depends on and fetching those costs a minute for nothing.
+      - name: Fetch the crates the offline checks will need
+        working-directory: src-tauri
+        run: cargo fetch --target x86_64-pc-windows-msvc
+      - name: Tests, clippy, rustfmt, pages, i18n, command lists
+        shell: pwsh
+        run: ./scripts/check-all.ps1
