@@ -3,6 +3,8 @@
 mod audio;
 mod browser_reg;
 mod com;
+#[cfg(debug_assertions)]
+mod debug;
 mod diag;
 mod zoom;
 mod downloads;
