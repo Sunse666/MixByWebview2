@@ -1,4 +1,4 @@
-use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
+﻿use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Emitter};
 
@@ -30,7 +30,7 @@ pub fn install(app: &AppHandle) -> tauri::Result<()> {
                 let _ = app.emit_to(target, "ui:new-tab", ());
             }
             "quit" => {
-                crate::ipc::save_sessions(&app);
+                crate::ipc::save_sessions(app);
                 app.exit(0);
             }
             _ => {}

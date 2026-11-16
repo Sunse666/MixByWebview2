@@ -85,23 +85,13 @@ pub struct WindowMaps {
 }
 
 /// Browsing data that outlives the window: history, bookmarks, site icons and zoom.
+#[derive(Default)]
 pub struct Library {
     pub history: Vec<Visit>,
     /// host -> favicon url, shared by history, bookmarks and the new tab page.
     pub favicons: crate::favicons::Favicons,
     pub bookmarks: Vec<Bookmark>,
     pub zoom: crate::zoom::ZoomStore,
-}
-
-impl Default for Library {
-    fn default() -> Self {
-        Self {
-            history: Vec::new(),
-            favicons: crate::favicons::Favicons::default(),
-            bookmarks: Vec::new(),
-            zoom: crate::zoom::ZoomStore::default(),
-        }
-    }
 }
 
 /// What the chrome is showing right now: menu, suggestions, find and translation.
@@ -238,7 +228,7 @@ impl AppState {
         self.cores
             .write()
             .entry(label.to_string())
-            .or_insert_with(Core::default);
+            .or_default();
     }
 
     pub fn remove_window(&self, label: &str) {
@@ -254,14 +244,14 @@ impl AppState {
         parking_lot::RwLockWriteGuard::try_map(self.cores.write(), |map| map.get_mut(label)).ok()
     }
 
-    /// Tab state of one window. A window whose state is gone 鈥?a webview callback that
-    /// outlived its window 鈥?gets an empty one instead of taking the process down.
+    /// Tab state of one window. A window whose state is gone 閳?a webview callback that
+    /// outlived its window 閳?gets an empty one instead of taking the process down.
     pub fn read_core(&self, label: &str) -> parking_lot::MappedRwLockReadGuard<'_, Core> {
         if let Some(core) = self.try_read_core(label) {
             return core;
         }
         let mut guard = self.cores.write();
-        guard.entry(label.to_string()).or_insert_with(Core::default);
+        guard.entry(label.to_string()).or_default();
         crate::logging::warn(&format!("no tab state for window {label}; using an empty one"));
         let read = parking_lot::RwLockWriteGuard::downgrade(guard);
         // The entry cannot vanish here: the lock was never released between the
@@ -505,7 +495,7 @@ pub(crate) fn emit_tabs(app: &AppHandle, label: &str) {
     let json = serde_json::to_string(&list).unwrap_or_else(|_| "{}".into());
     let _ = app.emit_to(label, "tabs:changed", list);
     if let Some(side) = app.get_webview(&format!("{label}-side")) {
-        let _ = side.eval(&format!(
+        let _ = side.eval(format!(
             "window.__mixSidebarTabs && window.__mixSidebarTabs({json})"
         ));
     }

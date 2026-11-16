@@ -153,7 +153,7 @@ impl Theme {
         self.tab_radius = self.tab_radius.clamp(0.0, 20.0);
         self.font_size = self.font_size.clamp(10.0, 20.0);
         self.opacity = self.opacity.clamp(0.4, 1.0);
-        if self.font_family.contains(|c: char| c == ';' || c == '{' || c == '}' || c == '"') {
+        if self.font_family.contains([';', '{', '}', '"']) {
             self.font_family.clear();
         }
         self.schema_version = SCHEMA;
@@ -183,17 +183,21 @@ mod tests {
 
     #[test]
     fn bad_font_family_is_dropped() {
-        let mut theme = Theme::default();
-        theme.font_family = "x; }".into();
+        let theme = Theme {
+            font_family: "x; }".to_string(),
+            ..Theme::default()
+        };
         assert_eq!(theme.sanitized().font_family, "Segoe UI, system-ui, sans-serif");
     }
 
     #[test]
     fn numbers_are_clamped() {
-        let mut theme = Theme::default();
-        theme.radius = 999.0;
-        theme.tab_radius = -4.0;
-        theme.font_size = 3.0;
+        let theme = Theme {
+            radius: 999.0,
+            tab_radius: -4.0,
+            font_size: 3.0,
+            ..Theme::default()
+        };
         let theme = theme.sanitized();
         assert_eq!(theme.radius, 32.0);
         assert_eq!(theme.tab_radius, 0.0);

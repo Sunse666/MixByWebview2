@@ -1,4 +1,4 @@
-pub mod crx;
+﻿pub mod crx;
 
 use crate::paths::AppDirs;
 use serde::Serialize;
@@ -252,7 +252,7 @@ fn read_manifest(dir: &Path) -> Result<Manifest, String> {
     let raw = std::fs::read_to_string(&path).map_err(|err| format!("no manifest.json: {err}"))?;
     let raw = raw.trim_start_matches('\u{feff}');
     let json: serde_json::Value =
-        serde_json::from_str(&raw).map_err(|err| format!("manifest.json is not valid JSON: {err}"))?;
+        serde_json::from_str(raw).map_err(|err| format!("manifest.json is not valid JSON: {err}"))?;
 
     let manifest_version = json
         .get("manifest_version")

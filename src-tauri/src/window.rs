@@ -1,4 +1,4 @@
-use std::time::Duration;
+﻿use std::time::Duration;
 
 use tauri::{
     webview::WebviewBuilder, AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, Webview,
@@ -248,7 +248,6 @@ pub fn open_window(
     state.add_window(label);
     let opts = state.opts.clone();
     let window_color = crate::overlay::parse_color(&state.theme.read().colors.bg);
-    drop(state);
 
     let win = Window::builder(app, label)
         .title("Mix")
@@ -315,7 +314,7 @@ pub fn open_window(
             WebviewUrl::App("index.html".into()),
         )
         .devtools(true)
-        .initialization_script(&format!("window.__mixWindow = \"{label}\";"));
+        .initialization_script(format!("window.__mixWindow = \"{label}\";"));
         let builder = tabs::apply_profile(builder, dir);
         if with_extensions {
             tabs::apply_extensions(builder, &opts)

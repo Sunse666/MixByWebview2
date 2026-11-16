@@ -446,9 +446,11 @@ mod tests {
 
     #[test]
     fn a_nonsense_number_does_not_become_nan() {
-        let mut settings = Settings::default();
-        settings.sidebar_width = f64::NAN;
-        settings.default_zoom = f64::INFINITY;
+        let mut settings = Settings {
+            sidebar_width: f64::NAN,
+            default_zoom: f64::INFINITY,
+            ..Settings::default()
+        };
         settings.sanitize();
         assert_eq!(settings.sidebar_width, default_sidebar_width());
         assert_eq!(settings.default_zoom, 1.0);
@@ -456,9 +458,14 @@ mod tests {
 
     #[test]
     fn the_panels_the_build_knows_survive_in_their_order() {
-        let mut settings = Settings::default();
-        settings.sidebar_views =
-            vec!["history".to_string(), "gone".to_string(), "bookmarks".to_string()];
+        let mut settings = Settings {
+            sidebar_views: vec![
+                "history".to_string(),
+                "gone".to_string(),
+                "bookmarks".to_string(),
+            ],
+            ..Settings::default()
+        };
         settings.sanitize();
         assert_eq!(
             settings.sidebar_views,

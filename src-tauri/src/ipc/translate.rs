@@ -1,4 +1,4 @@
-//! Page translation: in-place replacement and the proxy page fallback.
+﻿//! Page translation: in-place replacement and the proxy page fallback.
 
 use super::*;
 
@@ -74,7 +74,7 @@ pub async fn translate_done(
         crate::logging::warn(&format!("translation failed: {message}"));
         if let Some(chrome) = app.get_webview(&format!("{owner}-chrome")) {
             let text = serde_json::to_string(message).unwrap_or_else(|_| "\"failed\"".into());
-            let _ = chrome.eval(&format!(
+            let _ = chrome.eval(format!(
                 "window.__mixTranslateFailed && window.__mixTranslateFailed({text})"
             ));
         }

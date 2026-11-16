@@ -1,4 +1,4 @@
-use std::io::Write;
+﻿use std::io::Write;
 use std::path::{Path, PathBuf};
 
 /// Everything that goes into a support bundle.
@@ -92,6 +92,56 @@ pub fn log_tail(path: &Path, limit: usize) -> Vec<u8> {
         .unwrap_or(start);
     bytes[start..].to_vec()
 }
+
+/// Gathers the current state and writes a bundle.
+pub fn export(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    use tauri::Manager;
+
+    let state = app.state::<crate::ipc::AppState>();
+    let dirs = &state.dirs;
+
+    let read = |path: &Path| {
+        std::fs::read_to_string(path)
+            .map(|text| redact(&text))
+            .unwrap_or_else(|_| "{\"missing\": true}".to_string())
+    };
+
+    let settings = read(&dirs.settings_file);
+    let theme = read(&dirs.theme_file);
+    let session = read(&dirs.session_file);
+
+    let paths = serde_json::json!({
+        "root": dirs.root.display().to_string(),
+        "user_data": dirs.user_data.display().to_string(),
+        "crx": dirs.crx.display().to_string(),
+        "scripts": dirs.scripts.display().to_string(),
+        "fell_back": dirs.fell_back,
+    })
+    .to_string();
+    let paths = redact(&paths);
+
+    let extensions = serde_json::to_string(&state.extensions).unwrap_or_else(|_| "[]".into());
+    let scripts = serde_json::to_string(&state.scripts).unwrap_or_else(|_| "[]".into());
+    let webview = tauri::webview_version().unwrap_or_else(|_| "unknown".into());
+    let log = log_tail(&dirs.logs.join("mix.log"), 2 * 1024 * 1024);
+
+    let bundle = Bundle {
+        version: env!("CARGO_PKG_VERSION"),
+        git: env!("MIX_GIT"),
+        os: std::env::consts::OS,
+        webview: &webview,
+        settings: &settings,
+        theme: &theme,
+        session: &session,
+        paths: &paths,
+        extensions: &extensions,
+        scripts: &scripts,
+        log_tail: &log,
+    };
+
+    write_bundle(&dirs.diag, &bundle).map_err(|err| err.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -152,53 +202,4 @@ mod tests {
         let tail = log_tail(&scratch("missing").join("nope.log"), 1024);
         assert!(!tail.is_empty());
     }
-}
-
-/// Gathers the current state and writes a bundle.
-pub fn export(app: &tauri::AppHandle) -> Result<PathBuf, String> {
-    use tauri::Manager;
-
-    let state = app.state::<crate::ipc::AppState>();
-    let dirs = &state.dirs;
-
-    let read = |path: &Path| {
-        std::fs::read_to_string(path)
-            .map(|text| redact(&text))
-            .unwrap_or_else(|_| "{\"missing\": true}".to_string())
-    };
-
-    let settings = read(&dirs.settings_file);
-    let theme = read(&dirs.theme_file);
-    let session = read(&dirs.session_file);
-
-    let paths = serde_json::json!({
-        "root": dirs.root.display().to_string(),
-        "user_data": dirs.user_data.display().to_string(),
-        "crx": dirs.crx.display().to_string(),
-        "scripts": dirs.scripts.display().to_string(),
-        "fell_back": dirs.fell_back,
-    })
-    .to_string();
-    let paths = redact(&paths);
-
-    let extensions = serde_json::to_string(&state.extensions).unwrap_or_else(|_| "[]".into());
-    let scripts = serde_json::to_string(&state.scripts).unwrap_or_else(|_| "[]".into());
-    let webview = tauri::webview_version().unwrap_or_else(|_| "unknown".into());
-    let log = log_tail(&dirs.logs.join("mix.log"), 2 * 1024 * 1024);
-
-    let bundle = Bundle {
-        version: env!("CARGO_PKG_VERSION"),
-        git: env!("MIX_GIT"),
-        os: std::env::consts::OS,
-        webview: &webview,
-        settings: &settings,
-        theme: &theme,
-        session: &session,
-        paths: &paths,
-        extensions: &extensions,
-        scripts: &scripts,
-        log_tail: &log,
-    };
-
-    write_bundle(&dirs.diag, &bundle).map_err(|err| err.to_string())
 }

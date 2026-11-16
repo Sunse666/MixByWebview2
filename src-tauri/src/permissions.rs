@@ -102,10 +102,7 @@ pub fn poll(app: &AppHandle, id: u64) -> Option<bool> {
             ;
         match pending.get(&id) {
             None => return Some(false),
-            Some(prompt) => match prompt.answer {
-                None => return None,
-                Some(answer) => (answer, prompt.key.clone()),
-            },
+            Some(prompt) => (prompt.answer?, prompt.key.clone()),
         }
     };
     remember(app, &key, answer);

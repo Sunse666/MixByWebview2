@@ -1,4 +1,4 @@
-//! Tab lifecycle: creating, closing, selecting, ordering and the per-tab state the strip reads.
+﻿//! Tab lifecycle: creating, closing, selecting, ordering and the per-tab state the strip reads.
 
 use super::*;
 
@@ -76,7 +76,7 @@ pub async fn tab_select(app: AppHandle, window: tauri::Window, state: State<'_, 
             .and_then(|core| core.tabs.iter().find(|tab| tab.id == id).map(|tab| tab.scroll))
             .unwrap_or(0.0);
         if scroll > 0.0 {
-            let _ = webview.eval(&format!("window.scrollTo(0, {scroll});"));
+            let _ = webview.eval(format!("window.scrollTo(0, {scroll});"));
         }
     }
     emit_tabs(&app, window.label());
@@ -405,7 +405,7 @@ pub async fn thumb_stats(
     id: String,
 ) -> Result<ThumbStats, AppError> {
     let live = state
-        .try_read_core(&window_of_tab(&id))
+        .try_read_core(window_of_tab(&id))
         .map(|core| core.tabs.iter().filter(|tab| tab.alive).count().max(1) as u64)
         .unwrap_or(1);
     let handle = app.clone();
@@ -609,7 +609,7 @@ pub async fn tab_icon(
     }
 
     let (page_url, incognito) = state
-        .try_read_core(&window_of_tab(&id))
+        .try_read_core(window_of_tab(&id))
         .and_then(|core| {
             core.tabs
                 .iter()

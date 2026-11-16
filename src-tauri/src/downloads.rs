@@ -234,10 +234,7 @@ pub mod ops {
             let _ = with_op(url, |operation| unsafe { operation.Resume() });
             std::thread::sleep(std::time::Duration::from_millis(120));
         }
-        match with_op(url, |operation| unsafe { operation.Cancel() }) {
-            Ok(state) => Ok(state),
-            Err(err) => Err(err),
-        }
+        with_op(url, |operation| unsafe { operation.Cancel() })
     }
 
     /// The state the browser reports for this operation.

@@ -1,4 +1,4 @@
-//! Overlay panels: menus, bubbles and the tab card, each one a webview of its own.
+﻿//! Overlay panels: menus, bubbles and the tab card, each one a webview of its own.
 //!
 //! A panel's height belongs to its content, and only the page knows what that is. So a
 //! panel opens with the size this file keeps for its kind and then reports the height it
@@ -407,12 +407,12 @@ fn mark_page(app: &AppHandle, label: &str, open: bool) {
         .and_then(|core| core.selected.clone());
     if let Some(tab) = selected {
         if let Some(webview) = app.get_webview(&tab) {
-            let _ = webview.eval(&format!("window.__mixOverlay = {open};"));
+            let _ = webview.eval(format!("window.__mixOverlay = {open};"));
         }
     }
     // The sidebar is a webview of its own as well, and has to close it too.
     if let Some(side) = app.get_webview(&format!("{label}-side")) {
-        let _ = side.eval(&format!("window.__mixOverlay = {open};"));
+        let _ = side.eval(format!("window.__mixOverlay = {open};"));
     }
 }
 

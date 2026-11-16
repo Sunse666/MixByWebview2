@@ -41,7 +41,7 @@ pub fn register() -> Result<String, AppError> {
         write("Software\\Clients\\StartMenuInternet\\Mix\\Capabilities", "ApplicationIcon", Some(&format!("\"{exe}\",0")))?;
         write("Software\\RegisteredApplications", CLIENT, Some(&format!("Software\\Clients\\StartMenuInternet\\{CLIENT}\\Capabilities")))?;
         crate::logging::info(&format!("registered as a browser candidate: {exe}"));
-        return Ok(exe);
+        Ok(exe)
     }
     #[cfg(not(windows))]
     {

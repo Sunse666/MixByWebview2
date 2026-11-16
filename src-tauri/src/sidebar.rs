@@ -1,4 +1,4 @@
-//! The sidebar: a column beside the page holding bookmarks, downloads and history.
+﻿//! The sidebar: a column beside the page holding bookmarks, downloads and history.
 
 use crate::ipc::AppState;
 use crate::window::{logical_size, set_bounds};
@@ -113,7 +113,7 @@ pub fn tell_side(app: &AppHandle, label: &str, side: &str) {
         return;
     };
     let value = if side == "right" { "right" } else { "left" };
-    let _ = view.eval(&format!(
+    let _ = view.eval(format!(
         "window.__mixSidebarSide && window.__mixSidebarSide(\"{value}\")"
     ));
 }
@@ -125,7 +125,7 @@ pub fn tell_views(app: &AppHandle, label: &str, views: &[String]) {
         return;
     };
     let json = serde_json::to_string(views).unwrap_or_else(|_| "[]".into());
-    let _ = view.eval(&format!(
+    let _ = view.eval(format!(
         "window.__mixSidebarViews && window.__mixSidebarViews({json})"
     ));
 }

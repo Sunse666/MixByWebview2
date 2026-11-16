@@ -1,4 +1,4 @@
-use serde::Serialize;
+﻿use serde::Serialize;
 use tauri::{
     webview::WebviewBuilder, Emitter, LogicalPosition, LogicalSize, Manager, Url, Webview,
     WebviewUrl, Window,
@@ -160,8 +160,8 @@ pub fn broadcast_shortcuts(app: &tauri::AppHandle) {
     let ids: Vec<String> = state
         .cores
         .read()
-        .iter()
-        .flat_map(|(_, core)| core.tabs.iter().map(|tab| tab.id.clone()))
+        .values()
+        .flat_map(|core| core.tabs.iter().map(|tab| tab.id.clone()))
         .collect();
     for id in ids {
         if let Some(webview) = app.get_webview(&id) {
@@ -366,8 +366,8 @@ pub fn create(
             let _ = app.emit_to(owner.clone(), "ui:open-url", url.to_string());
             tauri::webview::NewWindowResponse::Deny
         })
-        .initialization_script(&custom_css_script())
-        .initialization_script(&shortcut_prefix())
+        .initialization_script(custom_css_script())
+        .initialization_script(shortcut_prefix())
         .initialization_script(SHORTCUT_FORWARDER)
         .on_navigation({
             let tab_id = id.to_string();
@@ -393,7 +393,7 @@ pub fn create(
                         .and_then(|core| core.tabs.iter().find(|tab| tab.id == id).map(|tab| tab.scroll))
                         .unwrap_or(0.0);
                     if scroll > 0.0 {
-                        let _ = webview.eval(&format!("window.scrollTo(0, {scroll});"));
+                        let _ = webview.eval(format!("window.scrollTo(0, {scroll});"));
                     }
                 }
                 // The address bar hears about a finished load from here, not from the
@@ -440,7 +440,7 @@ pub fn create(
                 .try_state::<crate::ipc::AppState>()
                 .and_then(|state| {
                     state
-                        .try_read_core(&crate::ipc::window_of_tab(&payload.id))
+                        .try_read_core(crate::ipc::window_of_tab(&payload.id))
                         .and_then(|core| core.tabs.iter().find(|t| t.id == payload.id).map(|t| t.url.clone()))
                 })
                 .unwrap_or_default();

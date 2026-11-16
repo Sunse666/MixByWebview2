@@ -1,4 +1,4 @@
-//! Address bar, suggestions, find, zoom and the url edit bridge.
+﻿//! Address bar, suggestions, find, zoom and the url edit bridge.
 
 use super::*;
 
@@ -112,7 +112,7 @@ fn tell_panel(app: &AppHandle, label: &str, level: f64) {
     };
     if let Some(overlay) = overlay {
         if let Some(view) = app.get_webview(&overlay) {
-            let _ = view.eval(&format!("window.__mixZoom && window.__mixZoom({level});"));
+            let _ = view.eval(format!("window.__mixZoom && window.__mixZoom({level});"));
         }
     }
 }
@@ -268,7 +268,7 @@ pub async fn suggest_active(
         return Ok(());
     };
     if let Some(webview) = app.get_webview(&label) {
-        let _ = webview.eval(&format!(
+        let _ = webview.eval(format!(
             "window.__mixSuggestActive && window.__mixSuggestActive({index})"
         ));
     }
@@ -314,7 +314,7 @@ fn push_suggestions(app: &AppHandle, window_label: &str, state: &AppState) -> Ve
     let height = if rows == 0.0 { 40.0 } else { rows * 34.0 + 14.0 };
     let width = state.ui.read().suggest_width;
     let _ = webview.set_size(tauri::LogicalSize::new(width, height));
-    let _ = webview.eval(&format!("window.__mixSuggest && window.__mixSuggest({json})"));
+    let _ = webview.eval(format!("window.__mixSuggest && window.__mixSuggest({json})"));
     items
 }
 
@@ -451,7 +451,7 @@ pub async fn url_action(
     let label = webview.window().label().to_string();
     if let Some(chrome) = app.get_webview(&format!("{label}-chrome")) {
         let encoded = serde_json::to_string(&action).unwrap_or_else(|_| "\"\"".to_string());
-        let _ = chrome.eval(&format!("window.__mixUrlAction && window.__mixUrlAction({encoded})"));
+        let _ = chrome.eval(format!("window.__mixUrlAction && window.__mixUrlAction({encoded})"));
     }
     Ok(())
 }

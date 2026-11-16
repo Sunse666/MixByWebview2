@@ -1,4 +1,4 @@
-use std::time::{Duration, Instant};
+﻿use std::time::{Duration, Instant};
 
 use tauri::{AppHandle, Manager, PhysicalPosition, PhysicalSize};
 
@@ -146,37 +146,6 @@ fn next_cell(current: Option<Cell>, direction: Direction) -> Option<Cell> {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::{next_cell, Cell, Direction};
-
-    #[test]
-    fn left_cycles_half_then_corners() {
-        assert_eq!(next_cell(None, Direction::Left), Some(Cell::LeftHalf));
-        assert_eq!(next_cell(Some(Cell::LeftHalf), Direction::Left), Some(Cell::TopLeft));
-        assert_eq!(next_cell(Some(Cell::TopLeft), Direction::Left), Some(Cell::BottomLeft));
-        assert_eq!(next_cell(Some(Cell::BottomLeft), Direction::Left), Some(Cell::LeftHalf));
-    }
-
-    #[test]
-    fn right_cycles_half_then_corners() {
-        assert_eq!(next_cell(None, Direction::Right), Some(Cell::RightHalf));
-        assert_eq!(next_cell(Some(Cell::RightHalf), Direction::Right), Some(Cell::TopRight));
-        assert_eq!(next_cell(Some(Cell::BottomRight), Direction::Right), Some(Cell::RightHalf));
-    }
-
-    #[test]
-    fn up_toggles_full_and_top_half() {
-        assert_eq!(next_cell(None, Direction::Up), Some(Cell::Full));
-        assert_eq!(next_cell(Some(Cell::Full), Direction::Up), Some(Cell::TopHalf));
-    }
-
-    #[test]
-    fn down_restores_after_the_bottom_half() {
-        assert_eq!(next_cell(None, Direction::Down), Some(Cell::BottomHalf));
-        assert_eq!(next_cell(Some(Cell::BottomHalf), Direction::Down), None);
-    }
-}
 /// Global hotkeys are the primary trigger; window keys still work.
 pub fn install_hotkeys(app: &AppHandle) -> bool {
     use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
@@ -212,4 +181,36 @@ pub fn install_hotkeys(app: &AppHandle) -> bool {
         crate::logging::warn("docking falls back to the in-window shortcuts");
     }
     ok
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{next_cell, Cell, Direction};
+
+    #[test]
+    fn left_cycles_half_then_corners() {
+        assert_eq!(next_cell(None, Direction::Left), Some(Cell::LeftHalf));
+        assert_eq!(next_cell(Some(Cell::LeftHalf), Direction::Left), Some(Cell::TopLeft));
+        assert_eq!(next_cell(Some(Cell::TopLeft), Direction::Left), Some(Cell::BottomLeft));
+        assert_eq!(next_cell(Some(Cell::BottomLeft), Direction::Left), Some(Cell::LeftHalf));
+    }
+
+    #[test]
+    fn right_cycles_half_then_corners() {
+        assert_eq!(next_cell(None, Direction::Right), Some(Cell::RightHalf));
+        assert_eq!(next_cell(Some(Cell::RightHalf), Direction::Right), Some(Cell::TopRight));
+        assert_eq!(next_cell(Some(Cell::BottomRight), Direction::Right), Some(Cell::RightHalf));
+    }
+
+    #[test]
+    fn up_toggles_full_and_top_half() {
+        assert_eq!(next_cell(None, Direction::Up), Some(Cell::Full));
+        assert_eq!(next_cell(Some(Cell::Full), Direction::Up), Some(Cell::TopHalf));
+    }
+
+    #[test]
+    fn down_restores_after_the_bottom_half() {
+        assert_eq!(next_cell(None, Direction::Down), Some(Cell::BottomHalf));
+        assert_eq!(next_cell(Some(Cell::BottomHalf), Direction::Down), None);
+    }
 }

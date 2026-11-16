@@ -1,4 +1,4 @@
-//! Debug hooks: the things only a debug build can be asked to do.
+﻿//! Debug hooks: the things only a debug build can be asked to do.
 //!
 //! Every one of them is armed by an environment variable and starts a thread that waits
 //! a second or two. They exist because this machine cannot be driven from a script: the
@@ -71,7 +71,6 @@ pub fn install(app: &mut tauri::App) {
             let _ = handle.run_on_main_thread(move || {
                 let state = target.state::<AppState>();
                 let url = state.settings.read().start_url.clone();
-                drop(state);
                 match crate::window::open_window(&target, "w2", vec![(url, 0.0, false)], 0, None) {
                     Ok(_) => crate::logging::info("debug: second window opened"),
                     Err(err) => crate::logging::warn(&format!("debug window failed: {err}")),
