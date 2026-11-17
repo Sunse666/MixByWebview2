@@ -317,18 +317,12 @@ fn place(app: &AppHandle, win: &tauri::Window, kind: &str, frame: Frame) -> Resu
     )?;
 
     if base(kind) != "suggest" && base(kind) != "thumb" {
+        // Once, and no retry. Asking a second time a moment later was tried and it closes
+        // panels instead of keeping them: the request lands on the window rather than the
+        // child webview, so the panel's document sees a blur and dismisses itself - the find
+        // bar appeared and vanished. A panel that really cannot take the keyboard needs a
+        // measurement first, not another guess.
         let _ = webview.set_focus();
-        // A webview created a moment ago does not always take the focus on the first ask,
-        // and a panel whose whole point is typing is useless without it - the find bar would
-        // silently type into the page behind. One retry, briefly, is cheaper than a panel
-        // that works only when the timing happens to be kind.
-        if needs_keyboard(kind) {
-            let retry = webview.clone();
-            std::thread::spawn(move || {
-                std::thread::sleep(std::time::Duration::from_millis(80));
-                let _ = retry.set_focus();
-            });
-        }
     }
     if base(kind) == "thumb" {
         let chrome_label = format!("{}-chrome", win.label());
@@ -485,15 +479,6 @@ pub fn remark_page(app: &AppHandle, window_label: &str, webview_label: &str) {
     if let Some(webview) = app.get_webview(webview_label) {
         let _ = webview.eval("window.__mixOverlay = true;");
     }
-}
-
-/// Panels that exist to be typed into: losing the race for the keyboard makes them useless
-/// in a way the user cannot work around.
-fn needs_keyboard(kind: &str) -> bool {
-    matches!(
-        base(kind),
-        "find" | "settings" | "palette" | "tab_search" | "permission"
-    )
 }
 
 /// Where the keyboard goes when an overlay closes.
