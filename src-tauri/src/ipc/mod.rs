@@ -479,6 +479,9 @@ pub struct TabMeta {
     pinned: bool,
     icon: Option<String>,
     loading: bool,
+    /// From the audio poller's cache, so drawing the strip costs no COM calls.
+    playing: bool,
+    muted: bool,
 }
 
 #[derive(Clone, Serialize)]
@@ -515,15 +518,20 @@ fn snapshot(core: &Core, label: &str) -> TabList {
         tabs: core
             .tabs
             .iter()
-            .map(|tab| TabMeta {
-                id: tab.id.clone(),
-                url: tab.url.clone(),
-                title: tab.title.clone(),
-                alive: tab.alive,
-                incognito: tab.incognito,
-                pinned: tab.pinned,
-                icon: tab.icon.clone(),
-                loading: tab.loading,
+            .map(|tab| {
+                let audio = crate::audio::cached(&tab.id);
+                TabMeta {
+                    id: tab.id.clone(),
+                    url: tab.url.clone(),
+                    title: tab.title.clone(),
+                    alive: tab.alive,
+                    incognito: tab.incognito,
+                    pinned: tab.pinned,
+                    icon: tab.icon.clone(),
+                    loading: tab.loading,
+                    playing: audio.map(|state| state.playing).unwrap_or(false),
+                    muted: audio.map(|state| state.muted).unwrap_or(false),
+                }
             })
             .collect(),
         selected: core.selected.clone(),

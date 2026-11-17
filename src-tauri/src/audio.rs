@@ -10,8 +10,26 @@ pub struct Audio {
     pub muted: bool,
 }
 
-/// Last state pushed to the ui, so an unchanged second costs no event.
-static LAST: Mutex<Option<std::collections::HashMap<String, Audio>>> = Mutex::new(None);
+/// Last state read for each tab: the poller writes it, the tab strip reads it.
+///
+/// Keeping it means a strip redraw costs no COM calls, and the redraw happens far more
+/// often than the state changes.
+static CACHE: Mutex<Option<std::collections::HashMap<String, Audio>>> = Mutex::new(None);
+
+/// What the last poll saw for one tab, if it has been polled.
+pub fn cached(id: &str) -> Option<Audio> {
+    CACHE.lock().as_ref().and_then(|map| map.get(id).copied())
+}
+
+/// Records a state and says whether it is news.
+pub(crate) fn remember(id: &str, audio: Audio) -> bool {
+    let mut guard = CACHE.lock();
+    let map = guard.get_or_insert_with(std::collections::HashMap::new);
+    let previous = map.insert(id.to_string(), audio);
+    // A first, quiet reading is not news: every tab would otherwise be announced once at
+    // startup, which is a strip redraw per tab for nothing.
+    previous != Some(audio) && (previous.is_some() || audio.playing || audio.muted)
+}
 
 #[cfg(windows)]
 fn read(webview: &tauri::Webview) -> Option<Audio> {
@@ -79,7 +97,11 @@ pub fn set_muted(_webview: &tauri::Webview, _muted: bool) -> bool {
     false
 }
 
-/// Polls the selected tab of every window and emits when the state moves.
+/// Polls every live tab of every window and emits when a state moves.
+///
+/// A background tab that starts playing music is exactly what the strip's speaker is for, so
+/// this cannot only watch the tab on screen. It is one COM round trip per live tab, every
+/// 1.2 s, and nothing is emitted unless a value actually changed.
 pub fn watch(app: tauri::AppHandle) {
     std::thread::spawn(move || loop {
         std::thread::sleep(Duration::from_millis(1200));
@@ -90,7 +112,13 @@ pub fn watch(app: tauri::AppHandle) {
             .cores
             .read()
             .iter()
-            .filter_map(|(window, core)| core.selected.clone().map(|id| (window.clone(), id)))
+            .flat_map(|(window, core)| {
+                core.tabs
+                    .iter()
+                    .filter(|tab| tab.alive)
+                    .map(|tab| (window.clone(), tab.id.clone()))
+                    .collect::<Vec<_>>()
+            })
             .collect();
         for (window, id) in targets {
             let Some(webview) = app.get_webview(&id) else {
@@ -99,12 +127,7 @@ pub fn watch(app: tauri::AppHandle) {
             let Some(audio) = read(&webview) else {
                 continue;
             };
-            let changed = {
-                let mut last = LAST.lock();
-                let map = last.get_or_insert_with(std::collections::HashMap::new);
-                map.insert(id.clone(), audio) != Some(audio)
-            };
-            if changed {
+            if remember(&id, audio) {
                 let _ = app.emit_to(
                     window,
                     "tab:audio",
@@ -112,7 +135,7 @@ pub fn watch(app: tauri::AppHandle) {
                 );
             }
         }
-        let mut last = LAST.lock();
+        let mut last = CACHE.lock();
         if let Some(map) = last.as_mut() {
             if map.len() > 200 {
                 map.retain(|id, _| app.get_webview(id).is_some());

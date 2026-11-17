@@ -520,15 +520,17 @@ pub async fn thumb_stats(
     })
 }
 
-/// Mutes or unmutes the selected tab; with no argument it flips.
+/// Mutes or unmutes a tab; the selected one unless an id is given, and with no `muted` it
+/// flips whatever the state is.
 #[tauri::command]
 pub async fn tab_mute(
     app: AppHandle,
     window: tauri::Window,
     state: State<'_, AppState>,
+    id: Option<String>,
     muted: Option<bool>,
 ) -> Result<bool, AppError> {
-    let id = selected_label(&state, &window);
+    let id = id.unwrap_or_else(|| selected_label(&state, &window));
     if id.is_empty() {
         return Ok(false);
     }
@@ -545,6 +547,8 @@ pub async fn tab_mute(
         playing: current.playing,
         muted: target,
     });
+    // The strip reads the cache, so it has to know before the next poll comes round.
+    crate::audio::remember(&id, now);
     crate::logging::info(&format!("tab {id} muted={} ({ok})", now.muted));
     let _ = app.emit_to(
         window.label(),

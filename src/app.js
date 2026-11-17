@@ -384,6 +384,22 @@ function fillTab(el, tab) {
     invoke("tab_close", { id: tab.id });
   });
 
+  // A tab making noise says so, and the badge silences it without switching to it. A muted
+  // tab keeps the badge even in silence: otherwise there is no way to unmute it again from
+  // the strip. Both states come from the Rust poller's cache, so drawing costs nothing.
+  const speaking = Boolean(tab.playing);
+  const silenced = Boolean(tab.muted);
+  const audio = document.createElement("button");
+  audio.className = "tab-audio" + (silenced ? " is-muted" : "");
+  audio.tabIndex = -1;
+  audio.textContent = silenced ? "\u{1F507}" : "\u{1F50A}";
+  audio.title = t(silenced ? "Unmute tab" : "Mute tab");
+  audio.addEventListener("mousedown", (event) => event.stopPropagation());
+  audio.addEventListener("click", (event) => {
+    event.stopPropagation();
+    invoke("tab_mute", { id: tab.id, muted: !silenced });
+  });
+
   const iconUrl = String(tab.icon || "");
   const looksReal =
     (iconUrl.startsWith("data:image/") && iconUrl.length > 64) ||
@@ -406,11 +422,11 @@ function fillTab(el, tab) {
     pin.className = "tab-pin";
     pin.textContent = "\u25C6";
     pin.title = "Pinned";
-    el.replaceChildren(icon, label, pin);
+    el.replaceChildren(icon, label, ...(speaking || silenced ? [audio] : []), pin);
   } else if (settings.tab_show_close === false) {
-    el.replaceChildren(icon, label);
+    el.replaceChildren(icon, label, ...(speaking || silenced ? [audio] : []));
   } else {
-    el.replaceChildren(icon, label, close);
+    el.replaceChildren(icon, label, ...(speaking || silenced ? [audio] : []), close);
   }
 }
 
@@ -1160,6 +1176,9 @@ async function boot() {
     if (!payload.id) return;
     audioState[payload.id] = { playing: Boolean(payload.playing), muted: Boolean(payload.muted) };
     renderToolbar();
+    // The tab's own badge comes from the same state, so the strip has to be redrawn - and
+    // this fires at most twice per tab per song, not on a timer.
+    renderTabs();
   });
   await listen("settings:changed", async () => {
     settings = await invoke("settings_get");
