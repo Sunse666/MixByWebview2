@@ -428,6 +428,8 @@ const DICT = {
     "Blocked": "已阻止",
     "Recently closed": "最近关闭",
     "Nothing closed yet.": "还没有关闭过的标签页",
+    "Always translate this site": "总是翻译此站点",
+    "Stop translating this site": "不再翻译此站点",
   },
 };
 

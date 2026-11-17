@@ -37,8 +37,167 @@ pub async fn translate_restore(
     if let Some(webview) = app.get_webview(&id) {
         let _ = webview.eval("window.__mixStopTranslate && window.__mixStopTranslate()");
     }
-    state.ui.write().translated_tabs.remove(&id);
+    let url = state
+        .try_read_core(window_of_tab(&id))
+        .and_then(|core| {
+            core.tabs
+                .iter()
+                .find(|tab| tab.id == id)
+                .map(|tab| tab.url.clone())
+        })
+        .unwrap_or_default();
+    {
+        let mut ui = state.ui.write();
+        ui.translated_tabs.remove(&id);
+        // Remember which page the user wants untranslated: on a site that is always
+        // translated, the next load would otherwise put the translation straight back.
+        if !url.is_empty() {
+            ui.translate_skip.insert(id, url);
+        }
+    }
     Ok(())
+}
+
+/// The site of a page, as the always-translate list stores it.
+///
+/// The host only, without `www.`, in lower case: a list holding whole urls would never match
+/// twice, and the comparison at page load is exact.
+fn site_of(url: &str) -> Option<String> {
+    let parsed = tauri::Url::parse(url).ok()?;
+    if !matches!(parsed.scheme(), "http" | "https") {
+        return None;
+    }
+    let host = parsed.host_str()?.trim_start_matches("www.").to_lowercase();
+    (!host.is_empty()).then_some(host)
+}
+
+fn site_of_tab(state: &AppState, tab: &str) -> Option<String> {
+    let core = state.try_read_core(window_of_tab(tab))?;
+    let url = core.tabs.iter().find(|entry| entry.id == tab)?.url.clone();
+    site_of(&url)
+}
+
+/// Whether the page in this window is on a site that is translated on sight.
+#[tauri::command]
+pub async fn translate_site_state(
+    window: tauri::Window,
+    state: State<'_, AppState>,
+) -> Result<bool, AppError> {
+    let id = selected_label(&state, &window);
+    let Some(host) = site_of_tab(&state, &id) else {
+        return Ok(false);
+    };
+    Ok(state
+        .settings
+        .read()
+        .translate_hosts
+        .iter()
+        .any(|known| known == &host))
+}
+
+/// Adds the current page's site to the always-translate list, or takes it out.
+///
+/// Turning it on also translates the page on screen: setting a preference and leaving that
+/// page in its original language would look like nothing happened.
+#[tauri::command]
+pub async fn translate_site(
+    app: AppHandle,
+    window: tauri::Window,
+    state: State<'_, AppState>,
+    enable: bool,
+) -> Result<bool, AppError> {
+    let id = selected_label(&state, &window);
+    let Some(host) = site_of_tab(&state, &id) else {
+        return Err(AppError::new(
+            "no_site",
+            "this page has no site to remember",
+        ));
+    };
+    let mut hosts = state.settings.read().translate_hosts.clone();
+    hosts.retain(|known| known != &host);
+    if enable {
+        hosts.push(host.clone());
+    }
+    apply_settings_patch(&state, serde_json::json!({ "translate_hosts": hosts }))?;
+    crate::logging::info(&format!(
+        "translate {} for {host}",
+        if enable { "always" } else { "never again" }
+    ));
+    if enable {
+        {
+            let mut ui = state.ui.write();
+            ui.translated_tabs.remove(&id);
+            ui.translate_skip.remove(&id);
+            ui.translate_result = (0, None);
+        }
+        if let Some(webview) = app.get_webview(&id) {
+            let _ = webview.eval("window.__mixStartTranslate && window.__mixStartTranslate()");
+        }
+    }
+    Ok(enable)
+}
+
+/// Translates a page that has just loaded, if its site is on the always-translate list.
+///
+/// A page the user asked to see in its original language is left alone, and so is one that
+/// has already been translated.
+pub(crate) fn auto_translate(app: &AppHandle, tab: &str, url: &str) {
+    let Some(state) = app.try_state::<AppState>() else {
+        return;
+    };
+    let Some(host) = site_of(url) else {
+        return;
+    };
+    if !state
+        .settings
+        .read()
+        .translate_hosts
+        .iter()
+        .any(|known| known == &host)
+    {
+        return;
+    }
+    {
+        let mut ui = state.ui.write();
+        if ui.translated_tabs.contains(tab)
+            || ui
+                .translate_skip
+                .get(tab)
+                .is_some_and(|skipped| skipped == url)
+        {
+            return;
+        }
+        ui.translate_skip.remove(tab);
+        ui.translate_result = (0, None);
+    }
+    if let Some(webview) = app.get_webview(tab) {
+        crate::logging::info(&format!("always translate: {host}"));
+        let _ = webview.eval("window.__mixStartTranslate && window.__mixStartTranslate()");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::site_of;
+
+    #[test]
+    fn a_site_is_a_bare_lowercase_host() {
+        assert_eq!(
+            site_of("https://www.Example.COM/a/b?c=1").as_deref(),
+            Some("example.com")
+        );
+        assert_eq!(
+            site_of("http://sub.example.com:8080/x").as_deref(),
+            Some("sub.example.com")
+        );
+    }
+
+    #[test]
+    fn nothing_to_remember_on_a_bare_page() {
+        assert_eq!(site_of("about:blank"), None);
+        assert_eq!(site_of("data:text/html,hi"), None);
+        assert_eq!(site_of("not a url"), None);
+    }
 }
 
 /// Whether the selected tab currently shows translated text.

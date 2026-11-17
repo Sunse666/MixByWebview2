@@ -394,6 +394,8 @@ pub fn create(
                 // A document that replaced the one a panel was opened over has no idea the
                 // panel is there, so it would not close it on the next click.
                 crate::overlay::remark_page(&app, crate::ipc::window_of_tab(&id), &id);
+                // Sites the user asked to always translate are translated as they arrive.
+                crate::ipc::auto_translate(&app, &id, payload.url().as_str());
             }
             if loading {
                 if let Some(state) = app.try_state::<crate::ipc::AppState>() {

@@ -211,6 +211,14 @@ async function bootAppMenu() {
       divider();
       row("\u2399", "Print", "Ctrl+P", act(() => invoke("tab_print")));
       row("\u4e16", "Translate this page", "", () => invoke("overlay_toggle", { kind: "translate" }));
+      // Kept out of the settings page: a site is only ever "this one", and the page in front
+      // of the user is what decides which.
+      const always = await invoke("translate_site_state").catch(() => false);
+      row("\u25c9", always ? "Stop translating this site" : "Always translate this site", always ? "\u2713" : "", async () => {
+        await invoke("translate_site", { enable: !always }).catch(() => {});
+        await render("root");
+        await close();
+      });
       row("\u21aa", "Open in the full translator", "", async () => {
         await invoke("translate_page", { target: null }).catch((error) => report(String(error)));
         await close();

@@ -283,6 +283,11 @@ pub async fn tab_close(
     // Per-tab bookkeeping that nothing would ever read again once the tab is gone.
     state.windows.shown_at.write().remove(&id);
     state.windows.url_published.write().remove(&id);
+    {
+        let mut ui = state.ui.write();
+        ui.translated_tabs.remove(&id);
+        ui.translate_skip.remove(&id);
+    }
 
     let (go_left, next_url) = {
         let settings = state.settings.read();

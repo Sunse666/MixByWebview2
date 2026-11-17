@@ -55,6 +55,8 @@ pub struct Settings {
     pub toolbar: Vec<String>,
     /// Extensions the user hid from the toolbar, by name.
     pub hidden_extensions: Vec<String>,
+    /// Sites that are translated as soon as they load, by host, without `www.`.
+    pub translate_hosts: Vec<String>,
     /// Extensions that must not load at all; takes effect on the next start.
     pub disabled_extensions: Vec<String>,
     /// Last state the browser confirmed for an extension, by folder.
@@ -169,6 +171,7 @@ impl Default for Settings {
                 "downloads".into(),
             ],
             hidden_extensions: Vec::new(),
+            translate_hosts: Vec::new(),
             disabled_extensions: Vec::new(),
             extension_state: std::collections::BTreeMap::new(),
             translate_to: "zh".into(),
@@ -285,6 +288,16 @@ impl Settings {
         }
 
         self.keep_alive_hosts = self.keep_alive_hosts.trim().to_string();
+        // Hosts, not urls: a list that accumulates junk entries stops matching anything, and
+        // the comparison at page load is exact.
+        self.translate_hosts = self
+            .translate_hosts
+            .iter()
+            .map(|host| host.trim().trim_start_matches("www.").to_ascii_lowercase())
+            .filter(|host| !host.is_empty())
+            .collect();
+        self.translate_hosts.dedup();
+        self.translate_hosts.truncate(200);
         self.drag_threshold = self.drag_threshold.clamp(8, 120);
         self.gesture_width = self.gesture_width.clamp(1, 10);
         self.gesture_threshold = self.gesture_threshold.clamp(10, 200);

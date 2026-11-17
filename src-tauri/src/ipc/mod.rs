@@ -106,6 +106,9 @@ pub struct Ui {
     pub translate_result: (usize, Option<String>),
     /// Tabs whose text the translator replaced.
     pub translated_tabs: std::collections::HashSet<String>,
+    /// Tab -> the url the user asked to see in its original language. The always-translate
+    /// list would otherwise put the translation straight back on that page.
+    pub translate_skip: std::collections::HashMap<String, String>,
     /// Whether the last in-page search matched anything.
     pub find_hit: bool,
 }
@@ -176,6 +179,7 @@ impl AppState {
                 suggest_width: 420.0,
                 translate_result: (0, None),
                 translated_tabs: std::collections::HashSet::new(),
+                translate_skip: std::collections::HashMap::new(),
                 find_hit: true,
             }),
             nav: parking_lot::RwLock::new(Nav {

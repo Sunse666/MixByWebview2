@@ -75,6 +75,8 @@
     "allow-translate-done",
     "allow-translate-texts",
     "allow-translate-page",
+    "allow-translate-site",
+    "allow-translate-site-state",
     "allow-page-failed",
     "allow-tab-scroll",
     "allow-url-type",

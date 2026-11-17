@@ -186,6 +186,8 @@ fn main() {
             ipc::translate_done,
             ipc::translate_texts,
             ipc::translate_page,
+            ipc::translate_site,
+            ipc::translate_site_state,
             ipc::page_failed,
             ipc::tab_scroll,
             ipc::url_type,
