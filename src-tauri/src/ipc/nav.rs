@@ -412,6 +412,28 @@ fn exit_url_edit(app: &AppHandle, window_label: &str) {
     }
 }
 
+/// The javascript that drives the page's own find.
+///
+/// `window.find(aString, caseSensitive, backwards, wrapAround, wholeWord, searchInFrames,
+/// showDialog)` takes seven positional arguments, and a value in the wrong slot is invisible:
+/// `restart` used to be passed as `wholeWord`, so every fresh query was searched as a whole
+/// word. Typing "exam" over a page that says "example" reported no match, while the arrows -
+/// which passed nothing and therefore searched for a substring - highlighted it.
+///
+/// Restarting means "this is a new query, start from the top of the document", which is what
+/// dropping the current selection does; `window.find` otherwise carries on from it.
+fn find_script(query: &str, back: bool, restart: bool) -> String {
+    let reset = if restart {
+        "try{window.getSelection().removeAllRanges();}catch(e){}"
+    } else {
+        ""
+    };
+    format!(
+        "(function(){{{reset}var hit=window.find({query}, false, {back}, true, false, false, false);\
+window.__TAURI_INTERNALS__.invoke('find_result', {{ hit: Boolean(hit) }}).catch(function(){{}});}})()"
+    )
+}
+
 /// Drives the browser's own find through the page.
 #[tauri::command]
 pub async fn find_in_page(
@@ -428,11 +450,7 @@ pub async fn find_in_page(
     };
     let query = serde_json::to_string(&text).unwrap_or_else(|_| "\"\"".into());
     let back = forward.map(|value| !value).unwrap_or(false);
-    let again = restart.unwrap_or(false);
-    let script = format!(
-        "(function(){{var hit=window.find({query}, false, {back}, true, {again}, false, false);\
-window.__TAURI_INTERNALS__.invoke('find_result', {{ hit: Boolean(hit) }}).catch(function(){{}});}})()"
-    );
+    let script = find_script(&query, back, restart.unwrap_or(false));
     let _ = webview.eval(&script);
     Ok(())
 }
@@ -468,4 +486,34 @@ pub async fn url_action(
         ));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::find_script;
+
+    #[test]
+    fn a_partial_word_is_not_searched_as_a_whole_word() {
+        // The reported symptom: a page says "example", the bar says no match for "exam".
+        let typing = find_script("\"exam\"", false, true);
+        assert!(
+            typing.contains("find(\"exam\", false, false, true, false, false, false)"),
+            "wholeWord must stay false while typing: {typing}"
+        );
+    }
+
+    #[test]
+    fn restarting_starts_at_the_top_instead_of_setting_a_flag() {
+        let typing = find_script("\"exam\"", false, true);
+        assert!(
+            typing.contains("removeAllRanges"),
+            "a new query starts over"
+        );
+        let stepping = find_script("\"exam\"", true, false);
+        assert!(!stepping.contains("removeAllRanges"), "a step continues");
+        assert!(
+            stepping.contains("find(\"exam\", false, true, true, false, false, false)"),
+            "and only backwards differs: {stepping}"
+        );
+    }
 }
