@@ -391,6 +391,9 @@ pub fn create(
                 // The address bar hears about a finished load from here, not from the
                 // poll: this is the one moment the url is known to be the document's.
                 crate::window::publish_loaded(&app, &id, payload.url().as_str());
+                // A document that replaced the one a panel was opened over has no idea the
+                // panel is there, so it would not close it on the next click.
+                crate::overlay::remark_page(&app, crate::ipc::window_of_tab(&id), &id);
             }
             if loading {
                 if let Some(state) = app.try_state::<crate::ipc::AppState>() {

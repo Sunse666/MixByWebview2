@@ -60,6 +60,9 @@ pub struct WindowMaps {
     pub overlay: parking_lot::RwLock<std::collections::HashMap<String, String>>,
     /// Whether each window's overlay came from a page rather than the chrome strip.
     pub overlay_from_page: parking_lot::RwLock<std::collections::HashMap<String, bool>>,
+    /// Which panel is open in each window, so a toggle can tell being asked to close that
+    /// one apart from being asked to show another.
+    pub overlay_kind: parking_lot::RwLock<std::collections::HashMap<String, String>>,
     /// Windows whose overlay is the tab hover card.
     pub overlay_thumb: parking_lot::RwLock<std::collections::HashSet<String>>,
     /// The geometry each window's overlay was opened with. The page reports a new
@@ -251,6 +254,7 @@ impl AppState {
         self.windows.suggest_text.write().remove(label);
         self.windows.url_edit.write().remove(label);
         self.windows.overlay_frame.write().remove(label);
+        self.windows.overlay_kind.write().remove(label);
         self.windows.overlay_thumb.write().remove(label);
     }
 

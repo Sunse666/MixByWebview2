@@ -499,13 +499,17 @@ pub async fn overlay_toggle(
     x: Option<f64>,
     y: Option<f64>,
 ) -> Result<bool, AppError> {
-    let open = app
+    // The same panel closes; a different one is shown instead. Closing whatever happened to
+    // be open and leaving nothing - which is what this did - made a click on one button while
+    // another panel was showing look like it had done nothing at all.
+    let current = app
         .state::<AppState>()
         .windows
-        .overlay
+        .overlay_kind
         .read()
-        .contains_key(window.label());
-    if open {
+        .get(window.label())
+        .cloned();
+    if current.as_deref() == Some(crate::overlay::base(&kind)) {
         crate::overlay::close(&app, window.label());
         return Ok(false);
     }

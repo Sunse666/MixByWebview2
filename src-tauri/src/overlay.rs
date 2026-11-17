@@ -39,6 +39,10 @@ pub struct Frame {
     pub y: f64,
     pub width: f64,
     pub height: f64,
+    /// How far the panel may move up when its content grows: the bottom of the chrome strip
+    /// for a panel that hangs under the strip, and 4 px for one that hangs off a click or a
+    /// control, whose own position is the thing the user is looking at.
+    pub floor: f64,
 }
 
 impl Frame {
@@ -99,7 +103,7 @@ pub fn follows_content(kind: &str) -> bool {
 }
 
 /// The kind without its "&name=value" tail.
-fn base(kind: &str) -> &str {
+pub(crate) fn base(kind: &str) -> &str {
     kind.split('&').next().unwrap_or(kind)
 }
 
@@ -192,6 +196,7 @@ pub fn open(app: &AppHandle, win: &tauri::Window, kind: &str) -> Result<(), Stri
             y: chrome_h + 6.0,
             width: width.clamp(MIN_W, win_w),
             height: height.min(room),
+            floor: chrome_h + 2.0,
         },
     )
 }
@@ -232,6 +237,7 @@ pub fn open_sized(
             y,
             width: size.0.max(MIN_W),
             height: size.1.max(MIN_H),
+            floor: 4.0,
         },
     )
 }
@@ -255,6 +261,7 @@ pub fn open_under(
             y,
             width,
             height,
+            floor: 4.0,
         },
     )
 }
@@ -280,6 +287,7 @@ pub fn open_url(
             y,
             width: width.max(MIN_W),
             height: height.max(MIN_H),
+            floor: 4.0,
         },
     )
 }
@@ -310,6 +318,17 @@ fn place(app: &AppHandle, win: &tauri::Window, kind: &str, frame: Frame) -> Resu
 
     if base(kind) != "suggest" && base(kind) != "thumb" {
         let _ = webview.set_focus();
+        // A webview created a moment ago does not always take the focus on the first ask,
+        // and a panel whose whole point is typing is useless without it - the find bar would
+        // silently type into the page behind. One retry, briefly, is cheaper than a panel
+        // that works only when the timing happens to be kind.
+        if needs_keyboard(kind) {
+            let retry = webview.clone();
+            std::thread::spawn(move || {
+                std::thread::sleep(std::time::Duration::from_millis(80));
+                let _ = retry.set_focus();
+            });
+        }
     }
     if base(kind) == "thumb" {
         let chrome_label = format!("{}-chrome", win.label());
@@ -321,6 +340,12 @@ fn place(app: &AppHandle, win: &tauri::Window, kind: &str, frame: Frame) -> Resu
         let state = app.state::<crate::ipc::AppState>();
         let mut slots = state.windows.overlay.write();
         slots.insert(win.label().to_string(), label.clone());
+        // What is open, so a toggle can tell "this panel" from "another panel".
+        state
+            .windows
+            .overlay_kind
+            .write()
+            .insert(win.label().to_string(), base(kind).to_string());
         // Only a panel that measures itself gets a frame to resize against; a fixed one
         // keeps the size it was opened with for its whole life.
         if follows_content(kind) {
@@ -341,12 +366,13 @@ fn place(app: &AppHandle, win: &tauri::Window, kind: &str, frame: Frame) -> Resu
 
 /// Where a panel goes once its content has been measured.
 ///
-/// `floor` is how far down the chrome strip reaches: a panel that hangs under it may move
-/// up to fit a tall list, but never over the strip. It used to stop at 4 px from the top
-/// instead, which put the app menu on top of the tab strip and the toolbar as soon as its
-/// own content was taller than the window - a long menu should scroll, not cover.
-fn fitted(frame: Frame, win_h: f64, floor: f64, height: f64) -> (f64, f64) {
-    let floor = floor.clamp(4.0, (win_h - MARGIN).max(4.0));
+/// `frame.floor` is how far down the chrome strip reaches for a panel that hangs under it:
+/// such a panel may move up to fit a tall list, but never over the strip. A panel that hangs
+/// off a click or a control keeps the old 4 px floor, because its anchor is a point the user
+/// chose - a group chip in the tab strip opens its menu above the strip's bottom, and pushing
+/// that menu down to clear the strip would move it away from the chip.
+fn fitted(frame: Frame, win_h: f64, height: f64) -> (f64, f64) {
+    let floor = frame.floor.clamp(4.0, (win_h - MARGIN).max(4.0));
     let height = height.clamp(MIN_H, (win_h - floor - 4.0).max(MIN_H));
     let top = frame.y.min((win_h - height - 4.0).max(floor)).max(floor);
     (top, height)
@@ -384,8 +410,7 @@ pub fn resize(app: &AppHandle, overlay_label: &str, height: f64) -> Result<(), S
     };
 
     let (win_w, win_h) = logical_size(&win).map_err(|err| err.to_string())?;
-    let floor = crate::ipc::chrome_height(app) + 2.0;
-    let (top, height) = fitted(frame, win_h, floor, height);
+    let (top, height) = fitted(frame, win_h, height);
     let left = frame
         .left()
         .clamp(4.0, (win_w - frame.width - 4.0).max(4.0));
@@ -444,6 +469,33 @@ fn mark_page(app: &AppHandle, label: &str, open: bool) {
     }
 }
 
+/// Puts the "a panel is open" flag back into a page that has just loaded a document.
+///
+/// The flag lives in the document, so a navigation throws it away: a page that redirects
+/// while a panel is open would then ignore the next click, and the panel would sit there
+/// covering it with nothing to dismiss it but the strip. The injected script itself is put
+/// back by WebView2 on every document; this flag is the one thing that has to be repeated.
+pub fn remark_page(app: &AppHandle, window_label: &str, webview_label: &str) {
+    let Some(state) = app.try_state::<crate::ipc::AppState>() else {
+        return;
+    };
+    if !state.windows.overlay.read().contains_key(window_label) {
+        return;
+    }
+    if let Some(webview) = app.get_webview(webview_label) {
+        let _ = webview.eval("window.__mixOverlay = true;");
+    }
+}
+
+/// Panels that exist to be typed into: losing the race for the keyboard makes them useless
+/// in a way the user cannot work around.
+fn needs_keyboard(kind: &str) -> bool {
+    matches!(
+        base(kind),
+        "find" | "settings" | "palette" | "tab_search" | "permission"
+    )
+}
+
 /// Where the keyboard goes when an overlay closes.
 fn belongs_to_page(kind: &str) -> bool {
     matches!(base(kind), "context_menu" | "find" | "permission")
@@ -474,6 +526,7 @@ pub fn close(app: &AppHandle, window_label: &str) {
         let from_page = {
             let state = app.state::<crate::ipc::AppState>();
             state.windows.overlay_frame.write().remove(window_label);
+            state.windows.overlay_kind.write().remove(window_label);
             let flag = state.windows.overlay_from_page.write().remove(window_label);
             flag.unwrap_or(false)
         };
@@ -539,11 +592,28 @@ mod panel_geometry_tests {
             y: 77.0,
             width: 320.0,
             height: 566.0,
+            floor: 73.0,
         };
-        let (top, height) = fitted(menu, 917.0, 73.0, 900.0);
+        let (top, height) = fitted(menu, 917.0, 900.0);
         assert!(top >= 73.0, "top {top} is above the chrome strip");
         assert!(top + height <= 917.0 - 3.0, "panel runs past the window");
         assert!(height > 700.0, "a tall menu should use the room it has");
+    }
+
+    #[test]
+    fn a_menu_hanging_off_a_chip_stays_below_it() {
+        // A group chip sits in the tab strip, above the strip's bottom edge. Its menu must
+        // keep hanging from the chip: the strip's floor is not its floor.
+        let menu = Frame {
+            anchor: Anchor::Left,
+            x: 120.0,
+            y: 34.0,
+            width: 214.0,
+            height: 138.0,
+            floor: 4.0,
+        };
+        let (top, _) = fitted(menu, 900.0, 320.0);
+        assert_eq!(top, 34.0);
     }
 
     #[test]
@@ -554,11 +624,12 @@ mod panel_geometry_tests {
             y: 800.0,
             width: 200.0,
             height: 100.0,
+            floor: 4.0,
         };
-        let (top, height) = fitted(menu, 1000.0, 73.0, 450.0);
+        let (top, height) = fitted(menu, 1000.0, 450.0);
         assert_eq!(height, 450.0);
         assert!(top < menu.y, "a menu without room below should move up");
-        assert!(top >= 73.0, "but not over the chrome strip");
+        assert!(top >= 4.0, "but not off the top of the window");
         assert!(top + height <= 1000.0 - 3.0);
     }
 
@@ -570,8 +641,9 @@ mod panel_geometry_tests {
             y: 77.0,
             width: 200.0,
             height: 100.0,
+            floor: 73.0,
         };
-        let (top, height) = fitted(menu, 200.0, 73.0, 400.0);
+        let (top, height) = fitted(menu, 200.0, 400.0);
         assert_eq!(top, 73.0);
         assert_eq!(height, MIN_H.max(200.0 - 73.0 - 4.0));
     }
@@ -584,6 +656,7 @@ mod panel_geometry_tests {
             y: 20.0,
             width: 200.0,
             height: 100.0,
+            floor: 4.0,
         };
         assert_eq!(menu.left(), 40.0);
 
