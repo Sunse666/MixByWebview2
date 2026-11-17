@@ -1268,13 +1268,36 @@ async function boot() {
     });
   }
 
-  const drag = document.getElementById("drag");
+  // The title bar drags the window, and a double click maximizes it.
+  //
+  // The drag waits for the pointer to actually move. Handing the mouse to the window's
+  // move loop on mousedown (start_dragging does ReleaseCapture + WM_NCLBUTTONDOWN with
+  // HTCAPTION) means the page never sees the first click finish, so the second click
+  // counts as the first one and no double click is emitted - the window would not
+  // maximize. A few pixels tell a drag from a click.
+  let dragFrom = null;
+  const onTitlebar = (event) =>
+    !event.target.closest("button") && !event.target.closest(".tab");
   drag.addEventListener("mousedown", (event) => {
-    if (event.target.closest("button") || event.target.closest(".tab")) return;
+    if (event.button !== 0 || !onTitlebar(event)) return;
+    dragFrom = { x: event.screenX, y: event.screenY };
+  });
+  drag.addEventListener("mousemove", (event) => {
+    if (!dragFrom) return;
+    // The button can go up outside this element, where no mouseup arrives.
+    if ((event.buttons & 1) === 0) {
+      dragFrom = null;
+      return;
+    }
+    if (Math.abs(event.screenX - dragFrom.x) + Math.abs(event.screenY - dragFrom.y) < 4) return;
+    dragFrom = null;
     invoke("window_drag");
   });
+  drag.addEventListener("mouseup", () => {
+    dragFrom = null;
+  });
   drag.addEventListener("dblclick", (event) => {
-    if (event.target.closest("button") || event.target.closest(".tab")) return;
+    if (!onTitlebar(event)) return;
     invoke("window_control", { action: "max" });
   });
 
