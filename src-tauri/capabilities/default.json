@@ -124,6 +124,8 @@
     "allow-permission-request",
     "allow-permission-reply",
     "allow-permission-poll",
+    "allow-permission-list",
+    "allow-permission-forget",
     "allow-menu-context-get",
     "allow-download-list",
     "allow-download-open",

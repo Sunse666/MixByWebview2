@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-permission-forget"
+description = "Enables the permission_forget command without any pre-configured scope."
+commands.allow = ["permission_forget"]
+
+[[permission]]
+identifier = "deny-permission-forget"
+description = "Denies the permission_forget command without any pre-configured scope."
+commands.deny = ["permission_forget"]

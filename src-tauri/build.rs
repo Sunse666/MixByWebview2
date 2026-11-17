@@ -141,6 +141,8 @@ fn main() {
         "permission_request",
         "permission_reply",
         "permission_poll",
+        "permission_list",
+        "permission_forget",
         "menu_context_get",
         "download_list",
         "download_open",

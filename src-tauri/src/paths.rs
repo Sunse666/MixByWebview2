@@ -22,6 +22,7 @@ pub struct AppDirs {
     pub session_file: PathBuf,
     pub history_file: PathBuf,
     pub bookmarks_file: PathBuf,
+    pub permissions_file: PathBuf,
     pub zoom_file: PathBuf,
     pub fell_back: bool,
 }
@@ -70,6 +71,7 @@ impl AppDirs {
             session_file: user_data.join("session.json"),
             history_file: user_data.join("history.json"),
             bookmarks_file: user_data.join("bookmarks.json"),
+            permissions_file: user_data.join("permissions.json"),
             zoom_file: user_data.join("zoom.json"),
             crx: root.join("crx"),
             favicons_file: user_data.join("favicons.json"),

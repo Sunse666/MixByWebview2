@@ -155,6 +155,7 @@ impl AppState {
         let downloads = crate::downloads::load_history(&dirs);
         let history = crate::library::load_visits(&dirs.history_file);
         let bookmarks = crate::library::load_bookmarks(&dirs.bookmarks_file);
+        let permissions = crate::permissions::PermissionStore::load(&dirs.permissions_file);
         let mut cores = std::collections::HashMap::new();
         cores.insert("w1".to_string(), Core::default());
 
@@ -188,7 +189,7 @@ impl AppState {
             theme: parking_lot::RwLock::new(theme),
             downloads: parking_lot::RwLock::new(downloads),
             windows: WindowMaps::default(),
-            permissions: crate::permissions::PermissionStore::default(),
+            permissions,
             snap: parking_lot::Mutex::new(crate::snap::SnapState::default()),
         }
     }

@@ -220,6 +220,28 @@ pub async fn permission_poll(app: AppHandle, id: u64) -> Result<Option<bool>, Ap
     Ok(crate::permissions::poll(&app, id))
 }
 
+/// What this browser has been told to allow, so it can be looked at and undone.
+#[tauri::command]
+pub async fn permission_list(
+    webview: tauri::Webview,
+    app: AppHandle,
+) -> Result<Vec<serde_json::Value>, AppError> {
+    require_trusted(&webview)?;
+    Ok(crate::permissions::decisions(&app))
+}
+
+/// Forgets one site's answer, or every answer when no key is given.
+#[tauri::command]
+pub async fn permission_forget(
+    webview: tauri::Webview,
+    app: AppHandle,
+    key: Option<String>,
+) -> Result<(), AppError> {
+    require_trusted(&webview)?;
+    crate::permissions::forget(&app, key.as_deref());
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn snap(app: AppHandle, direction: String) -> Result<(), AppError> {
     let dir = match direction.as_str() {

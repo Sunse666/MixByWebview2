@@ -235,6 +235,8 @@ fn main() {
             ipc::permission_request,
             ipc::permission_reply,
             ipc::permission_poll,
+            ipc::permission_list,
+            ipc::permission_forget,
             ipc::menu_context_get,
             ipc::download_list,
             ipc::download_open,

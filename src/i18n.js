@@ -419,6 +419,13 @@ const DICT = {
     "Start Mix when the system starts": "开机时启动 Mix",
     "Restore windows on launch": "启动时恢复窗口",
     "Green": "绿色",
+    "Site permissions": "站点权限",
+    "Each site asks once; whatever you answer is remembered here.": "每个站点只问一次，你的选择会记在这里",
+    "Forget": "忘记",
+    "Forget every site": "忘记所有站点",
+    "No site has been asked yet.": "还没有站点被询问过",
+    "Allowed": "已允许",
+    "Blocked": "已阻止",
   },
 };
 

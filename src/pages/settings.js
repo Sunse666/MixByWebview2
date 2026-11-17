@@ -17,6 +17,7 @@ import { buildShortcuts } from "./settings/sections/shortcuts.js";
 import { buildBackup } from "./settings/sections/backup.js";
 import { buildBrowser } from "./settings/sections/browser.js";
 import { buildToolbar } from "./settings/sections/toolbar.js";
+import { buildPermissions } from "./settings/sections/permissions.js";
 
 const invoke = withFeedback(window.__TAURI__.core.invoke);
 
@@ -37,6 +38,7 @@ const SECTIONS = [
   buildShortcuts,
   buildBackup,
   buildBrowser,
+  buildPermissions,
   buildToolbar,
   buildClearData,
 ];
