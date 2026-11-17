@@ -24,7 +24,7 @@ pub async fn shortcut(
             crate::overlay::close(&app, window.label());
         }
         "reopen_tab" => {
-            let _ = tab_reopen(app, window, state).await?;
+            let _ = tab_reopen(app, window, state, None).await?;
         }
         "new_window" => {
             window_new(app, state).await?;

@@ -763,20 +763,59 @@ pub async fn tab_icon(
     );
     Ok(())
 }
-/// Reopens the most recently closed tab of this window.
+/// Takes the entry the menu asked for out of the stack.
+///
+/// The stack is oldest first, so the entry at menu position 0 - the top row - is the last
+/// one in it. `checked_sub` rather than an index calculation so a stale menu cannot panic
+/// the process: the list shrinks while it is open (the shortcut reopens one too).
+fn take_closed(list: &mut Vec<(String, String)>, index: Option<usize>) -> Option<(String, String)> {
+    match index {
+        Some(index) => {
+            let at = list.len().checked_sub(1 + index)?;
+            Some(list.remove(at))
+        }
+        None => list.pop(),
+    }
+}
+
+/// What this window closed lately, newest first, so the menu can offer the list.
+///
+/// Newest first because that is the order the entries are wanted in: the top row is the
+/// one `tab_reopen` without an index would bring back.
+#[tauri::command]
+pub async fn tab_closed_list(
+    window: tauri::Window,
+    state: State<'_, AppState>,
+) -> Result<Vec<serde_json::Value>, AppError> {
+    let entries = state
+        .windows
+        .closed_tabs
+        .read()
+        .get(window.label())
+        .map(|list| list.iter().rev().cloned().collect::<Vec<_>>())
+        .unwrap_or_default();
+    Ok(entries
+        .into_iter()
+        .map(|(url, title)| serde_json::json!({ "url": url, "title": title }))
+        .collect())
+}
+
+/// Reopens a closed tab: the newest one, or the one at `index` in the list the menu shows.
 #[tauri::command]
 pub async fn tab_reopen(
     app: AppHandle,
     window: tauri::Window,
     state: State<'_, AppState>,
+    index: Option<usize>,
 ) -> Result<bool, AppError> {
-    let Some((url, _title)) = state
-        .windows
-        .closed_tabs
-        .write()
-        .get_mut(window.label())
-        .and_then(|list| list.pop())
-    else {
+    let entry = {
+        let mut history = state.windows.closed_tabs.write();
+        match history.get_mut(window.label()) {
+            Some(list) => take_closed(list, index),
+            None => None,
+        }
+    };
+    let Some((url, _title)) = entry else {
         return Ok(false);
     };
     tab_new(app, window, state, Some(url), None, None).await?;
@@ -1170,5 +1209,45 @@ pub(crate) fn enforce_live_limit(app: &AppHandle, label: &str) {
             }
             None => return,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::take_closed;
+
+    fn stack() -> Vec<(String, String)> {
+        ["a", "b", "c"]
+            .iter()
+            .map(|name| (name.to_string(), name.to_uppercase()))
+            .collect()
+    }
+
+    #[test]
+    fn the_menu_counts_from_the_newest() {
+        let mut list = stack();
+        assert_eq!(
+            take_closed(&mut list, Some(0)).map(|entry| entry.0),
+            Some("c".to_string())
+        );
+        // One entry is gone, so the second row is now the oldest.
+        assert_eq!(
+            take_closed(&mut list, Some(1)).map(|entry| entry.0),
+            Some("a".to_string())
+        );
+        assert_eq!(
+            take_closed(&mut list, None).map(|entry| entry.0),
+            Some("b".to_string())
+        );
+    }
+
+    #[test]
+    fn a_stale_position_is_ignored_instead_of_panicking() {
+        let mut list = stack();
+        assert_eq!(take_closed(&mut list, Some(7)), None);
+        assert_eq!(list.len(), 3);
+        list.clear();
+        assert_eq!(take_closed(&mut list, Some(0)), None);
+        assert_eq!(take_closed(&mut list, None), None);
     }
 }

@@ -168,9 +168,13 @@ async function bootAppMenu() {
       row("\u2315", "Find in page", "Ctrl+F", () => invoke("overlay_toggle", { kind: "find" }));
       row("\u25d1", "New incognito tab", "Ctrl+Shift+N", act(() => invoke("tab_new", { incognito: true })));
       row("\u21ba", "Reopen closed tab", "Ctrl+Shift+T", async () => {
-        await invoke("tab_reopen");
+        await invoke("tab_reopen", {});
         await close();
       });
+      // The list behind that shortcut: twenty entries are kept per window, and only the
+      // newest one used to be reachable.
+      const closed = (await invoke("tab_closed_list").catch(() => [])) || [];
+      row("\u2261", "Recently closed", closed.length ? String(closed.length) : "", () => render("closed"));
       row("\u2193", "Downloads", "Ctrl+J", act(() => invoke("tab_new", { url: "http://tauri.localhost/pages/downloads.html" })));
       divider();
 
@@ -265,10 +269,30 @@ async function bootAppMenu() {
       row("\u2699", "Open userscripts folder", "", act(() => invoke("open_dir", { which: "scripts" })));
     },
 
+    closed: async () => {
+      header("Recently closed");
+      const entries = (await invoke("tab_closed_list").catch(() => [])) || [];
+      if (!entries.length) {
+        const empty = document.createElement("div");
+        empty.className = "menu-note";
+        empty.textContent = t("Nothing closed yet.");
+        appMenu.append(empty);
+        return;
+      }
+      entries.forEach((entry, index) => {
+        const label = entry.title || entry.url.replace(/^https?:\/\//, "");
+        const short = label.length > 58 ? label.slice(0, 57) + "\u2026" : label;
+        const button = row("\u21ba", short, index === 0 ? "Ctrl+Shift+T" : "", async () => {
+          await invoke("tab_reopen", { index });
+          await close();
+        });
+        button.title = entry.url;
+      });
+    },
+
     tools: async () => {
       header("More tools");
-      row("\u2318", "Developer tools", "F12", act(() => invoke("shortcut", { action: "devtools" })));
-      row("\u26a0", "Open log file", "", act(() => invoke("open_dir", { which: "logs" })));
+      row("\u2318", "Developer tools", "F12", act(() => invoke("shortcut", { action: "devtools" })));      row("\u26a0", "Open log file", "", act(() => invoke("open_dir", { which: "logs" })));
       row("\u2261", "Profile folder", "", act(() => invoke("open_dir", { which: "userdata" })));
       row("\u2691", "Export diagnostics", "", async () => {
         const path = await invoke("diag_export");

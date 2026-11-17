@@ -426,6 +426,8 @@ const DICT = {
     "No site has been asked yet.": "还没有站点被询问过",
     "Allowed": "已允许",
     "Blocked": "已阻止",
+    "Recently closed": "最近关闭",
+    "Nothing closed yet.": "还没有关闭过的标签页",
   },
 };
 

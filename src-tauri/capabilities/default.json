@@ -82,6 +82,7 @@
     "allow-tab-move",
     "allow-tab-icon",
     "allow-tab-reopen",
+    "allow-tab-closed-list",
     "allow-window-new",
     "allow-tab-pop-out",
     "allow-favicon-map",
