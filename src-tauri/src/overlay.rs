@@ -435,6 +435,13 @@ fn mark_page(app: &AppHandle, label: &str, open: bool) {
     if let Some(side) = app.get_webview(&format!("{label}-side")) {
         let _ = side.eval(format!("window.__mixOverlay = {open};"));
     }
+    // So is the strip. It had no such flag, so a click on the toolbar or the address bar
+    // outside a panel closed nothing: the panel only went away if it happened to hold the
+    // keyboard focus and could notice losing it. That is a race against a webview that was
+    // just created, which is why it worked only sometimes.
+    if let Some(chrome) = app.get_webview(&format!("{label}-chrome")) {
+        let _ = chrome.eval(format!("window.__mixOverlay = {open};"));
+    }
 }
 
 /// Where the keyboard goes when an overlay closes.

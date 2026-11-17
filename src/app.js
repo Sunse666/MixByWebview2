@@ -1511,16 +1511,22 @@ async function boot() {
 
   document.getElementById("theme-btn").addEventListener("click", () => invoke("overlay_toggle", { kind: "app_menu" }));
 
-  // A press in the strip that is not a control dismisses an open overlay. The page half
-  // of this lives in the injected script; the overlay is its own webview, so clicks in
-  // the toolbar, the tab strip and the address bar never reach it.
+  // A press anywhere in the strip dismisses an open overlay. The page half of this lives in
+  // the injected script and the sidebar has its own; the overlay is a webview of its own, so
+  // clicks in the toolbar, the tab strip and the address bar never reach it.
+  //
+  // Every control counts, not just empty space: a press on a toolbar button while a panel is
+  // open used to be ignored, and the panel went away only if it happened to hold the keyboard
+  // focus - a race with a webview that was created a moment earlier, which is why it worked
+  // sometimes. The one exception is the button that toggles this very menu, whose own click
+  // already decides whether to close or open.
   document.addEventListener(
     "pointerdown",
     (event) => {
+      if (!window.__mixOverlay) return;
       const target = event.target;
-      // A button is left alone: it may open or toggle an overlay of its own, and closing
-      // it here would be undone by the click that follows. Anything else dismisses.
-      if (target && target.closest && target.closest("button")) return;
+      if (target && target.closest && target.closest("#theme-btn")) return;
+      window.__mixOverlay = false;
       invoke("overlay_close").catch(() => {});
     },
     true,
