@@ -430,12 +430,22 @@ pub fn focused_window(app: &AppHandle) -> Option<tauri::Window> {
         .or_else(|| app.get_window("w1"))
 }
 
-/// Height of the chrome strip: the base plus the optional bookmarks row.
+/// Nothing the strip can plausibly be; outside this a report is a page still laying out.
+pub const MIN_CHROME_H: f64 = 48.0;
+pub const MAX_CHROME_H: f64 = 240.0;
+
+/// Height of the chrome strip, as the strip measured itself.
+///
+/// The measurement wins; the constant plus the bookmarks row is only what to use before the
+/// page has said anything, and if what it says is nonsense.
 pub fn chrome_height(app: &AppHandle) -> f64 {
     match app.try_state::<AppState>() {
         Some(state) => {
-            let show_bookmarks = state.settings.read().show_bookmarks;
-            crate::window::CHROME_H + if show_bookmarks { 30.0 } else { 0.0 }
+            let settings = state.settings.read();
+            if (MIN_CHROME_H..=MAX_CHROME_H).contains(&settings.chrome_height) {
+                return settings.chrome_height;
+            }
+            crate::window::CHROME_H + if settings.show_bookmarks { 30.0 } else { 0.0 }
         }
         None => crate::window::CHROME_H,
     }

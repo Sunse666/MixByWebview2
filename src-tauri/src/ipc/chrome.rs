@@ -278,21 +278,36 @@ pub async fn page_fullscreen(
     Ok(())
 }
 
-/// Reports the height the chrome strip actually rendered at.
+/// Reports the height the chrome strip actually rendered at, which the layout then follows.
+///
+/// The strip is html: how tall it is belongs to a stylesheet, and the constant in
+/// `window.rs` can only ever be a guess for the first paint. This is the number that
+/// settles it. It used to be accepted and then ignored - the layout kept the constant and
+/// only a warning was logged, so the page area started 16 px too low on every window.
+///
+/// A report outside the plausible range is refused rather than stored: a page that is still
+/// laying itself out says 0, and a height of 0 would collapse the window's layout.
 #[tauri::command]
 pub async fn chrome_fit(
     app: AppHandle,
-    _window: tauri::Window,
+    window: tauri::Window,
     state: State<'_, AppState>,
     height: f64,
 ) -> Result<(), AppError> {
-    let reported = height.clamp(0.0, 400.0);
-    state.settings.write().chrome_height = reported;
-    let expected = chrome_height(&app);
-    if (reported - expected).abs() > 8.0 {
-        crate::logging::warn(&format!(
-            "chrome strip reported {reported} but is laid out at {expected}; layout kept"
-        ));
+    if !(MIN_CHROME_H..=MAX_CHROME_H).contains(&height) {
+        crate::logging::warn(&format!("chrome strip reported {height}; ignored"));
+        return Ok(());
+    }
+    let changed = {
+        let mut settings = state.settings.write();
+        // Under a pixel of difference is a rounding argument, not a layout change.
+        let changed = (settings.chrome_height - height).abs() > 1.0;
+        settings.chrome_height = height;
+        changed
+    };
+    if changed {
+        crate::logging::info(&format!("chrome height {height}"));
+        let _ = crate::window::relayout(&app, window.label());
     }
     Ok(())
 }

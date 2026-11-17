@@ -8,7 +8,13 @@ use tauri::{
 use crate::ipc::AppState;
 use crate::tabs;
 
-pub const CHROME_H: f64 = 86.0;
+/// The chrome strip's height before it has measured itself.
+///
+/// 32 px of title bar plus 38 px of address bar, which is what `style.css` draws. It is a
+/// guess for the first paint only: `chrome_fit` replaces it with the real number, and was
+/// 86 for a while after the strip got shorter - which left a 16 px band of window under the
+/// strip and a warning in the log on every start.
+pub const CHROME_H: f64 = 70.0;
 
 pub fn logical_size(win: &Window) -> tauri::Result<(f64, f64)> {
     let size = win.inner_size()?;
@@ -364,12 +370,15 @@ pub fn open_window(
         )?;
     }
 
-    if let Some(chrome) = app.get_webview(&format!("{label}-chrome")) {
-        let scale = win.scale_factor().unwrap_or(1.0);
-        if (scale - 1.0).abs() > f64::EPSILON {
-            let _ = chrome.set_zoom(scale);
-        }
-    }
+    // The strip is deliberately not zoomed.
+    //
+    // An older version did `chrome.set_zoom(scale)` to "match the window scaling", with the
+    // comment that WebView2 renders at 1:1. It does not: a child webview's box is given in
+    // logical pixels and the platform already maps a css pixel to one of them, so the zoom
+    // applied the scale twice. Measured on a 125% display: a 70 css px strip needs 70 logical
+    // pixels but was drawn into a 57 css px viewport, i.e. clipped, and the constant was
+    // tuned to 86 to hide it on that one display. Without the zoom the mapping is 1:1 on
+    // every scale, and `CHROME_H` can be the height the stylesheet actually draws.
 
     let mut later: Vec<String> = Vec::new();
     for (index, (url, _scroll, _pinned)) in urls.iter().enumerate() {

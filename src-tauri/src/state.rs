@@ -152,7 +152,9 @@ impl Default for Settings {
             schema_version: SCHEMA,
             start_url: "https://example.com".into(),
             restore_session: true,
-            chrome_height: 86.0,
+            // Zero means "the strip has not measured itself yet"; the strip reports its
+            // real height on every start, and this field is only where it lands.
+            chrome_height: 0.0,
             show_bookmarks: false,
             proxy_mode: default_proxy_mode(),
             proxy_server: String::new(),
@@ -333,7 +335,7 @@ impl Settings {
             self.start_url = Settings::default().start_url;
         }
         self.max_live_tabs = self.max_live_tabs.clamp(1, 64);
-        self.chrome_height = finite(self.chrome_height, 86.0).clamp(0.0, 400.0);
+        self.chrome_height = finite(self.chrome_height, 0.0).clamp(0.0, 400.0);
     }
 
     pub fn save(&self, path: &Path) -> std::io::Result<()> {
@@ -353,6 +355,10 @@ impl Settings {
                 }
                 let mut value = value.migrate();
                 value.sanitize();
+                // Measured, never stored: an old file may still carry the height the strip
+                // used to be, and trusting it would put the pages 16 px too low until the
+                // strip measured itself again.
+                value.chrome_height = 0.0;
                 value
             }
             Err(err) => {

@@ -1166,7 +1166,9 @@ async function boot() {
     renderTabs();
     renderBookmarks(await invoke("bookmark_list"));
     renderToolbar(await invoke("ext_list"));
-
+    // The bookmarks row is part of the strip, so turning it on or off changes how much of
+    // the window the pages must not use.
+    fitStrip();
   });
   await listen("tab:loading", (event) => {
     const tab = tabs.find((item) => item.id === event.payload.id);
@@ -1207,12 +1209,13 @@ async function boot() {
     });
   }
 
-  const fitStrip = () => {
-    const bar = document.getElementById("bookmarks");
-    const barHeight = bar && !bar.hidden ? bar.getBoundingClientRect().height : 0;
-    const height = Math.round(document.body.getBoundingClientRect().height - barHeight);
+  // The whole strip, bookmarks row included: the window reserves this much above the page,
+  // and this is the only place that knows what the stylesheet actually drew. A declaration
+  // rather than a const so the settings listener above can call it without an order rule.
+  function fitStrip() {
+    const height = Math.round(document.body.getBoundingClientRect().height);
     if (height > 0) invoke("chrome_fit", { height }).catch(() => {});
-  };
+  }
   fitStrip();
   window.addEventListener("resize", fitStrip);
   report(`boot tabs=${tabs.length} selected=${selected}`);
