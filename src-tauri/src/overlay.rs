@@ -339,6 +339,19 @@ fn place(app: &AppHandle, win: &tauri::Window, kind: &str, frame: Frame) -> Resu
     Ok(())
 }
 
+/// Where a panel goes once its content has been measured.
+///
+/// `floor` is how far down the chrome strip reaches: a panel that hangs under it may move
+/// up to fit a tall list, but never over the strip. It used to stop at 4 px from the top
+/// instead, which put the app menu on top of the tab strip and the toolbar as soon as its
+/// own content was taller than the window - a long menu should scroll, not cover.
+fn fitted(frame: Frame, win_h: f64, floor: f64, height: f64) -> (f64, f64) {
+    let floor = floor.clamp(4.0, (win_h - MARGIN).max(4.0));
+    let height = height.clamp(MIN_H, (win_h - floor - 4.0).max(MIN_H));
+    let top = frame.y.min((win_h - height - 4.0).max(floor)).max(floor);
+    (top, height)
+}
+
 /// Resizes the open panel of one window to the height its page measured.
 ///
 /// The width stays as it was: a panel's width is a design decision, its height is what
@@ -371,11 +384,11 @@ pub fn resize(app: &AppHandle, overlay_label: &str, height: f64) -> Result<(), S
     };
 
     let (win_w, win_h) = logical_size(&win).map_err(|err| err.to_string())?;
-    let height = height.clamp(MIN_H, (win_h - MARGIN).max(MIN_H));
+    let floor = crate::ipc::chrome_height(app) + 2.0;
+    let (top, height) = fitted(frame, win_h, floor, height);
     let left = frame
         .left()
         .clamp(4.0, (win_w - frame.width - 4.0).max(4.0));
-    let top = frame.y.min((win_h - height - 4.0).max(4.0)).max(4.0);
 
     #[cfg(debug_assertions)]
     crate::logging::info(&format!("overlay {overlay_label} measured {height:.0}"));
@@ -506,6 +519,54 @@ mod panel_geometry_tests {
         assert!(!follows_content("thumb&id=t1"));
         assert!(!follows_content("palette"));
         assert!(!follows_content("settings&section=theme"));
+    }
+
+    #[test]
+    fn a_long_menu_never_grows_over_the_chrome() {
+        // The window is 917 tall and the strip reaches 71 down, so the app menu opens at
+        // 77. Its content is longer than the room under the strip; it has to stop at the
+        // strip and scroll, not jump to the top of the window.
+        let menu = Frame {
+            anchor: Anchor::Right,
+            x: 900.0,
+            y: 77.0,
+            width: 320.0,
+            height: 566.0,
+        };
+        let (top, height) = fitted(menu, 917.0, 73.0, 900.0);
+        assert!(top >= 73.0, "top {top} is above the chrome strip");
+        assert!(top + height <= 917.0 - 3.0, "panel runs past the window");
+        assert!(height > 700.0, "a tall menu should use the room it has");
+    }
+
+    #[test]
+    fn a_menu_near_the_bottom_grows_up_but_stays_below_the_strip() {
+        let menu = Frame {
+            anchor: Anchor::Left,
+            x: 40.0,
+            y: 800.0,
+            width: 200.0,
+            height: 100.0,
+        };
+        let (top, height) = fitted(menu, 1000.0, 73.0, 450.0);
+        assert_eq!(height, 450.0);
+        assert!(top < menu.y, "a menu without room below should move up");
+        assert!(top >= 73.0, "but not over the chrome strip");
+        assert!(top + height <= 1000.0 - 3.0);
+    }
+
+    #[test]
+    fn a_window_with_no_room_still_gets_a_panel() {
+        let menu = Frame {
+            anchor: Anchor::Left,
+            x: 4.0,
+            y: 77.0,
+            width: 200.0,
+            height: 100.0,
+        };
+        let (top, height) = fitted(menu, 200.0, 73.0, 400.0);
+        assert_eq!(top, 73.0);
+        assert_eq!(height, MIN_H.max(200.0 - 73.0 - 4.0));
     }
 
     #[test]
