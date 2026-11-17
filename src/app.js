@@ -32,9 +32,13 @@ let thumbOpen = false;
 const downloadPill = document.getElementById("download");
 let announcedDownload = 0;
 
-function renderDownloads(tasks) {
+// `announce` is false for the list read at boot. That list is history from disk, and
+// announcing its last entry is why the same "OK <file>" came back on every start, long
+// after that download had been closed: the pill announces what happens while the browser
+// runs, it is not a status board. Anything unfinished is still in the downloads list.
+function renderDownloads(tasks, announce = true) {
   const latest = tasks && tasks.length ? tasks[tasks.length - 1] : null;
-  if (!latest) {
+  if (!announce || !latest) {
     downloadPill.hidden = true;
     return;
   }
@@ -1251,7 +1255,7 @@ async function boot() {
     invoke("bookmark_add", { url, title: url }).catch(() => {});
   });
 
-  renderDownloads(await invoke("download_list"));
+  renderDownloads(await invoke("download_list"), false);
   renderToolbar(await invoke("ext_list"));
   renderBookmarks(await invoke("bookmark_list"));
 
