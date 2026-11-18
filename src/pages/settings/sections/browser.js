@@ -64,18 +64,50 @@ export function buildBrowser({ settings, invoke }) {
   mode.addEventListener("change", async () => {
     syncServer();
     await invoke("settings_set", { patch: { proxy_mode: mode.value } }).catch(() => {});
+    await paintState();
   });
   server.addEventListener("change", async () => {
     await invoke("settings_set", { patch: { proxy_server: server.value.trim() } }).catch(
       () => {},
     );
+    await paintState();
   });
+
+  // The proxy is a browser argument, so a change only applies at the next start. What
+  // matters is whether the two disagree *now*: a hint that is always there is a hint nobody
+  // reads, and "I changed it and nothing happened" needs an answer that can be acted on.
+  const stateRow = document.createElement("div");
+  stateRow.className = "card-note";
+  stateRow.style.margin = "10px 0 0";
+
+  const restart = document.createElement("button");
+  restart.className = "button";
+  restart.textContent = t("Restart Mix");
+  restart.style.marginTop = "8px";
+  restart.addEventListener("click", () => invoke("app_restart").catch(() => {}));
+
+  const actions = document.createElement("div");
+  actions.className = "card-actions";
+  actions.append(restart);
+  actions.hidden = true;
+
+  async function paintState() {
+    const info = (await invoke("proxy_state").catch(() => null)) || null;
+    if (!info) return;
+    actions.hidden = !info.pending;
+    stateRow.textContent = info.pending
+      ? t("In use") + ": " + info.applied + " \u2192 " + t("restart to apply") + " " + info.configured
+      : t("In use") + ": " + info.applied;
+  }
 
   proxyCard.append(
     row(t("Proxy"), t("How Mix reaches the network"), mode),
     row(t("Proxy server"), t("Host and port, optionally with a scheme"), server),
     row(t("Restart to apply"), t("The proxy is set when the browser starts")),
+    stateRow,
+    actions,
   );
+  paintState();
 
   return [browserHead, browserCard, proxyHead, proxyCard];
 }

@@ -213,6 +213,7 @@ fn main() {
             ipc::diag_export,
             ipc::app_info,
             ipc::app_restart,
+            ipc::proxy_state,
             ipc::app_quit,
             ipc::drag_probe,
             ipc::search_new_tab,

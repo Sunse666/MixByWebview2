@@ -102,6 +102,7 @@
     "allow-diag-export",
     "allow-app-info",
     "allow-app-restart",
+    "allow-proxy-state",
     "allow-app-quit",
     "allow-drag-probe",
     "allow-search-new-tab",

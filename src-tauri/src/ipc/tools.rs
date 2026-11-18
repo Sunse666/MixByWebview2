@@ -488,20 +488,39 @@ pub async fn diag_export(app: AppHandle, webview: tauri::Webview) -> Result<Stri
     Ok(path.display().to_string())
 }
 
-/// Restarts so extension changes are picked up: WebView2 loads them at startup.
+/// Restarts so a startup-only setting is picked up: WebView2 loads extensions and the proxy
+/// when it is created.
+///
+/// The wait is the whole point. The profile folder and the single-instance lock belong to
+/// this process until it is gone, and a launch that arrives first is forwarded to the
+/// instance that is about to exit, then quits - so the browser would simply disappear. A
+/// detached command starts the next one a couple of seconds later.
 #[tauri::command]
 pub async fn app_restart(app: AppHandle, webview: tauri::Webview) -> Result<(), AppError> {
     require_trusted(&webview)?;
-    let exe = std::env::current_exe().map_err(|err| AppError::new("restart", err.to_string()))?;
-    let mut command = std::process::Command::new(exe);
-    if let Ok(dir) = std::env::current_dir() {
-        command.current_dir(dir);
+    if crate::paths::instance_mode() {
+        return Err(AppError::new(
+            "restart",
+            "this window runs on its own; restart Mix from the main window",
+        ));
     }
-    command
+    let exe = std::env::current_exe()
+        .map_err(|err| AppError::new("restart", format!("cannot find this program: {err}")))?;
+    let command = format!(
+        "ping -n 3 127.0.0.1 >nul & start \"\" \"{}\"",
+        exe.display()
+    );
+    let mut started = std::process::Command::new("cmd");
+    started.args(["/c", &command]);
+    if let Ok(dir) = std::env::current_dir() {
+        started.current_dir(dir);
+    }
+    started
         .spawn()
-        .map_err(|err| AppError::new("restart", err.to_string()))?;
+        .map_err(|err| AppError::new("restart", format!("cannot start the next one: {err}")))?;
     save_sessions(&app);
     flush_history(&app);
+    crate::logging::info("restarting");
     app.exit(0);
     Ok(())
 }
@@ -517,6 +536,28 @@ pub async fn app_quit(app: AppHandle, webview: tauri::Webview) -> Result<(), App
     Ok(())
 }
 
+/// What the running webviews were started with, and whether the settings have moved on.
+///
+/// The proxy reaches WebView2 as a browser argument at creation, so a change cannot take
+/// effect before the next start. Saying which of the two is running is the difference
+/// between "I changed it and nothing happened" and a restart that is actually wanted.
+#[tauri::command]
+pub async fn proxy_state(
+    webview: tauri::Webview,
+    state: State<'_, AppState>,
+) -> Result<serde_json::Value, AppError> {
+    require_trusted(&webview)?;
+    let settings = state.settings.read();
+    let wanted = crate::tabs::proxy_label(&settings.proxy_mode, &settings.proxy_server);
+    let running = crate::tabs::proxy_applied();
+    Ok(serde_json::json!({
+        "applied": running,
+        "configured": wanted,
+        "pending": running != wanted,
+    }))
+}
+
+/// Restarts Mix: this process leaves, and a detached command starts the next one.
 /// The chrome ui has no console we can read, so it reports through here.
 #[tauri::command]
 pub async fn ui_log(message: String) -> Result<(), AppError> {

@@ -119,6 +119,7 @@ fn main() {
         "diag_export",
         "app_info",
         "app_restart",
+        "proxy_state",
         "app_quit",
         "drag_probe",
         "search_new_tab",

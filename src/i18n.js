@@ -430,6 +430,9 @@ const DICT = {
     "Nothing closed yet.": "还没有关闭过的标签页",
     "Always translate this site": "总是翻译此站点",
     "Stop translating this site": "不再翻译此站点",
+    "In use": "正在使用",
+    "Restart Mix": "重启 Mix",
+    "restart to apply": "重启后生效：",
   },
 };
 

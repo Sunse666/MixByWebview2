@@ -245,6 +245,28 @@ pub fn set_proxy_args(args: Option<String>) {
     let _ = PROXY_ARGS.set(args);
 }
 
+/// How a proxy choice is named, both in the settings and in what is running.
+///
+/// Manual with no server is the system proxy, because that is what it turns into: no
+/// arguments are passed at all. Both sides go through here so a comparison cannot disagree
+/// with what the webviews were actually given.
+pub fn proxy_label(mode: &str, server: &str) -> String {
+    match mode {
+        "off" => "off".to_string(),
+        "manual" if !server.trim().is_empty() => format!("manual {}", server.trim()),
+        _ => "system".to_string(),
+    }
+}
+
+/// What this session's webviews were created with.
+pub fn proxy_applied() -> String {
+    match PROXY_ARGS.get().and_then(|args| args.clone()) {
+        Some(args) if args == "--no-proxy-server" => "off".to_string(),
+        Some(args) => format!("manual {}", args.trim_start_matches("--proxy-server=")),
+        None => "system".to_string(),
+    }
+}
+
 fn proxy_args(builder: WebviewBuilder<tauri::Wry>) -> WebviewBuilder<tauri::Wry> {
     match PROXY_ARGS.get().and_then(|args| args.clone()) {
         Some(args) => builder.additional_browser_args(&args),
@@ -493,4 +515,27 @@ pub fn create(
     )?;
     crate::downloads::ops::watch(&webview);
     Ok(webview)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::proxy_label;
+
+    #[test]
+    fn a_manual_choice_without_a_server_is_the_system_proxy() {
+        // Nothing is passed to WebView2 in that case, so naming it "manual" would make the
+        // settings page report a change that is not one.
+        assert_eq!(proxy_label("manual", ""), "system");
+        assert_eq!(proxy_label("manual", "   "), "system");
+        assert_eq!(proxy_label("system", "127.0.0.1:1"), "system");
+    }
+
+    #[test]
+    fn the_running_choice_and_the_saved_one_are_named_the_same_way() {
+        assert_eq!(proxy_label("off", ""), "off");
+        assert_eq!(
+            proxy_label("manual", " http://127.0.0.1:7890 "),
+            "manual http://127.0.0.1:7890"
+        );
+    }
 }
