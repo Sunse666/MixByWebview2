@@ -32,6 +32,12 @@ pub fn set_bounds(webview: &Webview, x: f64, y: f64, w: f64, h: f64) -> tauri::R
 pub const PRIMARY: &str = "w1";
 
 /// Rebuilds the tab groups a session recorded.
+///
+/// A restored group can come back closed around the tab the window opens on, and then the
+/// strip shows one chip while the page area shows a tab with no visible entry. Collapsing a
+/// group during a session moves the selection out of it (`group_toggle` does that); a
+/// restore has to end in the same state, or the window starts in a shape the user cannot
+/// have produced by hand.
 fn apply_groups(app: &AppHandle, label: &str, groups: &[crate::session::SessionGroup]) {
     if groups.is_empty() {
         return;
@@ -57,6 +63,42 @@ fn apply_groups(app: &AppHandle, label: &str, groups: &[crate::session::SessionG
             members,
         });
     }
+
+    let hidden_selection = core.selected.clone().filter(|selected| {
+        core.groups
+            .iter()
+            .any(|group| group.collapsed && group.members.iter().any(|member| member == selected))
+    });
+    if let Some(selected) = hidden_selection {
+        let outside = core
+            .tabs
+            .iter()
+            .find(|tab| {
+                !core
+                    .groups
+                    .iter()
+                    .any(|group| group.members.iter().any(|member| member == &tab.id))
+            })
+            .map(|tab| tab.id.clone());
+        match outside {
+            Some(next) => core.selected = Some(next),
+            // Nothing outside the groups: open the one holding the selection instead, since
+            // there is no other tab to show.
+            None => {
+                for group in core.groups.iter_mut() {
+                    if group.members.iter().any(|member| member == &selected) {
+                        group.collapsed = false;
+                    }
+                }
+            }
+        }
+    }
+    let closed = core.groups.iter().filter(|group| group.collapsed).count();
+    crate::logging::info(&format!(
+        "restored {} group(s), {closed} closed, selected {:?}",
+        core.groups.len(),
+        core.selected
+    ));
 }
 /// What a popped-out window was told to open: the tab, its offset, and the geometry of
 /// the window it came from.
@@ -207,6 +249,13 @@ pub fn bootstrap(app: &mut tauri::App) -> tauri::Result<()> {
                 .collect();
             open_window(app.handle(), PRIMARY, tabs, selected, keep.window.clone())?;
             apply_groups(app.handle(), PRIMARY, &keep.groups);
+            // The groups arrive after `open_window` has already saved a session without
+            // them, so without this a launch that ends before the next quit writes the
+            // groups away. The strip and the pages also have to be told about the new
+            // groups and about a selection that may have moved out of a closed one.
+            crate::ipc::sync_visibility(app.handle(), PRIMARY);
+            crate::ipc::emit_tabs(app.handle(), PRIMARY);
+            crate::ipc::save_sessions(app.handle());
         }
         None => {
             open_window(

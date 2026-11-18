@@ -81,7 +81,9 @@ async function boot() {
       return;
     }
 
-    for (const task of items) {
+    // Newest first: the list on disk is in the order the files were started, and the one
+    // just fetched is the one worth seeing.
+    for (const task of items.slice().reverse()) {
       const row = document.createElement("div");
       row.className = "entry";
 
@@ -100,12 +102,14 @@ async function boot() {
       state.textContent = parts.join(" · ");
 
       if (task.state === "started" || task.state === "interrupted") {
+        // An interrupted download is already stopped, so its button says "Resume" - and it
+        // used to send `!task.paused` anyway, which paused it again.
+        const stopped = task.paused || task.state === "interrupted";
         const pause = document.createElement("button");
         pause.className = "button";
-        pause.textContent =
-          t(task.paused || task.state === "interrupted" ? "Resume" : "Pause");
+        pause.textContent = t(stopped ? "Resume" : "Pause");
         pause.addEventListener("click", async () => {
-          await invoke("download_pause", { id: task.id, paused: !task.paused }).catch(() => {});
+          await invoke("download_pause", { id: task.id, paused: !stopped }).catch(() => {});
         });
         const cancel = document.createElement("button");
         cancel.className = "button";
@@ -115,7 +119,29 @@ async function boot() {
         });
         row.append(name, state, pause, cancel);
         list.append(row);
-        return;
+        // Not `return`: that ended the whole list at the first download still in flight.
+        continue;
+      }
+
+      if (task.state === "failed") {
+        // Nothing to open: the file is partial at best. Offer the download again instead.
+        const retry = document.createElement("button");
+        retry.className = "button";
+        retry.textContent = t("Try again");
+        retry.addEventListener("click", async () => {
+          await invoke("download_url", { url: task.url, fileName: task.file_name }).catch(
+            () => {},
+          );
+        });
+        const reveal = document.createElement("button");
+        reveal.className = "button";
+        reveal.textContent = t("Show in folder");
+        reveal.addEventListener("click", () =>
+          invoke("download_reveal", { id: task.id }).catch(() => {}),
+        );
+        row.append(name, state, retry, reveal);
+        list.append(row);
+        continue;
       }
 
       const open = document.createElement("button");
