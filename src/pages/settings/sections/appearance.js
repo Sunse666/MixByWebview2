@@ -205,8 +205,18 @@ export function buildAppearance({ settings, invoke }) {
     box.type = "checkbox";
     box.checked = chosen.includes(id);
     box.addEventListener("change", async () => {
-      const on = viewBoxes.filter((entry) => entry.box.checked).map((entry) => entry.id);
-      await invoke("settings_set", { patch: { sidebar_views: on } }).catch(() => {});
+      // Ticked panels keep the order they already had, and a newly ticked one goes to the
+      // end: rebuilding the list from this fixed row would undo an arrangement made by
+      // dragging the sidebar's own tabs.
+      const ticked = new Set(
+        viewBoxes.filter((entry) => entry.box.checked).map((entry) => entry.id),
+      );
+      const kept = chosen.filter((id) => ticked.has(id));
+      const added = [...ticked].filter((id) => !kept.includes(id));
+      const next = [...kept, ...added];
+      chosen.length = 0;
+      chosen.push(...next);
+      await invoke("settings_set", { patch: { sidebar_views: next } }).catch(() => {});
     });
     const text = document.createElement("span");
     text.textContent = t(label);

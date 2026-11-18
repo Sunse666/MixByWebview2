@@ -433,6 +433,7 @@ const DICT = {
     "In use": "正在使用",
     "Restart Mix": "重启 Mix",
     "restart to apply": "重启后生效：",
+    "Show the original": "显示原文",
   },
 };
 

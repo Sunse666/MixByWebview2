@@ -94,6 +94,7 @@ fn main() {
         "translate_page",
         "translate_site",
         "translate_site_state",
+        "translate_toggle",
         "page_failed",
         "tab_scroll",
         "url_type",

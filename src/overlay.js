@@ -210,7 +210,14 @@ async function bootAppMenu() {
       row("\u25a3", "Full screen", "F11", act(() => invoke("window_fullscreen", { enabled: null })));
       divider();
       row("\u2399", "Print", "Ctrl+P", act(() => invoke("tab_print")));
-      row("\u4e16", "Translate this page", "", () => invoke("overlay_toggle", { kind: "translate" }));
+      // Translates the page there and then. The row used to open a "translate" panel that
+      // does not exist, so it fell through to the settings panel and showed the theme editor
+      // instead; one command does the work either way.
+      const translated = await invoke("translate_state").catch(() => false);
+      row("\u4e16", translated ? "Show the original" : "Translate this page", "", async () => {
+        await invoke("translate_toggle").catch(() => {});
+        await close();
+      });
       // Kept out of the settings page: a site is only ever "this one", and the page in front
       // of the user is what decides which.
       const always = await invoke("translate_site_state").catch(() => false);

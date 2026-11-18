@@ -1171,6 +1171,13 @@ async function boot() {
     renderToolbar(await invoke("ext_list"));
   });
   await listen("ext:changed", async () => renderToolbar(await invoke("ext_list")));
+  // Translation can also be started from the app menu, which is a webview of its own: the
+  // toolbar has to follow whatever happened over there.
+  await listen("translate:done", (event) => {
+    const [count, error] = event.payload || [0, null];
+    if (!error) translateOn = count > 0;
+    renderToolbar();
+  });
   await listen("tab:audio", (event) => {
     const payload = event.payload || {};
     if (!payload.id) return;

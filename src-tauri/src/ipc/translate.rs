@@ -9,12 +9,11 @@ pub async fn translate_page_inplace(
     window: tauri::Window,
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
-    state.ui.write().translate_result = (0, None);
     let id = selected_label(&state, &window);
-    let Some(webview) = app.get_webview(&id) else {
+    if id.is_empty() {
         return Ok(());
-    };
-    let _ = webview.eval("window.__mixStartTranslate && window.__mixStartTranslate()");
+    }
+    start_tab(&app, &state, &id);
     Ok(())
 }
 
@@ -26,19 +25,25 @@ pub async fn translate_status(
     Ok(state.ui.read().translate_result.clone())
 }
 
-/// Puts the original text back.
-#[tauri::command]
-pub async fn translate_restore(
-    app: AppHandle,
-    window: tauri::Window,
-    state: State<'_, AppState>,
-) -> Result<(), AppError> {
-    let id = selected_label(&state, &window);
-    if let Some(webview) = app.get_webview(&id) {
+/// Starts the in-page translator for one tab.
+fn start_tab(app: &AppHandle, state: &AppState, id: &str) {
+    {
+        let mut ui = state.ui.write();
+        ui.translate_result = (0, None);
+        ui.translate_skip.remove(id);
+    }
+    if let Some(webview) = app.get_webview(id) {
+        let _ = webview.eval("window.__mixStartTranslate && window.__mixStartTranslate()");
+    }
+}
+
+/// Puts the original text of one tab back, and remembers that it was asked for.
+fn restore_tab(app: &AppHandle, state: &AppState, id: &str) {
+    if let Some(webview) = app.get_webview(id) {
         let _ = webview.eval("window.__mixStopTranslate && window.__mixStopTranslate()");
     }
     let url = state
-        .try_read_core(window_of_tab(&id))
+        .try_read_core(window_of_tab(id))
         .and_then(|core| {
             core.tabs
                 .iter()
@@ -48,12 +53,48 @@ pub async fn translate_restore(
         .unwrap_or_default();
     {
         let mut ui = state.ui.write();
-        ui.translated_tabs.remove(&id);
+        ui.translated_tabs.remove(id);
         // Remember which page the user wants untranslated: on a site that is always
         // translated, the next load would otherwise put the translation straight back.
         if !url.is_empty() {
-            ui.translate_skip.insert(id, url);
+            ui.translate_skip.insert(id.to_string(), url);
         }
+    }
+}
+
+/// Translates the page on screen, or puts its original text back when it already is.
+///
+/// The app menu needs this as one command: it is a webview of its own and has none of the
+/// toolbar's state, and its row used to open a panel that does not exist - it fell through
+/// to the settings panel, so "translate this page" showed the theme editor.
+#[tauri::command]
+pub async fn translate_toggle(
+    app: AppHandle,
+    window: tauri::Window,
+    state: State<'_, AppState>,
+) -> Result<bool, AppError> {
+    let id = selected_label(&state, &window);
+    if id.is_empty() {
+        return Ok(false);
+    }
+    if state.ui.read().translated_tabs.contains(&id) {
+        restore_tab(&app, &state, &id);
+        return Ok(false);
+    }
+    start_tab(&app, &state, &id);
+    Ok(true)
+}
+
+/// Puts the original text back.
+#[tauri::command]
+pub async fn translate_restore(
+    app: AppHandle,
+    window: tauri::Window,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    let id = selected_label(&state, &window);
+    if !id.is_empty() {
+        restore_tab(&app, &state, &id);
     }
     Ok(())
 }
@@ -124,15 +165,8 @@ pub async fn translate_site(
         if enable { "always" } else { "never again" }
     ));
     if enable {
-        {
-            let mut ui = state.ui.write();
-            ui.translated_tabs.remove(&id);
-            ui.translate_skip.remove(&id);
-            ui.translate_result = (0, None);
-        }
-        if let Some(webview) = app.get_webview(&id) {
-            let _ = webview.eval("window.__mixStartTranslate && window.__mixStartTranslate()");
-        }
+        state.ui.write().translated_tabs.remove(&id);
+        start_tab(&app, &state, &id);
     }
     Ok(enable)
 }
@@ -158,7 +192,7 @@ pub(crate) fn auto_translate(app: &AppHandle, tab: &str, url: &str) {
         return;
     }
     {
-        let mut ui = state.ui.write();
+        let ui = state.ui.write();
         if ui.translated_tabs.contains(tab)
             || ui
                 .translate_skip
@@ -167,13 +201,9 @@ pub(crate) fn auto_translate(app: &AppHandle, tab: &str, url: &str) {
         {
             return;
         }
-        ui.translate_skip.remove(tab);
-        ui.translate_result = (0, None);
     }
-    if let Some(webview) = app.get_webview(tab) {
-        crate::logging::info(&format!("always translate: {host}"));
-        let _ = webview.eval("window.__mixStartTranslate && window.__mixStartTranslate()");
-    }
+    crate::logging::info(&format!("always translate: {host}"));
+    start_tab(app, &state, tab);
 }
 
 #[cfg(test)]

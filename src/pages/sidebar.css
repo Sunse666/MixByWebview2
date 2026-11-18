@@ -64,6 +64,12 @@ body.resizing {
   background: var(--panel, #26292c);
   opacity: 1;
 }
+/* Dragging a tab reorders the panels; the target shows where it would land. */
+.side-tab.is-dragging { opacity: 0.4; }
+.side-tab.is-drop {
+  background: var(--border, #3a3f45);
+  box-shadow: inset 2px 0 0 #4c8dff;
+}
 .side-body {
   flex: 1;
   min-height: 0;

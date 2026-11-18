@@ -222,10 +222,24 @@ grip.addEventListener("lostpointercapture", () => {
   document.body.classList.remove("resizing");
 });
 
-/// Keeps only the panels this build has, in their standard order.
+/// Keeps the panels this build has, in the order the user arranged them.
+///
+/// This used to filter `ALL_VIEWS`, which threw the stored order away: a saved arrangement
+/// was put back into the standard one every time the sidebar drew itself.
 function knownViews(list) {
-  const kept = ALL_VIEWS.filter((id) => Array.isArray(list) && list.includes(id));
+  const wanted = Array.isArray(list) ? list : [];
+  const kept = [];
+  for (const id of wanted) {
+    if (ALL_VIEWS.includes(id) && !kept.includes(id)) kept.push(id);
+  }
   return kept.length ? kept : ALL_VIEWS.slice();
+}
+
+/// Saves the arrangement; the settings round trip calls back into this page and re-renders.
+function persistViews() {
+  renderButtons();
+  paint();
+  invoke("settings_set", { patch: { sidebar_views: views.slice() } }).catch(() => {});
 }
 
 function renderButtons() {
@@ -234,14 +248,53 @@ function renderButtons() {
   tabs.hidden = views.length <= 1;
   tabs.replaceChildren();
   if (tabs.hidden) return;
+  let dragged = null;
+  const clearMarks = () => {
+    for (const other of tabs.querySelectorAll(".side-tab")) {
+      other.classList.remove("is-dragging", "is-drop");
+    }
+  };
   for (const view of views) {
     const button = document.createElement("button");
     button.className = "side-tab";
     button.dataset.view = view;
     button.textContent = t(LABELS[view]);
+    button.draggable = true;
     button.addEventListener("click", () => {
       current = view;
       paint();
+    });
+    // These buttons are the panel order, so dragging them is the shortest way to change it.
+    button.addEventListener("dragstart", (event) => {
+      dragged = view;
+      button.classList.add("is-dragging");
+      if (event.dataTransfer) {
+        event.dataTransfer.effectAllowed = "move";
+        // A drag does not start without data in some engines; the value is not read back.
+        event.dataTransfer.setData("text/plain", view);
+      }
+    });
+    button.addEventListener("dragend", () => {
+      dragged = null;
+      clearMarks();
+    });
+    button.addEventListener("dragover", (event) => {
+      if (!dragged || dragged === view) return;
+      event.preventDefault();
+      button.classList.add("is-drop");
+    });
+    button.addEventListener("dragleave", () => button.classList.remove("is-drop"));
+    button.addEventListener("drop", (event) => {
+      event.preventDefault();
+      if (!dragged || dragged === view) return;
+      const from = views.indexOf(dragged);
+      const to = views.indexOf(view);
+      if (from < 0 || to < 0) return;
+      views.splice(from, 1);
+      views.splice(to, 0, dragged);
+      dragged = null;
+      clearMarks();
+      persistViews();
     });
     tabs.append(button);
   }
