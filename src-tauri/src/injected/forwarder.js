@@ -491,14 +491,12 @@
     };
   }
 
+  // Window docking used to be collected here as well, as a fallback for a machine where
+  // the global shortcut could not be registered. It is not coming back: this script runs
+  // inside whatever page is open, so any site could move and resize the user's window by
+  // pressing the keys itself. The strip has its own handler over a page we serve, and the
+  // global shortcut covers the rest.
   window.addEventListener("keydown", function (event) {
-    if (event.altKey && event.shiftKey && event.key.indexOf("Arrow") === 0 && window.__TAURI_INTERNALS__) {
-      event.preventDefault();
-      window.__TAURI_INTERNALS__.invoke("snap", {
-        direction: event.key.replace("Arrow", "").toLowerCase()
-      }).catch(function () {});
-      return;
-    }
     var action = actionFor(event);
     if (!action) return;
     if (action !== 'close_overlay') {

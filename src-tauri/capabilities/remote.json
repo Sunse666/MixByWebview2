@@ -31,7 +31,6 @@
     "allow-url-key",
     "allow-context-menu",
     "allow-permission-request",
-    "allow-permission-poll",
-    "allow-snap"
+    "allow-permission-poll"
   ]
 }
