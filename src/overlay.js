@@ -1152,6 +1152,32 @@ async function bootZoom() {
   menu.append(bar);
 }
 
+/// The address of the page as a code a phone can read off the screen.
+async function bootQr() {
+  menu.hidden = false;
+  appMenu.hidden = true;
+  themePanel.hidden = true;
+  applyTheme(await invoke("theme_get"));
+
+  const bar = document.createElement("div");
+  bar.className = "qr";
+  const image = document.createElement("img");
+  image.alt = "";
+  image.addEventListener("error", () => report("qr image refused"));
+  try {
+    image.src = await invoke("page_qr");
+  } catch (error) {
+    report("qr failed: " + error);
+    image.hidden = true;
+  }
+  bar.append(image);
+  menu.append(bar);
+
+  menu.addEventListener("pointerdown", (event) => {
+    if (event.target === menu) invoke("overlay_close");
+  });
+}
+
 async function bootFind() {
   menu.hidden = false;
   appMenu.hidden = true;
@@ -1420,6 +1446,9 @@ async function bootMenu() {
     await invoke("translate_page", { target: null }).catch((error) => report(String(error)));
     await invoke("overlay_close");
   });
+  item("\u25a6", "QR code for this page", "", async () => {
+    await invoke("overlay_open", { kind: "qr" }).catch((error) => report(String(error)));
+  });
   item("\u2318", "View source", "Ctrl+U", async () => {
     await invoke("view_source");
     await invoke("overlay_close");
@@ -1502,6 +1531,10 @@ async function bootPanel() {
   }
   if (kind === "zoom") {
     await bootZoom();
+    return;
+  }
+  if (kind === "qr") {
+    await bootQr();
     return;
   }
   if (kind === "find") {

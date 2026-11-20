@@ -73,6 +73,8 @@ pub fn initial_size(kind: &str) -> (f64, f64) {
         "group_menu" => (214.0, 138.0),
         "downloads" => (360.0, 320.0),
         "zoom" => (136.0, 40.0),
+        // The code plus its quiet zone, at a size a phone camera can read off a screen.
+        "qr" => (300.0, 300.0),
         "find" => (380.0, 44.0),
         "translate" => (380.0, 46.0),
         "suggest" => (420.0, 48.0),

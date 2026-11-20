@@ -42,6 +42,25 @@ html, body {
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
 }
 
+/* The qr panel is one picture and nothing else: no padding to waste modules on, and the
+   image scaled to whatever box the window gave the panel. */
+.qr {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.qr img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  image-rendering: pixelated;
+}
+
 header { display: flex; align-items: baseline; gap: 8px; }
 .hint { opacity: 0.55; font-size: 0.9em; }
 

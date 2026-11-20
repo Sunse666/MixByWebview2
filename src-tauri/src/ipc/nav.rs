@@ -586,6 +586,59 @@ pub async fn page_ready(
     Ok(target.display().to_string())
 }
 
+/// The address of the page in front of the user, as a QR code.
+///
+/// A qr code is a square per module, so the answer is an svg built from one path: it
+/// stays a data url the overlay can show at any size, with no second file on disk.
+#[tauri::command]
+pub async fn page_qr(
+    window: tauri::Window,
+    state: State<'_, AppState>,
+    text: Option<String>,
+) -> Result<String, AppError> {
+    let value = match text {
+        Some(given) if !given.trim().is_empty() => given,
+        _ => {
+            let id = selected_label(&state, &window);
+            state
+                .read_core(window.label())
+                .tabs
+                .iter()
+                .find(|tab| tab.id == id)
+                .map(|tab| tab.url.clone())
+                .unwrap_or_default()
+        }
+    };
+    if value.trim().is_empty() {
+        return Err(AppError::new("no_url", "nothing to encode"));
+    }
+    let code = qrcode::QrCode::new(value.as_bytes())
+        .map_err(|err| AppError::new("qr", err.to_string()))?;
+    let width = code.width();
+    let colors = code.to_colors();
+    // Four quiet modules on each side, which is what a scanner needs to find the code.
+    let quiet = 4usize;
+    let side = width + quiet * 2;
+    let mut path = String::with_capacity(colors.len() * 12);
+    for (index, color) in colors.iter().enumerate() {
+        if *color != qrcode::Color::Dark {
+            continue;
+        }
+        let x = index % width + quiet;
+        let y = index / width + quiet;
+        path.push_str(&format!("M{x} {y}h1v1h-1z"));
+    }
+    let svg = format!(
+        "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 {side} {side}\" \
+         shape-rendering=\"crispEdges\"><rect width=\"{side}\" height=\"{side}\" fill=\"#fff\"/>\
+         <path d=\"{path}\" fill=\"#000\"/></svg>"
+    );
+    Ok(format!(
+        "data:image/svg+xml;base64,{}",
+        crate::extensions::base64(svg.as_bytes())
+    ))
+}
+
 /// Runs a text edit in the chrome page, which owns the address field.
 #[tauri::command]
 pub async fn url_action(

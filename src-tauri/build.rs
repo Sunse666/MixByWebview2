@@ -140,6 +140,7 @@ fn main() {
         "source_ready",
         "save_page",
         "page_ready",
+        "page_qr",
         "context_menu",
         "snap",
         "settings_get",

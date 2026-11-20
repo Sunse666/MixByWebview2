@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-page-qr"
+description = "Enables the page_qr command without any pre-configured scope."
+commands.allow = ["page_qr"]
+
+[[permission]]
+identifier = "deny-page-qr"
+description = "Denies the page_qr command without any pre-configured scope."
+commands.deny = ["page_qr"]

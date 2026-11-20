@@ -144,6 +144,7 @@ const DICT = {
     "Restored": "已恢复",
     "View source": "查看网页源代码",
     "Save page as...": "另存为…",
+    "QR code for this page": "为此页面创建二维码",
     "Search this image on Google": "用 Google 搜索这张图片",
     "restart to apply": "重启后生效",
     "Settings, history, bookmarks, theme and icons without the WebView2 profile": "设置、历史、书签、主题和图标（不含 WebView2 缓存）",
