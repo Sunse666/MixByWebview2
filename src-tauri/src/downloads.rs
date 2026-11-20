@@ -9,7 +9,9 @@ use tauri::{webview::DownloadEvent, Emitter, Manager, Webview};
 pub enum Phase {
     /// The loop should be making progress.
     Started,
-    /// Stopped on purpose, bytes kept, resumable.
+    /// Stopped by the user, bytes kept, resumable.
+    Paused,
+    /// Stopped by the network or the server, bytes kept, resumable.
     Interrupted,
     /// All bytes are on disk.
     Finished,
@@ -21,6 +23,7 @@ impl Phase {
     pub fn as_str(self) -> &'static str {
         match self {
             Phase::Started => "started",
+            Phase::Paused => "paused",
             Phase::Interrupted => "interrupted",
             Phase::Finished => "finished",
             Phase::Failed => "failed",
@@ -30,6 +33,7 @@ impl Phase {
     pub fn parse(text: &str) -> Phase {
         match text {
             "started" => Phase::Started,
+            "paused" => Phase::Paused,
             "interrupted" => Phase::Interrupted,
             "finished" => Phase::Finished,
             _ => Phase::Failed,
@@ -43,17 +47,24 @@ impl Phase {
 
     /// True when asking again should continue this task rather than start another.
     pub fn is_retryable(self) -> bool {
-        matches!(self, Phase::Interrupted | Phase::Failed)
+        matches!(self, Phase::Paused | Phase::Interrupted | Phase::Failed)
     }
 
     /// What a pause or resume asked for should look like once applied.
+    ///
+    /// The two stoppage states are not the same thing to a reader: one was asked for, the
+    /// other happened. They only looked alike because both keep the bytes on disk.
     pub fn after_pause(paused: bool) -> Phase {
         if paused {
-            Phase::Interrupted
+            Phase::Paused
         } else {
             Phase::Started
         }
     }
+}
+
+fn is_false(value: &bool) -> bool {
+    !*value
 }
 
 /// Turns a failed or interrupted task back into a running one.
@@ -71,6 +82,10 @@ pub struct DownloadTask {
     pub url: String,
     pub file_name: String,
     pub path: String,
+    /// Set when the tab that started this download was private. The row is shown while
+    /// the browser runs, but is not written to the list on disk.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub incognito: bool,
     /// started | finished | failed
     pub state: String,
     /// Bytes written so far.
@@ -148,6 +163,7 @@ pub mod ops {
         };
         let app = webview.app_handle().clone();
         let downloads = state.dirs.downloads.clone();
+        let label = webview.label().to_string();
         let _ = webview.with_webview(move |platform| unsafe {
             let controller = platform.controller();
             let Ok(core) = controller.CoreWebView2() else {
@@ -155,6 +171,7 @@ pub mod ops {
             };
             let app = app.clone();
             let downloads = downloads.clone();
+            let label = label.clone();
             let handler = DownloadStartingEventHandler::create(Box::new(move |_sender, args| {
                 let Some(args) = args else {
                     return Ok(());
@@ -171,9 +188,16 @@ pub mod ops {
                 };
                 let suggested = suggested_name(&args);
                 let target = crate::downloads::target_for(&downloads, &url, &suggested);
+                // The work starts on a thread of its own rather than here: this handler
+                // runs on the WebView2 thread, and collecting the cookies asks that same
+                // thread a question - which it could not answer while it was in here.
                 let _ = args.SetCancel(true);
                 crate::logging::info(&format!("download via engine: {}", target.display()));
-                crate::downloads::start_with_engine(&app, &url, &target);
+                let app = app.clone();
+                let label = label.clone();
+                std::thread::spawn(move || {
+                    crate::downloads::start_with_engine_from(&app, &url, &target, &label);
+                });
                 Ok(())
             }));
             if let Ok(core) = core.cast::<ICoreWebView2_4>() {
@@ -269,9 +293,21 @@ pub mod ops {
 
 const KEEP: usize = 50;
 
-/// Takes the destination, records the task and lets the strip show it.
+/// Chooses where a download lands, and lets it run.
+///
+/// On Windows this is only the second half of the story: `ops::watch` hangs a second
+/// handler on the same `DownloadStarting` event, cancels the browser's own transfer and
+/// fetches the file with the internal engine instead. That engine records the task, so
+/// recording it here as well left two rows in the list for every download - one that
+/// belonged to a transfer which was cancelled a moment later, and one that finished.
+///
+/// The other platforms have no such handler (`ops::watch` is empty there), so this
+/// remains the only place a task is written down.
 pub fn handle(webview: Webview, event: DownloadEvent<'_>) -> bool {
     let app = webview.app_handle().clone();
+
+    // True on the platforms where this handler is the one that owns the task row.
+    let owns_the_row = !cfg!(windows);
 
     match event {
         DownloadEvent::Requested { url, destination } => {
@@ -285,12 +321,16 @@ pub fn handle(webview: Webview, event: DownloadEvent<'_>) -> bool {
                 .to_string();
             let target = target_for(&state.dirs.downloads, url.as_str(), &suggested);
             *destination = target.clone();
-            record(&app, Some(url.as_str()), Some(&target), "started");
+            if owns_the_row {
+                record(&app, Some(url.as_str()), Some(&target), "started");
+            }
             true
         }
         DownloadEvent::Finished { url, path, success } => {
-            let state = if success { "finished" } else { "failed" };
-            record(&app, Some(url.as_str()), path.as_deref(), state);
+            if owns_the_row {
+                let state = if success { "finished" } else { "failed" };
+                record(&app, Some(url.as_str()), path.as_deref(), state);
+            }
             success
         }
         _ => true,
@@ -298,16 +338,35 @@ pub fn handle(webview: Webview, event: DownloadEvent<'_>) -> bool {
 }
 
 /// Where the download list is kept between runs.
+///
+/// Under UserData, with the other state: it used to sit in the app root beside the exe,
+/// which put it outside both the backup and the clear-data action - a list of everything
+/// downloaded survived both.
 fn history_file(dirs: &crate::paths::AppDirs) -> std::path::PathBuf {
+    dirs.user_data.join("downloads.json")
+}
+/// The same list under the name it had before the move, read once so a profile that is
+/// upgraded does not lose the downloads it remembers.
+fn legacy_history_file(dirs: &crate::paths::AppDirs) -> std::path::PathBuf {
     dirs.root.join("downloads.json")
 }
 
 /// Writes the list, so the downloads page still shows what happened last time.
+///
+/// A download started from a private tab is left out: the row is on screen while the
+/// browser runs, and a file listing every private download on disk is the one thing
+/// private mode exists to prevent.
 pub fn save_history(app: &tauri::AppHandle) {
     let Some(state) = app.try_state::<AppState>() else {
         return;
     };
-    let tasks = state.downloads.read().clone();
+    let tasks: Vec<DownloadTask> = state
+        .downloads
+        .read()
+        .iter()
+        .filter(|task| !task.incognito)
+        .cloned()
+        .collect();
     let path = history_file(&state.dirs);
     if let Ok(bytes) = serde_json::to_vec_pretty(&tasks) {
         if let Err(err) = crate::paths::write_atomic(&path, &bytes) {
@@ -318,8 +377,18 @@ pub fn save_history(app: &tauri::AppHandle) {
 
 /// Reads the list back; anything that was running comes back as interrupted.
 pub fn load_history(dirs: &crate::paths::AppDirs) -> Vec<DownloadTask> {
-    let Ok(text) = std::fs::read_to_string(history_file(dirs)) else {
-        return Vec::new();
+    // A profile written before the move keeps its list in the app root. It is read from
+    // there once and then written to the new place, so the list is not lost on upgrade.
+    let legacy = legacy_history_file(dirs);
+    let text = match std::fs::read_to_string(history_file(dirs)) {
+        Ok(text) => text,
+        Err(_) => {
+            let Ok(text) = std::fs::read_to_string(&legacy) else {
+                return Vec::new();
+            };
+            let _ = std::fs::remove_file(&legacy);
+            text
+        }
     };
     let Ok(mut tasks) = serde_json::from_str::<Vec<DownloadTask>>(&text) else {
         return Vec::new();
@@ -416,7 +485,7 @@ pub fn set_state(app: &tauri::AppHandle, id: u64, next: &str) {
         let mut tasks = state.downloads.write();
         if let Some(task) = tasks.get_mut(index) {
             task.state = next.to_string();
-            task.paused = next == "interrupted";
+            task.paused = next == "paused";
             if next == "finished" {
                 task.bytes = std::fs::metadata(&task.path)
                     .map(|meta| meta.len())
@@ -436,6 +505,16 @@ pub fn set_state(app: &tauri::AppHandle, id: u64, next: &str) {
 
 /// Starts a transfer with the internal engine and records it as a task.
 pub fn start_with_engine(app: &tauri::AppHandle, url: &str, path: &Path) -> u64 {
+    start_with_engine_from(app, url, path, "")
+}
+
+/// Starts a transfer, telling the server what the page would have sent.
+///
+/// `tab` is the webview the download was started from: it supplies the referrer and the
+/// cookies. Both are best effort - a tab that is already gone sends nothing, which is
+/// what every download did before.
+pub fn start_with_engine_from(app: &tauri::AppHandle, url: &str, path: &Path, tab: &str) -> u64 {
+    let request = request_for(app, tab);
     let existing = {
         let Some(state) = app.try_state::<AppState>() else {
             return 0;
@@ -456,7 +535,7 @@ pub fn start_with_engine(app: &tauri::AppHandle, url: &str, path: &Path) -> u64 
         }
         _ => {
             let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
-            record_into(app, id, url, path);
+            record_into(app, id, url, path, is_private(app, tab));
             (id, path.to_path_buf())
         }
     };
@@ -468,12 +547,64 @@ pub fn start_with_engine(app: &tauri::AppHandle, url: &str, path: &Path) -> u64 
         ));
         return id;
     }
-    crate::fetch::start(app.clone(), id, url.to_string(), path.to_path_buf());
+    crate::fetch::start_with(
+        app.clone(),
+        id,
+        url.to_string(),
+        path.to_path_buf(),
+        request,
+    );
     id
 }
 
+/// True when the tab behind a download was a private one.
+///
+/// A label that no longer resolves counts as public, which is the behaviour every
+/// download had before this was tracked.
+fn is_private(app: &tauri::AppHandle, tab: &str) -> bool {
+    if tab.is_empty() {
+        return false;
+    }
+    app.try_state::<AppState>()
+        .and_then(|state| {
+            state
+                .try_read_core(crate::ipc::window_of_tab(tab))
+                .and_then(|core| {
+                    core.tabs
+                        .iter()
+                        .find(|entry| entry.id == tab)
+                        .map(|entry| entry.incognito)
+                })
+        })
+        .unwrap_or(false)
+}
+
+/// What the tab with this label would send along with its next request.
+///
+/// Cookies are read over the DevTools protocol because the webview exposes no other
+/// interface for them, and they stay inside the process. A tab that is gone, a
+/// background webview that refuses the call and a non-Windows build all produce an
+/// empty context: the download then works exactly as it did before.
+pub(crate) fn request_for(app: &tauri::AppHandle, tab: &str) -> crate::fetch::Request {
+    if tab.is_empty() {
+        return crate::fetch::Request::default();
+    }
+    let Some(webview) = app.get_webview(tab) else {
+        return crate::fetch::Request::default();
+    };
+    let page = webview.url().map(|url| url.to_string()).unwrap_or_default();
+    crate::fetch::Request {
+        referer: if page.starts_with("http") {
+            Some(page)
+        } else {
+            None
+        },
+        cookie: crate::fetch::cookies_for(&webview),
+    }
+}
+
 /// Adds a task with an id of the caller's choosing, so the engine and the task agree.
-fn record_into(app: &tauri::AppHandle, id: u64, url: &str, path: &Path) {
+fn record_into(app: &tauri::AppHandle, id: u64, url: &str, path: &Path, incognito: bool) {
     let Some(state) = app.try_state::<AppState>() else {
         return;
     };
@@ -489,6 +620,7 @@ fn record_into(app: &tauri::AppHandle, id: u64, url: &str, path: &Path) {
             speed: 0,
             paused: false,
             total: None,
+            incognito,
         });
         if tasks.len() > KEEP {
             let drop_count = tasks.len() - KEEP;
@@ -510,6 +642,17 @@ pub fn record_done(app: &tauri::AppHandle, url: &str, path: &Path) {
 }
 
 fn record(app: &tauri::AppHandle, url: Option<&str>, path: Option<&Path>, state: &str) {
+    record_from(app, url, path, state, false)
+}
+
+/// Records a download, saying whether the tab behind it was private.
+fn record_from(
+    app: &tauri::AppHandle,
+    url: Option<&str>,
+    path: Option<&Path>,
+    state: &str,
+    incognito: bool,
+) {
     let Some(guard) = app.try_state::<AppState>() else {
         return;
     };
@@ -529,6 +672,7 @@ fn record(app: &tauri::AppHandle, url: Option<&str>, path: Option<&Path>, state:
                     speed: 0,
                     paused: false,
                     total: None,
+                    incognito,
                 });
                 if tasks.len() > KEEP {
                     let drop_count = tasks.len() - KEEP;
@@ -540,12 +684,18 @@ fn record(app: &tauri::AppHandle, url: Option<&str>, path: Option<&Path>, state:
                     .iter()
                     .rposition(|task| Some(task.url.as_str()) == url && task.state == "started");
                 if let Some(index) = target {
-                    let interrupted = tasks[index].paused && state != "finished";
-                    tasks[index].state = if interrupted {
-                        "interrupted".to_string()
+                    // The browser reported this download, but the bytes are written by
+                    // the engine: the event says the browser stopped caring, not that the
+                    // file is done. Whatever the engine last wrote is the truer answer, and
+                    // it is the only one that can tell a pause from a broken connection.
+                    let engine = Phase::parse(&tasks[index].state);
+                    let keep_engine = matches!(engine, Phase::Paused | Phase::Interrupted);
+                    tasks[index].state = if keep_engine {
+                        engine.as_str().to_string()
                     } else {
                         state.to_string()
                     };
+                    tasks[index].paused = engine == Phase::Paused;
                     if let Some(path) = path {
                         tasks[index].path = path.display().to_string();
                         tasks[index].file_name = file_name(path);
@@ -573,10 +723,9 @@ pub fn start_progress_watch(app: tauri::AppHandle) {
         let mut changed = false;
         let tasks = {
             let mut tasks = state.downloads.write();
-            for task in tasks
-                .iter_mut()
-                .filter(|task| task.state == "started" || task.state == "interrupted")
-            {
+            for task in tasks.iter_mut().filter(|task| {
+                task.state == "started" || task.state == "interrupted" || task.state == "paused"
+            }) {
                 let size = std::fs::metadata(&task.path)
                     .map(|meta| meta.len())
                     .unwrap_or(0);
@@ -718,10 +867,21 @@ mod tests {
 
     #[test]
     fn a_pause_leaves_something_resumable() {
-        assert_eq!(Phase::after_pause(true), Phase::Interrupted);
+        // A pause the user asked for reads differently from a connection that went
+        // away, but both keep their bytes and both can be resumed.
+        assert_eq!(Phase::after_pause(true), Phase::Paused);
         assert_eq!(Phase::after_pause(false), Phase::Started);
+        assert!(Phase::Paused.is_retryable());
         assert!(Phase::Interrupted.is_retryable());
+        assert!(!Phase::Paused.is_live());
         assert!(!Phase::Interrupted.is_live());
+    }
+
+    #[test]
+    fn the_two_stoppages_stay_apart_on_the_way_to_disk() {
+        assert_eq!(Phase::parse("paused"), Phase::Paused);
+        assert_eq!(Phase::parse("interrupted"), Phase::Interrupted);
+        assert_ne!(Phase::Paused.as_str(), Phase::Interrupted.as_str());
     }
 
     #[test]

@@ -101,10 +101,10 @@ async function boot() {
       }
       state.textContent = parts.join(" · ");
 
-      if (task.state === "started" || task.state === "interrupted") {
-        // An interrupted download is already stopped, so its button says "Resume" - and it
-        // used to send `!task.paused` anyway, which paused it again.
-        const stopped = task.paused || task.state === "interrupted";
+      if (task.state === "started" || task.state === "interrupted" || task.state === "paused") {
+        // Both stopped states keep their bytes, so both offer the same button - but only
+        // one of them was asked for, and the row should say which.
+        const stopped = task.paused || task.state === "interrupted" || task.state === "paused";
         const pause = document.createElement("button");
         pause.className = "button";
         pause.textContent = t(stopped ? "Resume" : "Pause");

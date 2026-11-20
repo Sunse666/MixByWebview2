@@ -173,7 +173,7 @@ pub fn install(app: &mut tauri::App) {
                 let target = handle.clone();
                 let _ = handle.run_on_main_thread(move || {
                     let state = target.state::<AppState>();
-                    let call = crate::ipc::save_url(target.clone(), &state, url, None);
+                    let call = crate::ipc::save_url(target.clone(), &state, url, None, None);
                     match tauri::async_runtime::block_on(call) {
                         Ok(path) => crate::logging::info(&format!("debug save: {path}")),
                         Err(err) => {

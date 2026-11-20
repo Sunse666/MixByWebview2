@@ -284,6 +284,54 @@ async function bootAppMenu() {
       row("\u2699", "Open userscripts folder", "", act(() => invoke("open_dir", { which: "scripts" })));
     },
 
+    // The toolbar's extensions button opens this. It is a page of its own because the
+    // button sits on the strip, not in the menu, and the two lists it needs - what the
+    // browser loaded and what the user chose to hide - belong together.
+    extensions: async () => {
+      header("Extensions");
+      const settings = await invoke("settings_get");
+      const list = await invoke("ext_list").catch(() => []);
+      const loaded = (list || []).filter((ext) => ext.status === "loaded");
+      const hidden = new Set(settings.hidden_extensions || []);
+
+      if (!loaded.length) {
+        const empty = document.createElement("div");
+        empty.className = "menu-note";
+        empty.textContent = "No extensions loaded. Drop an MV3 extension into crx/ and restart.";
+        appMenu.append(empty);
+      }
+
+      for (const ext of loaded) {
+        const shown = !hidden.has(ext.name);
+        const item = document.createElement("button");
+        item.className = "row";
+        const icon = document.createElement("span");
+        icon.className = "ico";
+        icon.textContent = shown ? "\u2611" : "\u2610";
+        const label = document.createElement("span");
+        label.className = "label";
+        label.textContent = ext.version ? `${ext.name} ${ext.version}` : ext.name;
+        const hint = document.createElement("span");
+        hint.className = "hint";
+        hint.textContent = shown ? "" : t("Hidden");
+        item.append(icon, label, hint);
+        item.addEventListener("click", async () => {
+          const next = new Set(hidden);
+          if (next.has(ext.name)) next.delete(ext.name);
+          else next.add(ext.name);
+          await invoke("settings_set", { patch: { hidden_extensions: [...next] } });
+          await render("extensions");
+        });
+        appMenu.append(item);
+      }
+
+      divider();
+      row("\u25a4", "Open extension folder", "", () =>
+        invoke("open_dir", { which: "extensions" }), { page: true });
+      row("\u2699", "Extensions page", "", act(() =>
+        invoke("tab_new", { url: "http://tauri.localhost/pages/extensions.html" })));
+    },
+
     closed: async () => {
       header("Recently closed");
       const entries = (await invoke("tab_closed_list").catch(() => [])) || [];
@@ -445,7 +493,13 @@ async function bootAppMenu() {
 
   async function render(page) {
     clear();
-    await pages[page]();
+    // A page name that does not exist used to throw inside boot, which left an empty
+    // panel on screen and one line in the log - the extensions button opened exactly
+    // this, because the menu had no `extensions` page to show. Falling back to the root
+    // menu at least gives the user something, and the log says which name was wrong.
+    const show = pages[page] || pages.root;
+    if (!pages[page]) report("menu page missing: " + page + "; showing root");
+    await show();
     report("menu page=" + page + " nodes=" + appMenu.children.length);
   }
 
@@ -765,7 +819,7 @@ async function bootDownloads() {
     for (const task of tasks || []) {
       const key = task.path || task.url;
       const rank = (entry) =>
-        entry.state === "started" ? 3 : entry.state === "interrupted" ? 2 : 1;
+        entry.state === "started" ? 4 : entry.state === "paused" ? 3 : entry.state === "interrupted" ? 2 : 1;
       const held = seen.get(key);
       if (!held || rank(task) >= rank(held)) seen.set(key, task);
     }
@@ -807,11 +861,13 @@ async function bootDownloads() {
       }
       row.append(text);
 
-      if (task.state === "started" || task.state === "interrupted") {
+      if (task.state === "started" || task.state === "interrupted" || task.state === "paused") {
         const pause = document.createElement("button");
         pause.className = "download-action";
         pause.textContent =
-          task.paused || task.state === "interrupted" ? t("Resume") : t("Pause");
+          task.paused || task.state === "interrupted" || task.state === "paused"
+            ? t("Resume")
+            : t("Pause");
         pause.addEventListener("click", () => {
           invoke("download_pause", { id: task.id, paused: !task.paused }).catch(() => {});
         });
