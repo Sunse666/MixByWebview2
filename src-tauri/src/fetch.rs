@@ -6,10 +6,33 @@ use std::io::Write;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, OnceLock};
 
+/// What the page that started a download would have sent with it.
+///
+/// The engine is not the webview: it has no cookie jar and no referrer of its own, so a
+/// link behind a login used to come back as the site's login page saved under the file's
+/// name. The values are collected once, when the download starts, from the page that
+/// asked for it.
+#[derive(Debug, Clone, Default)]
+pub struct Request {
+    /// The page the download was started from, sent as the referrer.
+    pub referer: Option<String>,
+    /// Name=value pairs, already joined for one Cookie header.
+    pub cookie: Option<String>,
+}
+
+impl Request {
+    /// True when it has nothing the page would have sent anyway.
+    pub fn is_empty(&self) -> bool {
+        self.referer.is_none() && self.cookie.is_none()
+    }
+}
+
 /// One transfer, whether it is running, paused or finished.
 pub struct Job {
     pub url: String,
     pub path: std::path::PathBuf,
+    /// What the page would have sent along with the request.
+    pub request: Request,
     /// Set while the user wants it paused; the bytes stay.
     paused: Arc<AtomicBool>,
     /// Set when the file is no longer wanted, partial file and all.
@@ -48,8 +71,47 @@ fn jobs() -> &'static Mutex<HashMap<u64, Job>> {
     JOBS.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
+/// Sent as the user agent. A browser string rather than "Mix": plenty of file hosts
+/// answer a non-browser agent with an error page that still has a 200 status.
+pub(crate) const USER_AGENT: &str =
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) \
+     Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0";
+
+/// True when the file being written is a web page on purpose, so an html answer is the
+/// file rather than a login wall. "Save page as" lands here.
+fn wants_html(path: &std::path::Path) -> bool {
+    matches!(
+        path.extension()
+            .and_then(|value| value.to_str())
+            .map(|value| value.to_ascii_lowercase())
+            .as_deref(),
+        Some("html") | Some("htm") | Some("xhtml")
+    )
+}
+
+/// True when the answer is a document rather than the file that was asked for.
+///
+/// A login wall, an error page and a "link expired" notice all arrive as 200 with an
+/// html body, so the only way to notice is what the server says it is sending.
+fn is_html(response: &reqwest::Response) -> bool {
+    response
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .map(|value| value.to_ascii_lowercase().contains("text/html"))
+        .unwrap_or(false)
+}
+
 /// Starts (or restarts) a transfer, continuing from whatever is on disk.
-pub fn start(app: tauri::AppHandle, id: u64, url: String, path: std::path::PathBuf) {
+///
+/// `request` carries what the page would have sent; an empty one is a plain fetch.
+pub fn start_with(
+    app: tauri::AppHandle,
+    id: u64,
+    url: String,
+    path: std::path::PathBuf,
+    request: Request,
+) {
     let running = Arc::new(AtomicBool::new(true));
     let paused = Arc::new(AtomicBool::new(false));
     let cancelled = Arc::new(AtomicBool::new(false));
@@ -72,12 +134,20 @@ pub fn start(app: tauri::AppHandle, id: u64, url: String, path: std::path::PathB
             job.paused = paused.clone();
             job.cancelled = cancelled.clone();
             job.active = active.clone();
+            // The values are collected from the page at the call site, so a retry that
+            // comes from the downloads list carries none. Only replace what is there with
+            // something that is not empty, or a retry would wipe the first attempt's
+            // credentials and fail the way the original problem did.
+            if !request.is_empty() {
+                job.request = request.clone();
+            }
         } else {
             map.insert(
                 id,
                 Job {
                     url: url.clone(),
                     path: path.clone(),
+                    request: request.clone(),
                     paused: paused.clone(),
                     cancelled: cancelled.clone(),
                     active: active.clone(),
@@ -87,11 +157,18 @@ pub fn start(app: tauri::AppHandle, id: u64, url: String, path: std::path::PathB
         }
     }
 
+    let request_headers = {
+        let map = jobs().lock();
+        map.get(&id)
+            .map(|job| job.request.clone())
+            .unwrap_or_default()
+    };
+
     let active_guard = active.clone();
     let handle = tauri::async_runtime::spawn(async move {
         let client = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(600))
-            .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) Mix")
+            .user_agent(USER_AGENT)
             .build();
         let Ok(client) = client else {
             crate::downloads::set_state(&app, id, "failed");
@@ -101,14 +178,22 @@ pub fn start(app: tauri::AppHandle, id: u64, url: String, path: std::path::PathB
 
         // One transfer, continuing from whatever byte the file already holds. This is a
         // block rather than a loop because every way out of it is a return: the resume
-        // path is a second call to start(), not a second pass here.
+        // path is a second call to start_with(), not a second pass here.
         {
             let offset = std::fs::metadata(&path).map(|meta| meta.len()).unwrap_or(0);
-            let mut request = client.get(&url);
+            let mut builder = client.get(&url);
             if offset > 0 {
-                request = request.header(reqwest::header::RANGE, format!("bytes={offset}-"));
+                builder = builder.header(reqwest::header::RANGE, format!("bytes={offset}-"));
             }
-            let response = match request.send().await {
+            // What the page would have sent. Without these a link behind a login answers
+            // with the login page, and a hotlink-protected file answers with a refusal.
+            if let Some(referer) = request_headers.referer.as_deref() {
+                builder = builder.header(reqwest::header::REFERER, referer);
+            }
+            if let Some(cookie) = request_headers.cookie.as_deref() {
+                builder = builder.header(reqwest::header::COOKIE, cookie);
+            }
+            let response = match builder.send().await {
                 Ok(response) => response,
                 Err(err) => {
                     crate::logging::warn(&format!("fetch {id} failed: {err}"));
@@ -123,6 +208,27 @@ pub fn start(app: tauri::AppHandle, id: u64, url: String, path: std::path::PathB
                 release(&path);
                 return;
             }
+            // A server that ignores Range answers 200 with the whole file. Appending that
+            // to the bytes already on disk produced a file that was the head of the file
+            // followed by all of it, and the byte count then matched the announced length,
+            // so nothing downstream could tell. The partial file is dropped instead, and
+            // the transfer starts over from zero.
+            let resumed = offset > 0 && response.status() == reqwest::StatusCode::PARTIAL_CONTENT;
+            let offset = if resumed { offset } else { 0 };
+            if !resumed {
+                let _ = std::fs::remove_file(&path);
+            }
+            // A saved web page is a real thing to download, so an html answer is only
+            // refused when the file was not asked for as one.
+            if is_html(&response) && !wants_html(&path) {
+                crate::logging::warn(&format!(
+                    "fetch {id}: server answered with a web page, not the file"
+                ));
+                crate::downloads::set_state(&app, id, "failed");
+                release(&path);
+                return;
+            }
+            let mut response = response;
             let total = response.content_length().map(|length| length + offset);
             crate::downloads::set_total(&app, id, total);
 
@@ -145,7 +251,6 @@ pub fn start(app: tauri::AppHandle, id: u64, url: String, path: std::path::PathB
                 }
             };
 
-            let mut response = response;
             let mut written = offset;
             let mut last_report = std::time::Instant::now();
             let mut last_bytes = written;
@@ -162,7 +267,9 @@ pub fn start(app: tauri::AppHandle, id: u64, url: String, path: std::path::PathB
                 if paused.load(Ordering::Relaxed) || !running.load(Ordering::Relaxed) {
                     let _ = file.flush();
                     drop(file);
-                    crate::downloads::set_state(&app, id, "interrupted");
+                    // The user asked for this one, which reads differently from a
+                    // connection that went away: the buttons offered are not the same.
+                    crate::downloads::set_state(&app, id, "paused");
                     return;
                 }
                 if let Err(err) = file.write_all(&chunk) {
@@ -220,17 +327,63 @@ pub fn pause(id: u64) -> bool {
 }
 
 /// Asks the loop to carry on from what is on disk.
+///
+/// The request context is carried over rather than rebuilt: `pause` aborts the loop, so
+/// by the time this runs there may be no webview left to read the cookies back from.
 pub fn resume(app: tauri::AppHandle, id: u64) -> bool {
-    let (url, path) = {
+    let (url, path, request) = {
         let map = jobs().lock();
         match map.get(&id) {
-            Some(job) => (job.url.clone(), job.path.clone()),
+            Some(job) => (job.url.clone(), job.path.clone(), job.request.clone()),
             None => return false,
         }
     };
     unclaim(&path);
-    start(app, id, url, path);
+    start_with(app, id, url, path, request);
     true
+}
+
+/// The cookies this webview would send with its next request, joined for one header.
+///
+/// Read through the DevTools protocol because the webview offers no other way to ask,
+/// and nothing here second-guesses the expiry: what the browser is holding is what it
+/// would have sent, and filtering it again is how a download ends up unauthenticated.
+#[cfg(windows)]
+pub fn cookies_for(webview: &tauri::Webview) -> Option<String> {
+    let json = crate::screenshot::call_timeout(
+        webview,
+        "Network.getCookies",
+        "{}",
+        std::time::Duration::from_secs(2),
+    )?;
+    let value: serde_json::Value = serde_json::from_str(&json).ok()?;
+    let cookies = value.get("cookies")?.as_array()?;
+    let mut pairs: Vec<String> = Vec::new();
+    for cookie in cookies {
+        let (Some(name), Some(content)) = (
+            cookie.get("name").and_then(|item| item.as_str()),
+            cookie.get("value").and_then(|item| item.as_str()),
+        ) else {
+            continue;
+        };
+        if name.is_empty() {
+            continue;
+        }
+        // A value with a line break would split the header into a second one.
+        if name.contains([';', '\r', '\n']) || content.contains([';', '\r', '\n']) {
+            continue;
+        }
+        pairs.push(format!("{name}={content}"));
+    }
+    if pairs.is_empty() {
+        return None;
+    }
+    Some(pairs.join("; "))
+}
+
+#[cfg(not(windows))]
+pub fn cookies_for(_webview: &tauri::Webview) -> Option<String> {
+    None
 }
 
 /// Drops the transfer and the partial file with it.
