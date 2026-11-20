@@ -23,6 +23,7 @@
     "allow-tab-icon",
     "allow-source-ready",
     "allow-page-ready",
+    "allow-article-ready",
     "allow-find-result",
     "allow-page-fullscreen",
     "allow-translate-texts",

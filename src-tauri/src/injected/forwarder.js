@@ -932,3 +932,66 @@
   });
 })();
 
+// Reading mode: the article, without the page around it.
+//
+// The extraction is a heuristic, and deliberately a small one: the block with the most
+// text that is not navigation. A real reader scores every candidate against a model of
+// what an article looks like; that is a library, and this is the part of one that matters
+// for the pages a person actually reads - a news story, a blog post, a documentation
+// page.
+(function () {
+  if (window.__mixReadable) return;
+  window.__mixReadable = true;
+
+  var NOISE = 'script,style,noscript,nav,header,footer,aside,form,iframe,button,svg';
+
+  var score = function (element) {
+    var text = (element.innerText || '').trim();
+    if (text.length < 200) return 0;
+    var links = element.querySelectorAll('a');
+    var linkText = 0;
+    for (var i = 0; i < links.length; i++) linkText += (links[i].innerText || '').length;
+    // A block that is mostly links is a menu or a footer, not a story.
+    var density = linkText / Math.max(1, text.length);
+    if (density > 0.5) return 0;
+    var paragraphs = element.querySelectorAll('p').length;
+    return text.length * (1 - density) + paragraphs * 30;
+  };
+
+  var extract = function () {
+    var candidates = document.querySelectorAll('article, main, [role=main], section, div');
+    var best = null;
+    var bestScore = 0;
+    for (var i = 0; i < candidates.length; i++) {
+      var value = score(candidates[i]);
+      if (value > bestScore) {
+        bestScore = value;
+        best = candidates[i];
+      }
+    }
+    if (!best) best = document.body;
+    var clone = best.cloneNode(true);
+    var junk = clone.querySelectorAll(NOISE);
+    for (var j = junk.length - 1; j >= 0; j--) junk[j].remove();
+
+    // Every image is resolved to an absolute address, because the document it lands in
+    // has no base of its own.
+    var images = clone.querySelectorAll('img');
+    for (var k = 0; k < images.length; k++) {
+      var src = images[k].currentSrc || images[k].src || '';
+      if (src) images[k].setAttribute('src', src);
+      else images[k].remove();
+    }
+
+    var title = document.querySelector('h1') || document.querySelector('title');
+    return {
+      title: (title && (title.innerText || title.textContent) || document.title || '').trim(),
+      byline: (document.querySelector('meta[name=author]') || {}).content || '',
+      html: clone.innerHTML.slice(0, 400000),
+      url: location.href
+    };
+  };
+
+  window.__mixExtractArticle = extract;
+})();
+

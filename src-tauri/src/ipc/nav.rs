@@ -586,6 +586,75 @@ pub async fn page_ready(
     Ok(target.display().to_string())
 }
 
+/// Asks the page for the article it is showing, so it can be opened on its own.
+#[tauri::command]
+pub async fn reading_mode(
+    app: AppHandle,
+    window: tauri::Window,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    let id = selected_label(&state, &window);
+    let Some(webview) = app.get_webview(&id) else {
+        return Err(AppError::new("no_tab", id));
+    };
+    let _ = webview.eval(
+        "var a = window.__mixExtractArticle && window.__mixExtractArticle();\
+         if (a) window.__TAURI_INTERNALS__.invoke('article_ready', {
+           title: a.title, byline: a.byline, html: a.html, source: a.url });",
+    );
+    Ok(())
+}
+
+/// Lays out the article `reading_mode` asked for and opens it in a new tab.
+///
+/// The extraction already ran in the page, so this only wraps it: a measure that keeps
+/// lines short enough to read, the site's own text colour, and the source address at the
+/// end so a passage can be checked against the page it came from.
+#[tauri::command]
+pub async fn article_ready(
+    app: AppHandle,
+    window: tauri::Window,
+    state: State<'_, AppState>,
+    title: String,
+    byline: String,
+    html: String,
+    source: String,
+) -> Result<(), AppError> {
+    let body = format!(
+        "<!doctype html><meta charset=\"utf-8\"><title>{title}</title>\
+         <style>\
+         body{{margin:0 auto;padding:32px 20px;max-width:34em;\
+         font:18px/1.65 Georgia,serif;color:#1a1a1a;background:#fdfdfc}}\
+         h1{{font-size:1.7em;line-height:1.25;margin:0 0 .3em}}\
+         .byline{{color:#666;font-size:.85em;margin-bottom:1.5em}}\
+         img{{max-width:100%;height:auto}}\
+         pre,code{{font:14px/1.5 Consolas,monospace;background:#f0f0ee;padding:2px 4px}}\
+         blockquote{{border-left:3px solid #ccc;margin-left:0;padding-left:1em;color:#444}}\
+         a{{color:#0b57d0}}\
+         .src{{margin-top:2.5em;padding-top:1em;border-top:1px solid #ddd;\
+         color:#888;font-size:.8em;word-break:break-all}}\
+         @media(prefers-color-scheme:dark){{body{{background:#161616;color:#e6e6e6}}\
+         pre,code{{background:#242424}}a{{color:#8ab4f8}}\
+         blockquote{{border-color:#444;color:#bbb}}.src{{border-color:#333}}}}\
+         </style>\
+         <h1>{title}</h1><div class=\"byline\">{byline}</div>{html}\
+         <div class=\"src\">{source}</div>",
+        title = escape_html(&title),
+        byline = escape_html(&byline),
+        source = escape_html(&source),
+        // The extracted markup is the article itself, so it is not escaped: doing that
+        // would print the tags instead of the story. It came from the page, over a
+        // command only an app page may answer.
+        html = html,
+    );
+    let url = format!(
+        "data:text/html;charset=utf-8;base64,{}",
+        crate::extensions::base64(body.as_bytes())
+    );
+    tab_new(app, window, state, Some(url), None, None).await?;
+    Ok(())
+}
+
 /// The address of the page in front of the user, as a QR code.
 ///
 /// A qr code is a square per module, so the answer is an svg built from one path: it

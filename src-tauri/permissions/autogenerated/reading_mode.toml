@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-reading-mode"
+description = "Enables the reading_mode command without any pre-configured scope."
+commands.allow = ["reading_mode"]
+
+[[permission]]
+identifier = "deny-reading-mode"
+description = "Denies the reading_mode command without any pre-configured scope."
+commands.deny = ["reading_mode"]

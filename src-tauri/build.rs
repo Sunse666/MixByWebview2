@@ -141,6 +141,8 @@ fn main() {
         "save_page",
         "page_ready",
         "page_qr",
+        "reading_mode",
+        "article_ready",
         "context_menu",
         "snap",
         "settings_get",

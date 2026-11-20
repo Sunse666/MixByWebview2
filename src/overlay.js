@@ -1449,6 +1449,10 @@ async function bootMenu() {
   item("\u25a6", "QR code for this page", "", async () => {
     await invoke("overlay_open", { kind: "qr" }).catch((error) => report(String(error)));
   });
+  item("\u2261", "Open in reading mode", "", async () => {
+    await invoke("reading_mode").catch((error) => report(String(error)));
+    await invoke("overlay_close");
+  });
   item("\u2318", "View source", "Ctrl+U", async () => {
     await invoke("view_source");
     await invoke("overlay_close");

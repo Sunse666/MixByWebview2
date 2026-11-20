@@ -124,6 +124,8 @@
     "allow-save-page",
     "allow-page-ready",
     "allow-page-qr",
+    "allow-reading-mode",
+    "allow-article-ready",
     "allow-context-menu",
     "allow-snap",
     "allow-settings-get",
