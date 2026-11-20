@@ -491,11 +491,11 @@ pub async fn view_source(
     Ok(())
 }
 
-/// Receives the markup `view_source` asked for and opens it in a tab.
+/// Keeps the markup `view_source` asked for and opens the page that shows it.
 ///
-/// The markup is the tab's content, so it is escaped rather than served: a page that
-/// contains a `<script>` would otherwise run a second time, with a data url as its
-/// origin. Base64 keeps the url from growing by three bytes a character.
+/// The markup is not put in the url. A data url is refused outright by the webview, and a
+/// whole document does not fit in a hash - so it waits in the state and the page asks for
+/// it, which is how the error page already gets the address it names.
 #[tauri::command]
 pub async fn source_ready(
     app: AppHandle,
@@ -503,25 +503,16 @@ pub async fn source_ready(
     state: State<'_, AppState>,
     html: String,
 ) -> Result<(), AppError> {
-    let body = format!(
-        "<!doctype html><meta charset=\"utf-8\"><title>Source</title>\
-         <pre style=\"white-space:pre-wrap;word-break:break-word;\
-         font:13px/1.5 Consolas,ui-monospace,monospace;padding:12px;margin:0\">{}</pre>",
-        escape_html(&html)
-    );
-    let url = format!(
-        "data:text/html;charset=utf-8;base64,{}",
-        crate::extensions::base64(body.as_bytes())
-    );
-    tab_new(app, window, state, Some(url), None, None).await?;
+    state.ui.write().source = Some(html);
+    let page = "http://tauri.localhost/pages/source.html".to_string();
+    tab_new(app, window, state, Some(page), None, None).await?;
     Ok(())
 }
 
-/// The three characters that would otherwise be read as markup.
-fn escape_html(text: &str) -> String {
-    text.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
+/// The markup the source tab is meant to show.
+#[tauri::command]
+pub async fn source_get(state: State<'_, AppState>) -> Result<String, AppError> {
+    Ok(state.ui.read().source.clone().unwrap_or_default())
 }
 
 /// Asks the page for its markup, the way `view_source` does, but to save it to disk.
@@ -607,9 +598,9 @@ pub async fn reading_mode(
 
 /// Lays out the article `reading_mode` asked for and opens it in a new tab.
 ///
-/// The extraction already ran in the page, so this only wraps it: a measure that keeps
-/// lines short enough to read, the site's own text colour, and the source address at the
-/// end so a passage can be checked against the page it came from.
+/// The extraction already ran in the page, so this only keeps it: the built-in reader page
+/// lays it out, and asking for the markup through a command is what keeps a whole article
+/// out of the url.
 #[tauri::command]
 pub async fn article_ready(
     app: AppHandle,
@@ -620,39 +611,21 @@ pub async fn article_ready(
     html: String,
     source: String,
 ) -> Result<(), AppError> {
-    let body = format!(
-        "<!doctype html><meta charset=\"utf-8\"><title>{title}</title>\
-         <style>\
-         body{{margin:0 auto;padding:32px 20px;max-width:34em;\
-         font:18px/1.65 Georgia,serif;color:#1a1a1a;background:#fdfdfc}}\
-         h1{{font-size:1.7em;line-height:1.25;margin:0 0 .3em}}\
-         .byline{{color:#666;font-size:.85em;margin-bottom:1.5em}}\
-         img{{max-width:100%;height:auto}}\
-         pre,code{{font:14px/1.5 Consolas,monospace;background:#f0f0ee;padding:2px 4px}}\
-         blockquote{{border-left:3px solid #ccc;margin-left:0;padding-left:1em;color:#444}}\
-         a{{color:#0b57d0}}\
-         .src{{margin-top:2.5em;padding-top:1em;border-top:1px solid #ddd;\
-         color:#888;font-size:.8em;word-break:break-all}}\
-         @media(prefers-color-scheme:dark){{body{{background:#161616;color:#e6e6e6}}\
-         pre,code{{background:#242424}}a{{color:#8ab4f8}}\
-         blockquote{{border-color:#444;color:#bbb}}.src{{border-color:#333}}}}\
-         </style>\
-         <h1>{title}</h1><div class=\"byline\">{byline}</div>{html}\
-         <div class=\"src\">{source}</div>",
-        title = escape_html(&title),
-        byline = escape_html(&byline),
-        source = escape_html(&source),
-        // The extracted markup is the article itself, so it is not escaped: doing that
-        // would print the tags instead of the story. It came from the page, over a
-        // command only an app page may answer.
-        html = html,
-    );
-    let url = format!(
-        "data:text/html;charset=utf-8;base64,{}",
-        crate::extensions::base64(body.as_bytes())
-    );
-    tab_new(app, window, state, Some(url), None, None).await?;
+    state.ui.write().article = Some(Article {
+        title,
+        byline,
+        html,
+        source,
+    });
+    let page = "http://tauri.localhost/pages/reader.html".to_string();
+    tab_new(app, window, state, Some(page), None, None).await?;
     Ok(())
+}
+
+/// The article the reader tab is meant to lay out.
+#[tauri::command]
+pub async fn article_get(state: State<'_, AppState>) -> Result<Option<Article>, AppError> {
+    Ok(state.ui.read().article.clone())
 }
 
 /// The address of the page in front of the user, as a QR code.
@@ -702,10 +675,9 @@ pub async fn page_qr(
          shape-rendering=\"crispEdges\"><rect width=\"{side}\" height=\"{side}\" fill=\"#fff\"/>\
          <path d=\"{path}\" fill=\"#000\"/></svg>"
     );
-    Ok(format!(
-        "data:image/svg+xml;base64,{}",
-        crate::extensions::base64(svg.as_bytes())
-    ))
+    // The markup itself, not a data url: the webview refuses those, and the overlay can
+    // put an svg on the page as it stands.
+    Ok(svg)
 }
 
 /// Runs a text edit in the chrome page, which owns the address field.

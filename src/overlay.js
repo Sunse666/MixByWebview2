@@ -1161,16 +1161,19 @@ async function bootQr() {
 
   const bar = document.createElement("div");
   bar.className = "qr";
-  const image = document.createElement("img");
-  image.alt = "";
-  image.addEventListener("error", () => report("qr image refused"));
+  // The command hands back svg markup, which goes on the page as markup: a data url is
+  // refused by the webview, and this is the same picture without one.
   try {
-    image.src = await invoke("page_qr");
+    const markup = await invoke("page_qr");
+    bar.innerHTML = markup;
+    const image = bar.querySelector("svg");
+    if (image) {
+      image.setAttribute("width", "100%");
+      image.setAttribute("height", "100%");
+    }
   } catch (error) {
-    report("qr failed: " + error);
-    image.hidden = true;
+    report("qr failed: " + String(error));
   }
-  bar.append(image);
   menu.append(bar);
 
   menu.addEventListener("pointerdown", (event) => {

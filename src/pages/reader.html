@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Reader</title>
+  <style>
+    /* A measure that keeps lines short enough to read, at a size meant for reading. */
+    body {
+      margin: 0 auto;
+      padding: 32px 20px 72px;
+      max-width: 34em;
+      font: 18px/1.65 Georgia, "Songti SC", serif;
+      color: #1a1a1a;
+      background: #fdfdfc;
+    }
+    h1 { font-size: 1.7em; line-height: 1.25; margin: 0 0 .3em; }
+    .byline { color: #666; font-size: .85em; margin-bottom: 1.6em; }
+    img { max-width: 100%; height: auto; }
+    pre, code { font: 14px/1.5 Consolas, ui-monospace, monospace;
+      background: #f0f0ee; border-radius: 3px; }
+    pre { padding: 10px 12px; overflow-x: auto; }
+    code { padding: 2px 4px; }
+    blockquote { border-left: 3px solid #ccc; margin-left: 0; padding-left: 1em;
+      color: #444; }
+    a { color: #0b57d0; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid #ddd; padding: 6px 8px; text-align: left; }
+    .src { margin-top: 2.5em; padding-top: 1em; border-top: 1px solid #ddd;
+      color: #888; font-size: .8em; word-break: break-all; }
+    .empty { color: #888; }
+    @media (prefers-color-scheme: dark) {
+      body { background: #161616; color: #e6e6e6; }
+      pre, code { background: #242424; }
+      a { color: #8ab4f8; }
+      blockquote { border-color: #444; color: #bbb; }
+      .src { border-color: #333; }
+      th, td { border-color: #333; }
+    }
+  </style>
+</head>
+<body>
+  <h1 id="title"></h1>
+  <div class="byline" id="byline"></div>
+  <article id="body"></article>
+  <div class="src" id="src"></div>
+  <script type="module" src="reader.js"></script>
+</body>
+</html>

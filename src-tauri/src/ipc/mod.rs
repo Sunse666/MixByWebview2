@@ -111,6 +111,23 @@ pub struct Ui {
     pub translate_skip: std::collections::HashMap<String, String>,
     /// Whether the last in-page search matched anything.
     pub find_hit: bool,
+    /// Markup the source tab is waiting to show. Kept here rather than in the url: a
+    /// webview refuses a data url, and a document does not fit in a hash.
+    pub source: Option<String>,
+    /// The article the reader tab is waiting to lay out.
+    pub article: Option<Article>,
+}
+
+/// One page's article, as the reader page receives it.
+#[derive(Debug, Clone, Serialize)]
+pub struct Article {
+    pub title: String,
+    pub byline: String,
+    /// The extracted markup. Inserted as markup by the reader, which is what makes it an
+    /// article rather than a description of one.
+    pub html: String,
+    /// The page it came from, shown at the end so a passage can be checked.
+    pub source: String,
 }
 
 /// Navigation bookkeeping: what each tab is loading, where the bundled pages live and
@@ -181,6 +198,8 @@ impl AppState {
                 translated_tabs: std::collections::HashSet::new(),
                 translate_skip: std::collections::HashMap::new(),
                 find_hit: true,
+                source: None,
+                article: None,
             }),
             nav: parking_lot::RwLock::new(Nav {
                 app_base: String::new(),
