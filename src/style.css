@@ -39,20 +39,29 @@
 
 html, body {
   margin: 0;
-  height: 100%;
   overflow: hidden;
-  background: var(--bg);
   color: var(--text);
   font: var(--font-size) / 1.4 "Segoe UI", system-ui, sans-serif;
   user-select: none;
   -webkit-user-select: none;
 }
 
+/* The strip's height follows its content, never the viewport.
+   app.js measures the body and reports it to `chrome_fit`, which is what sizes this webview.
+   With `height: 100%` that measurement read back the height the webview had just been given,
+   so the loop could only ever agree with itself: the strip stayed at the constant it was
+   built with, and content taller than that constant was clipped instead of corrected. */
 body {
   display: flex;
   flex-direction: column;
+  background: var(--bg);
   border-radius: var(--radius) var(--radius) 0 0;
 }
+
+/* What a fractional dpi leaves below the content is the strip's own colour, not the page's:
+   at 125% the box is a half css pixel tall, and the page colour showed as a hairline under
+   the toolbar on some displays only. */
+html { background: var(--panel); }
 
 button {
   font: inherit;
@@ -197,8 +206,10 @@ button {
   display: flex;
   align-items: center;
   gap: 6px;
-  /* Fill whatever the strip has left, so rounding cannot leave a gap. */
-  flex: 1;
+  /* 38 px is the row, and it does not take up slack. Growing to fill the strip would make
+     this row's height depend on the viewport again - the one thing the measurement that
+     sizes the strip cannot see. */
+  flex: 0 0 auto;
   min-height: 38px;
   padding: 0 8px;
   background: var(--panel);
@@ -332,6 +343,11 @@ button {
   border-top: 1px solid var(--border);
   scrollbar-width: none;
 }
+
+/* `[hidden]` is a user-agent rule, so the `display: flex` above wins over it: the row kept
+   its 30 px while switched off, which made the strip's content 100 px on every machine and
+   hid the fact that switching the row on changes the height at all. */
+.bookmarks[hidden] { display: none; }
 
 .bookmarks::-webkit-scrollbar { display: none; }
 

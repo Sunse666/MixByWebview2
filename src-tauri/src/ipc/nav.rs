@@ -241,7 +241,7 @@ pub async fn suggest_open(
         &window,
         "suggest",
         x,
-        chrome_height(&app) + 2.0,
+        crate::window::chrome_height_px(&app) + 2.0,
         (width, height),
     )
     .map_err(|e| AppError::new("overlay", e))

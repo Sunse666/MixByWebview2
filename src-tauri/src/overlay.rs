@@ -165,7 +165,7 @@ pub(crate) fn parse_color(hex: &str) -> tauri::window::Color {
 /// find bar and the zoom bubble there too, everything else centred under the chrome.
 pub fn open(app: &AppHandle, win: &tauri::Window, kind: &str) -> Result<(), String> {
     let (win_w, win_h) = logical_size(win).map_err(|e| e.to_string())?;
-    let chrome_h = crate::ipc::chrome_height(app);
+    let chrome_h = crate::window::chrome_height_px(app);
     let room = (win_h - chrome_h - 12.0).max(MIN_H);
 
     // The settings form is not a bubble: its sections are different heights and it

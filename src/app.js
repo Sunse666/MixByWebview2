@@ -883,10 +883,32 @@ async function renderToolbar(extensions) {
 }
 
 
+// The whole strip, bookmarks row included: the window reserves this much above the page, and
+// this is the only place that knows what the stylesheet actually drew.
+//
+// Module scope because the row that changes the height most often is the bookmarks bar, and
+// every path that shows or hides it - boot, the settings listener, __mixSettingsChanged - ends
+// in renderBookmarks. Fitting from there keeps the reported height and the row from
+// disagreeing without each caller having to remember; the call used to sit in boot above the
+// first render, so it reported a strip that was still missing the row about to appear.
+function fitStrip() {
+  // Reading the box forces a layout, so this is the height the stylesheet just produced.
+  // It only says anything because style.css keeps the body off `height: 100%`; pinned to the
+  // viewport this would read back the number it was given and change nothing.
+  //
+  // Kept to a tenth of a pixel rather than rounded to a whole one. On a display scaled to
+  // 125% or 150% the rows land on fractions of a css pixel, and rounding them here decided
+  // the strip's height by up to half a pixel in whichever direction the fraction happened
+  // to fall - so two machines with the same stylesheet could report different integers.
+  const height = Math.round(document.body.getBoundingClientRect().height * 10) / 10;
+  if (height > 0) invoke("chrome_fit", { height }).catch(() => {});
+}
+
 function renderBookmarks(list) {
   const bar = document.getElementById("bookmarks");
   const items = list || [];
   bar.hidden = !settings.show_bookmarks;
+  fitStrip();
   if (bar.hidden) return;
 
   bar.replaceChildren(
@@ -1196,9 +1218,8 @@ async function boot() {
     renderTabs();
     renderBookmarks(await invoke("bookmark_list"));
     renderToolbar(await invoke("ext_list"));
-    // The bookmarks row is part of the strip, so turning it on or off changes how much of
-    // the window the pages must not use.
-    fitStrip();
+    // No fitStrip() here: renderBookmarks above does it, because the bookmarks row is the one
+    // part of the strip a setting can add or remove.
   });
   await listen("tab:loading", (event) => {
     const tab = tabs.find((item) => item.id === event.payload.id);
@@ -1239,14 +1260,6 @@ async function boot() {
     });
   }
 
-  // The whole strip, bookmarks row included: the window reserves this much above the page,
-  // and this is the only place that knows what the stylesheet actually drew. A declaration
-  // rather than a const so the settings listener above can call it without an order rule.
-  function fitStrip() {
-    const height = Math.round(document.body.getBoundingClientRect().height);
-    if (height > 0) invoke("chrome_fit", { height }).catch(() => {});
-  }
-  fitStrip();
   window.addEventListener("resize", fitStrip);
   report(`boot tabs=${tabs.length} selected=${selected}`);
 
@@ -1332,6 +1345,9 @@ async function boot() {
   });
 
   window.addEventListener("keydown", (event) => {
+    // The in-window fallback for docking, kept because the global shortcut can be
+    // refused by the platform. It lives here rather than in the injected script: the
+    // strip is a page this app serves, so a site cannot reach this handler.
     if (event.altKey && event.shiftKey && event.key.startsWith("Arrow")) {
       event.preventDefault();
       invoke("snap", { direction: event.key.replace("Arrow", "").toLowerCase() });

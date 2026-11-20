@@ -16,6 +16,20 @@ use crate::tabs;
 /// strip and a warning in the log on every start.
 pub const CHROME_H: f64 = 70.0;
 
+/// The strip's height in whole logical pixels, which is what a webview's bounds take.
+///
+/// `chrome_fit` keeps a tenth of a pixel, because that is the resolution at which the
+/// measurement means something on a scaled display; the layout is whole pixels, and both
+/// the strip and the top of every page come from this one call so they cannot differ.
+pub fn chrome_height_px(app: &AppHandle) -> f64 {
+    round_height(crate::ipc::chrome_height(app))
+}
+
+/// One rounding rule, so every caller puts the strip's edge on the same pixel.
+fn round_height(height: f64) -> f64 {
+    height.round().max(1.0)
+}
+
 pub fn logical_size(win: &Window) -> tauri::Result<(f64, f64)> {
     let size = win.inner_size()?;
     let scale = win.scale_factor()?;
@@ -398,10 +412,13 @@ pub fn open_window(
         .try_state::<AppState>()
         .map(|state| state.windows.fullscreen.read().contains(label))
         .unwrap_or(false);
+    // Fractional on a scaled display, but a webview's bounds are whole logical pixels.
+    // Rounded in one place and used for both the strip and the offset of every page, so
+    // the two can never disagree by the fraction the measurement now keeps.
     let chrome_h = if fullscreen {
         0.0
     } else {
-        crate::ipc::chrome_height(app)
+        chrome_height_px(app)
     };
     let built = win.add_child(
         chrome_builder(&opts.ui_data_dir, true),
@@ -674,10 +691,13 @@ pub fn relayout(app: &AppHandle, label: &str) -> Result<(), tauri::Error> {
     let fullscreen = app
         .try_state::<AppState>()
         .is_some_and(|state| state.windows.fullscreen.read().contains(label));
+    // Fractional on a scaled display, but a webview's bounds are whole logical pixels.
+    // Rounded in one place and used for both the strip and the offset of every page, so
+    // the two can never disagree by the fraction the measurement now keeps.
     let chrome_h = if fullscreen {
         0.0
     } else {
-        crate::ipc::chrome_height(app)
+        chrome_height_px(app)
     };
     let tab_height = (height - chrome_h).max(1.0);
 
@@ -710,4 +730,23 @@ pub fn relayout(app: &AppHandle, label: &str) -> Result<(), tauri::Error> {
 
     let _ = app.emit_to(label, "layout:changed", (width, height));
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::round_height;
+
+    #[test]
+    fn a_fractional_measurement_lands_on_one_whole_pixel() {
+        // What a display scaled to 125% produces: the rows do not add up to a whole number.
+        assert_eq!(round_height(70.4), 70.0);
+        assert_eq!(round_height(71.2), 71.0);
+        assert_eq!(round_height(88.8), 89.0);
+    }
+
+    #[test]
+    fn a_collapsed_strip_still_has_a_height() {
+        // Fullscreen hides the strip by asking for zero; a webview cannot have one.
+        assert_eq!(round_height(0.0), 1.0);
+    }
 }

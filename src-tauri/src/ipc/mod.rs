@@ -277,8 +277,8 @@ impl AppState {
         parking_lot::RwLockWriteGuard::try_map(self.cores.write(), |map| map.get_mut(label)).ok()
     }
 
-    /// Tab state of one window. A window whose state is gone 閳?a webview callback that
-    /// outlived its window 閳?gets an empty one instead of taking the process down.
+    /// Tab state of one window. A window whose state is gone - a webview callback that
+    /// outlived its window - gets an empty one instead of taking the process down.
     pub fn read_core(&self, label: &str) -> parking_lot::MappedRwLockReadGuard<'_, Core> {
         if let Some(core) = self.try_read_core(label) {
             return core;
@@ -447,6 +447,11 @@ pub const MAX_CHROME_H: f64 = 240.0;
 ///
 /// The measurement wins; the constant plus the bookmarks row is only what to use before the
 /// page has said anything, and if what it says is nonsense.
+///
+/// The value is fractional on a scaled display, which is the point: `chrome_fit` keeps a
+/// tenth of a pixel so a strip that measures 70.4 does not get remembered as 70. Anything
+/// that puts this into a webview's bounds has to round it first - see
+/// `crate::window::chrome_height_px`.
 pub fn chrome_height(app: &AppHandle) -> f64 {
     match app.try_state::<AppState>() {
         Some(state) => {

@@ -15,7 +15,7 @@ fn spawn_tab(
         .ok_or_else(|| AppError::new("no_window", "window is missing"))?;
     let opts = app.state::<AppState>().opts.clone();
     let (width, height) = crate::window::logical_size(&win)?;
-    let tab_height = (height - chrome_height(app)).max(1.0);
+    let tab_height = (height - crate::window::chrome_height_px(app)).max(1.0);
     // A webview that is not the one on screen is created as small as a webview gets and
     // hidden before anything resizes it: WebviewBuilder has no "start hidden", and at full
     // size it would paint over the page the user is looking at for a frame.
@@ -422,7 +422,7 @@ pub async fn thumb_show(
     // The card is a picture frame: its size is the design, not a measurement.
     let (width, height) = crate::overlay::initial_size("thumb");
     let left = (x - width / 2.0).clamp(6.0, (win_w - width - 6.0).max(6.0));
-    let top = chrome_height(&app) + 6.0;
+    let top = crate::window::chrome_height_px(&app) + 6.0;
     let kind = format!("thumb&id={}", crate::permissions::encode(&id));
     crate::overlay::open_sized(&app, &window, &kind, left, top, (width, height))
         .map_err(|err| AppError::new("overlay", err))?;

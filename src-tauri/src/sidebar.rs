@@ -83,7 +83,7 @@ pub fn ensure(app: &AppHandle, label: &str) {
     let Ok((width_px, height)) = logical_size(&win) else {
         return;
     };
-    let chrome_h = crate::ipc::chrome_height(app);
+    let chrome_h = crate::window::chrome_height_px(app);
     let plan = plan(app, width_px, false);
     if !plan.on() {
         return;
