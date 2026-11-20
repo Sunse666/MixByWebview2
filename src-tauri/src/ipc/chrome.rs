@@ -105,7 +105,7 @@ pub async fn context_menu(
     // it hangs from, with the size the menu opens at.
     let (menu_w, menu_h) = crate::overlay::initial_size("context_menu");
     let x = (request.x.unwrap_or(0.0) + 80.0).clamp(4.0, (width - menu_w - 4.0).max(4.0));
-    let y = (chrome_height(&app) + request.y.unwrap_or(0.0))
+    let y = (crate::window::chrome_height_px(&app) + request.y.unwrap_or(0.0))
         .clamp(4.0, (height - menu_h - 4.0).max(4.0));
 
     crate::logging::info(&format!(
@@ -187,7 +187,7 @@ pub async fn permission_request(
         &window,
         &url,
         x,
-        chrome_height(&app) + 48.0,
+        crate::window::chrome_height_px(&app) + 48.0,
         prompt_w,
         prompt_h,
     )
@@ -320,10 +320,12 @@ pub async fn chrome_fit(
         crate::logging::warn(&format!("chrome strip reported {height}; ignored"));
         return Ok(());
     }
+    // Half a pixel is the cutoff, not a whole one. With a whole one a strip that measured
+    // 70.4 and later 71.2 counted as unchanged and kept the value it first stored, so the
+    // number that survived was history rather than the current measurement.
     let changed = {
         let mut settings = state.settings.write();
-        // Under a pixel of difference is a rounding argument, not a layout change.
-        let changed = (settings.chrome_height - height).abs() > 1.0;
+        let changed = (settings.chrome_height - height).abs() >= 0.5;
         settings.chrome_height = height;
         changed
     };
@@ -385,6 +387,10 @@ fn free_window_label(state: &AppState) -> String {
 }
 
 /// Opens another window with its own tab strip.
+///
+/// It runs in this process, the way a second browser window does. A tab dragged out of a
+/// window is a different thing and starts its own process; the two share `UserData`, so
+/// the difference a user can see is that closing this one leaves the app running.
 #[tauri::command]
 pub async fn window_new(app: AppHandle, state: State<'_, AppState>) -> Result<String, AppError> {
     let label = free_window_label(&state);
