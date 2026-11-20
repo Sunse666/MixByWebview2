@@ -1406,6 +1406,10 @@ async function bootMenu() {
   item("\u2606", "Bookmark this page", "Ctrl+D", () => invoke("shortcut", { action: "bookmark" }));
   divider();
   item("\u2399", "Print", "Ctrl+P", () => invoke("tab_print"));
+  item("\u2b07", "Save page as...", "Ctrl+S", async () => {
+    await invoke("save_page").catch((error) => report(String(error)));
+    await invoke("overlay_close");
+  });
   if (context.selection) {
     item("\u4e16", "Translate selection", "", async () => {
       await invoke("translate_page", { target: context.selection }).catch((error) => report(String(error)));

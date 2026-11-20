@@ -22,6 +22,7 @@
     "allow-shortcut",
     "allow-tab-icon",
     "allow-source-ready",
+    "allow-page-ready",
     "allow-find-result",
     "allow-page-fullscreen",
     "allow-translate-texts",

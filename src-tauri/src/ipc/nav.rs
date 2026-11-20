@@ -524,6 +524,68 @@ fn escape_html(text: &str) -> String {
         .replace('>', "&gt;")
 }
 
+/// Asks the page for its markup, the way `view_source` does, but to save it to disk.
+#[tauri::command]
+pub async fn save_page(
+    app: AppHandle,
+    window: tauri::Window,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    let id = selected_label(&state, &window);
+    let Some(webview) = app.get_webview(&id) else {
+        return Err(AppError::new("no_tab", id));
+    };
+    let _ = webview.eval(
+        "window.__TAURI_INTERNALS__.invoke('page_ready', { html: document.documentElement.outerHTML })"
+    );
+    Ok(())
+}
+
+/// Writes the markup `save_page` asked for into the downloads folder.
+///
+/// The page is asked for its own html rather than fetched again: a fetch would bring back
+/// the same bytes the server has, not the document the reader is looking at - and a page
+/// that renders on the client has almost nothing in the response.
+#[tauri::command]
+pub async fn page_ready(
+    app: AppHandle,
+    window: tauri::Window,
+    state: State<'_, AppState>,
+    html: String,
+) -> Result<String, AppError> {
+    let id = selected_label(&state, &window);
+    let title = state
+        .read_core(window.label())
+        .tabs
+        .iter()
+        .find(|tab| tab.id == id)
+        .map(|tab| tab.title.clone())
+        .unwrap_or_default();
+    let page_url = state
+        .read_core(window.label())
+        .tabs
+        .iter()
+        .find(|tab| tab.id == id)
+        .map(|tab| tab.url.clone())
+        .unwrap_or_default();
+    // The title names the file; a page without one falls back to its last path segment,
+    // and `target_for` sanitises whatever comes out of that.
+    let suggested = if title.trim().is_empty() {
+        page_url.rsplit('/').next().unwrap_or("page").to_string()
+    } else {
+        title
+    };
+    let target = crate::downloads::target_for(
+        &state.dirs.downloads,
+        &page_url,
+        &format!("{suggested}.html"),
+    );
+    crate::paths::write_atomic(&target, html.as_bytes())?;
+    crate::downloads::record_done(&app, &page_url, &target);
+    crate::logging::info(&format!("page saved {}", target.display()));
+    Ok(target.display().to_string())
+}
+
 /// Runs a text edit in the chrome page, which owns the address field.
 #[tauri::command]
 pub async fn url_action(

@@ -232,6 +232,8 @@ fn main() {
             ipc::url_action,
             ipc::view_source,
             ipc::source_ready,
+            ipc::save_page,
+            ipc::page_ready,
             ipc::context_menu,
             ipc::snap,
             ipc::settings_get,

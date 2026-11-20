@@ -121,6 +121,8 @@
     "allow-url-action",
     "allow-view-source",
     "allow-source-ready",
+    "allow-save-page",
+    "allow-page-ready",
     "allow-context-menu",
     "allow-snap",
     "allow-settings-get",

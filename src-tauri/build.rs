@@ -138,6 +138,8 @@ fn main() {
         "url_action",
         "view_source",
         "source_ready",
+        "save_page",
+        "page_ready",
         "context_menu",
         "snap",
         "settings_get",
