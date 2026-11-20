@@ -19,11 +19,35 @@ const root = path.join(__dirname, "..");
 const src = path.join(root, "src");
 
 const dict = new Set();
+const seen = new Map();
+const duplicates = [];
 const i18n = fs.readFileSync(path.join(src, "i18n.js"), "utf8");
+let lineNumber = 0;
 for (const line of i18n.split(/\r?\n/)) {
+  lineNumber += 1;
   // Keys are either quoted ("Close tab") or bare identifiers (Settings).
+  // A long key is wrapped: the key sits on one line and its value on the next, so the
+  // value is matched only when it is on this line. The duplicate test compares values,
+  // and a wrapped entry is compared by its key alone.
   const match = /^\s*(?:"((?:[^"\\]|\\.)*)"|([A-Za-z_$][\w$]*))\s*:/.exec(line);
-  if (match) dict.add(match[1] !== undefined ? match[1] : match[2]);
+  if (!match) continue;
+  const key = match[1] !== undefined ? match[1] : match[2];
+  const inline = /:\s*("(?:[^"\\]|\\.)*")/.exec(line);
+  dict.add(key);
+  // An object literal keeps the last value for a repeated key, so a second entry is not a
+  // harmless repeat unless it says the same thing. Three of these had drifted apart while
+  // the check stayed green, and the one that won was whichever happened to come second.
+  const value = inline ? inline[1] : null;
+  if (seen.has(key)) {
+    const first = seen.get(key);
+    if (first.value && value && first.value !== value) {
+      duplicates.push(
+        '"' + key + '"  line ' + first.line + ' ' + first.value + '  vs  line ' + lineNumber + ' ' + value,
+      );
+    }
+  } else {
+    seen.set(key, { line: lineNumber, value });
+  }
 }
 
 const files = [];
@@ -118,4 +142,9 @@ if (unused.length) {
   console.log("dictionary entries no page mentions: " + unused.length + " (check before removing)");
   for (const key of unused) console.log('  "' + key + '"');
 }
-process.exit(missing.length ? 1 : 0);
+if (duplicates.length) {
+  console.log("");
+  console.log("a key is defined twice with different values (" + duplicates.length + "):");
+  for (const entry of duplicates) console.log("  " + entry);
+}
+process.exit(missing.length || duplicates.length ? 1 : 0);
