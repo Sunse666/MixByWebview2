@@ -119,6 +119,8 @@
     "allow-focus-page",
     "allow-chrome-menu",
     "allow-url-action",
+    "allow-view-source",
+    "allow-source-ready",
     "allow-context-menu",
     "allow-snap",
     "allow-settings-get",

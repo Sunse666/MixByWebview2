@@ -142,6 +142,8 @@ const DICT = {
     "Export profile": "导出配置",
     "Import profile": "导入配置",
     "Restored": "已恢复",
+    "View source": "查看网页源代码",
+    "Search this image on Google": "用 Google 搜索这张图片",
     "restart to apply": "重启后生效",
     "Settings, history, bookmarks, theme and icons without the WebView2 profile": "设置、历史、书签、主题和图标（不含 WebView2 缓存）",
     "Export theme": "导出主题",

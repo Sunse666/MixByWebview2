@@ -230,6 +230,8 @@ fn main() {
             ipc::focus_page,
             ipc::chrome_menu,
             ipc::url_action,
+            ipc::view_source,
+            ipc::source_ready,
             ipc::context_menu,
             ipc::snap,
             ipc::settings_get,

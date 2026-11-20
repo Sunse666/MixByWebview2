@@ -1368,6 +1368,13 @@ async function bootMenu() {
   if (context.image) {
     item("\u25a3", "Open image in new tab", "", () => invoke("tab_new", { url: context.image }));
     item("\u2398", "Copy image address", "", () => copy(context.image));
+    // Reverse image search is a third-party request with the picture's address in it, so
+    // the row says whose engine takes it rather than leaving that to be guessed.
+    item("\u2315", "Search this image on Google", "", async () => {
+      const url = "https://www.google.com/searchbyimage?image_url=" + encodeURIComponent(context.image);
+      await invoke("tab_new", { url });
+      await invoke("overlay_close");
+    });
     item("\u2b07", "Save image as...", "", async () => {
       const name = (context.image.split("/").pop() || "image").split("?")[0];
       try {
@@ -1390,9 +1397,13 @@ async function bootMenu() {
     divider();
   }
 
-  item("\u2190", "Back", "", () => invoke("tab_nav", { action: "back" }));
-  item("\u2192", "Forward", "", () => invoke("tab_nav", { action: "forward" }));
+  // The keys are shown because they work from here: the strip's own handler does not
+  // depend on the menu, and a menu that hides what the keyboard can do reads as a list of
+  // the only things a mouse may press.
+  item("\u2190", "Back", "Alt+\u2190", () => invoke("tab_nav", { action: "back" }));
+  item("\u2192", "Forward", "Alt+\u2192", () => invoke("tab_nav", { action: "forward" }));
   item("\u21bb", "Reload", "Ctrl+R", () => invoke("tab_nav", { action: "reload" }));
+  item("\u2606", "Bookmark this page", "Ctrl+D", () => invoke("shortcut", { action: "bookmark" }));
   divider();
   item("\u2399", "Print", "Ctrl+P", () => invoke("tab_print"));
   if (context.selection) {
@@ -1403,6 +1414,10 @@ async function bootMenu() {
   }
   item("\u4e16", "Translate page", "", async () => {
     await invoke("translate_page", { target: null }).catch((error) => report(String(error)));
+    await invoke("overlay_close");
+  });
+  item("\u2318", "View source", "Ctrl+U", async () => {
+    await invoke("view_source");
     await invoke("overlay_close");
   });
   item("\u2691", "Inspect", "", () => invoke("shortcut", { action: "devtools" }));

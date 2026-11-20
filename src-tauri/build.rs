@@ -136,6 +136,8 @@ fn main() {
         "focus_page",
         "chrome_menu",
         "url_action",
+        "view_source",
+        "source_ready",
         "context_menu",
         "snap",
         "settings_get",

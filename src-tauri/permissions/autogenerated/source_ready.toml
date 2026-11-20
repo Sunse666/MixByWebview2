@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-source-ready"
+description = "Enables the source_ready command without any pre-configured scope."
+commands.allow = ["source_ready"]
+
+[[permission]]
+identifier = "deny-source-ready"
+description = "Denies the source_ready command without any pre-configured scope."
+commands.deny = ["source_ready"]

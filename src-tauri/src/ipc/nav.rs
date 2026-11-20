@@ -467,6 +467,63 @@ pub async fn find_status(state: State<'_, AppState>) -> Result<bool, AppError> {
     Ok(state.ui.read().find_hit)
 }
 
+/// Opens the markup of the page in a tab of its own.
+///
+/// WebView2 does not accept `view-source:` as a scheme - it navigates to a blank page - so
+/// the document is asked for its own outer html and handed back as a data url. What comes
+/// back is the document after the page's scripts ran, which is what a reader following
+/// "view source" on a page that renders client side is looking at anyway.
+#[tauri::command]
+pub async fn view_source(
+    app: AppHandle,
+    window: tauri::Window,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    let id = selected_label(&state, &window);
+    let Some(webview) = app.get_webview(&id) else {
+        return Err(AppError::new("no_tab", id));
+    };
+    // The answer arrives through a command rather than as a return value, because eval
+    // cannot give one back.
+    let _ = webview.eval(
+        "window.__TAURI_INTERNALS__.invoke('source_ready', { html: document.documentElement.outerHTML })"
+    );
+    Ok(())
+}
+
+/// Receives the markup `view_source` asked for and opens it in a tab.
+///
+/// The markup is the tab's content, so it is escaped rather than served: a page that
+/// contains a `<script>` would otherwise run a second time, with a data url as its
+/// origin. Base64 keeps the url from growing by three bytes a character.
+#[tauri::command]
+pub async fn source_ready(
+    app: AppHandle,
+    window: tauri::Window,
+    state: State<'_, AppState>,
+    html: String,
+) -> Result<(), AppError> {
+    let body = format!(
+        "<!doctype html><meta charset=\"utf-8\"><title>Source</title>\
+         <pre style=\"white-space:pre-wrap;word-break:break-word;\
+         font:13px/1.5 Consolas,ui-monospace,monospace;padding:12px;margin:0\">{}</pre>",
+        escape_html(&html)
+    );
+    let url = format!(
+        "data:text/html;charset=utf-8;base64,{}",
+        crate::extensions::base64(body.as_bytes())
+    );
+    tab_new(app, window, state, Some(url), None, None).await?;
+    Ok(())
+}
+
+/// The three characters that would otherwise be read as markup.
+fn escape_html(text: &str) -> String {
+    text.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+}
+
 /// Runs a text edit in the chrome page, which owns the address field.
 #[tauri::command]
 pub async fn url_action(
