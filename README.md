@@ -24,12 +24,15 @@ Mix/
 │   ├── session.json    上次的窗口与标签
 │   ├── theme.json      主题
 │   ├── custom.css      自定义样式
+│   ├── downloads.json  下载记录（无痕下载不写入）
+│   ├── permissions.json 站点权限决定
+│   ├── zoom.json       按站点缩放
 │   └── logs/mix.log    运行日志
 ├── crx/                扩展文件夹
 └── javascript/         用户脚本
 ```
 
-**备份**：设置 → 备份 → 导出配置，会打包除 WebView2 缓存外的全部数据。
+**备份**：设置 → 备份 → 导出配置，把 `UserData/` 里的设置、历史、书签、主题、图标、权限与下载记录打包，同时带上 `crx/`（扩展）和 `javascript/`（用户脚本）——这三样一起拷到新机器就能完整还原。不包含 WebView2 的 `profile/`（登录态与 Cookie）、`logs/`、`downloads/` 和扩展解包缓存。
 
 ## 功能
 
@@ -128,9 +131,13 @@ Mix/
 ## 已知限制
 
 - **不支持密码管理**：没有凭据库集成，也没有自动填充
+- **挂起、撤销关闭、会话恢复都只记住地址**：页面会重新加载，浏览器的后退/前进历史、未提交的表单内容、已选中的上传文件都会丢。默认最多 12 个标签同时存活，超出即挂起
+- **用户脚本只提供 `GM_getValue` / `GM_setValue` / `GM_info` / `unsafeWindow`**；用到 `GM_xmlhttpRequest`、`GM_addStyle`、`GM_registerMenuCommand` 的脚本会静默失败（只在控制台留一行警告）
 - **跨域 iframe、Shadow DOM 内的文字无法翻译**
 - **只能装 MV3 扩展**，且扩展的 popup 气泡打不开（WebView2 没暴露该接口），只能看扩展信息
 - **画布上的文字无法选中或翻译**
+- **无痕标签隔离的是 cookie 与缓存**：下载的文件仍会留在磁盘上，只是不写进下载记录
+- **拖出窗口的标签会新开一个进程**（与 `Ctrl+N` 同享 `UserData`，但拖出的那个关闭后不影响主窗口继续运行）
 - **只在 Windows 上编译验证过**：macOS / Linux 的适配层还没写（`src-tauri/src/platform/` 里只有 `windows.rs`）
 
 ## 从源码构建
