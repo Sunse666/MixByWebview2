@@ -97,7 +97,6 @@ const DICT = {
     "Enabled": "已启用",
     "What the browser actually loaded, built into it included; the switches are on the cards below":
       "浏览器实际加载的扩展（含内置）；开关在下面的卡片里",
-    "Disabled": "已停用",
     "Restart to apply": "重启后生效",
     "Background": "背景",
     "Chrome": "界面",
@@ -130,6 +129,8 @@ const DICT = {
     "Site icons": "网站图标",
     "Zoom levels": "缩放级别",
     "Session": "会话",
+    "Cookies and site storage": "Cookie 与站点存储",
+    "Cache": "缓存",
     "Clear selected data": "清除所选数据",
     "Cleared": "已清除",
     "Start page": "启动页",
@@ -250,7 +251,6 @@ const DICT = {
     "Suspended": "已挂起",
     "Picture from when this tab was last open": "画面是它上次在前台时的样子",
     "New incognito tab": "新建无痕标签页",
-    "Reopen closed tab": "重新打开关闭的标签页",
     "Full screen": "全屏",
     "Print": "打印",
     "Userscripts": "用户脚本",
@@ -367,6 +367,7 @@ const DICT = {
     "Could not save:": "保存失败：",
     "Enabled": "已启用",
     "Disabled": "已禁用",
+    "Hidden": "已隐藏",
     "The browser refused that; restart and try again": "浏览器拒绝了这次操作，请重启后再试",
     "Restart Mix: the browser keeps this extension off until then":
       "请重启 Mix：浏览器会一直保持它是关闭的，重启后才会重新加载",
@@ -432,7 +433,6 @@ const DICT = {
     "Stop translating this site": "不再翻译此站点",
     "In use": "正在使用",
     "Restart Mix": "重启 Mix",
-    "restart to apply": "重启后生效：",
     "Show the original": "显示原文",
   },
 };

@@ -125,6 +125,15 @@ pub async fn backup_export(
     let mut count = 0;
     let mut stack = vec![state.dirs.user_data.clone()];
 
+    // The drop folders live beside UserData rather than inside it, so a backup that only
+    // walked UserData produced a package that restored a browser with no extensions and
+    // no userscripts - the two things the folder layout exists to make portable. They are
+    // stored under their own names at the top of the archive, which is how the import
+    // tells them apart from the profile.
+    for extra in [&state.dirs.crx, &state.dirs.scripts] {
+        count += add_tree(&mut zip, &state.dirs.root, extra, options);
+    }
+
     while let Some(dir) = stack.pop() {
         let Ok(entries) = std::fs::read_dir(&dir) else {
             continue;
@@ -166,6 +175,46 @@ pub async fn backup_export(
     Ok(target.display().to_string())
 }
 
+/// Adds every file under `dir` to the archive, under a path relative to `base`.
+///
+/// Shared by the profile walk and the two drop folders: the only difference between them
+/// is which directory the stored name is counted from, and that was the thing worth
+/// not writing twice.
+fn add_tree(
+    zip: &mut zip::ZipWriter<std::fs::File>,
+    base: &std::path::Path,
+    dir: &std::path::Path,
+    options: zip::write::SimpleFileOptions,
+) -> usize {
+    let mut added = 0;
+    let mut stack = vec![dir.to_path_buf()];
+    while let Some(dir) = stack.pop() {
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                stack.push(path);
+                continue;
+            }
+            let Ok(relative) = path.strip_prefix(base) else {
+                continue;
+            };
+            let name = relative.display().to_string().replace('\\', "/");
+            let Ok(bytes) = std::fs::read(&path) else {
+                continue;
+            };
+            if zip.start_file(name, options).is_err() {
+                continue;
+            }
+            let _ = std::io::Write::write_all(&mut *zip, &bytes);
+            added += 1;
+        }
+    }
+    added
+}
+
 /// Restores a backup over the current profile; the app restarts afterwards.
 #[tauri::command]
 pub async fn backup_import(
@@ -193,7 +242,21 @@ pub async fn backup_import(
         let Some(name) = entry.enclosed_name() else {
             continue;
         };
-        let target = state.dirs.user_data.join(&name);
+        // Extension and userscript folders are stored under their own names, because they
+        // live beside UserData rather than inside it. Everything else is profile data and
+        // goes back where it came from. `enclosed_name` has already refused any path that
+        // tried to climb out, so a name can only start with one of these two.
+        let landed = |first: &str, dir: &std::path::Path| -> std::path::PathBuf {
+            match name.strip_prefix(first) {
+                Ok(rest) => dir.join(rest),
+                Err(_) => state.dirs.user_data.join(&name),
+            }
+        };
+        let target = match name.iter().next().and_then(|part| part.to_str()) {
+            Some("crx") => landed("crx", &state.dirs.crx),
+            Some("javascript") => landed("javascript", &state.dirs.scripts),
+            _ => state.dirs.user_data.join(&name),
+        };
         if let Some(parent) = target.parent() {
             let _ = std::fs::create_dir_all(parent);
         }
@@ -892,7 +955,7 @@ pub async fn drag_action(
             let Some(url) = url.filter(|value| web_url(value)) else {
                 return Ok(());
             };
-            let _ = save_url(app, &state, url, None).await?;
+            let _ = save_url(app, &state, url, None, Some(label)).await?;
         }
         other => return Err(AppError::new("bad_action", other)),
     }
@@ -908,21 +971,44 @@ pub async fn download_url(
     file_name: Option<String>,
 ) -> Result<String, AppError> {
     require_trusted(&webview)?;
-    save_url(app, &state, url, file_name).await
+    let tab = webview.label().to_string();
+    save_url(app, &state, url, file_name, Some(tab)).await
 }
 
 /// Fetches a url into the downloads folder; shared with the support hook.
+///
+/// `tab` is the webview the url was found in. It supplies the referrer and the cookies:
+/// an image behind a hotlink check or a file behind a login answers a bare fetch with an
+/// error page, which used to be saved under the picture's name.
 pub(crate) async fn save_url(
     app: AppHandle,
     state: &AppState,
     url: String,
     file_name: Option<String>,
+    tab: Option<String>,
 ) -> Result<String, AppError> {
     if !url.starts_with("http://") && !url.starts_with("https://") {
         return Err(AppError::new("bad_url", "only http(s) files can be saved"));
     }
 
-    let response = reqwest::get(&url)
+    let request = tab
+        .as_deref()
+        .map(|label| crate::downloads::request_for(&app, label))
+        .unwrap_or_default();
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(600))
+        .user_agent(crate::fetch::USER_AGENT)
+        .build()
+        .map_err(|err| AppError::new("net", err.to_string()))?;
+    let mut builder = client.get(&url);
+    if let Some(referer) = request.referer.as_deref() {
+        builder = builder.header(reqwest::header::REFERER, referer);
+    }
+    if let Some(cookie) = request.cookie.as_deref() {
+        builder = builder.header(reqwest::header::COOKIE, cookie);
+    }
+    let response = builder
+        .send()
         .await
         .map_err(|err| AppError::new("net", err.to_string()))?;
     if !response.status().is_success() {
@@ -955,22 +1041,18 @@ pub async fn app_clear_data(
     window: tauri::Window,
     _state: State<'_, AppState>,
 ) -> Result<(), AppError> {
-    let labels: Vec<String> = {
-        let state = app.state::<AppState>();
-        let core = state.read_core(window.label());
-        core.tabs.iter().map(|tab| tab.id.clone()).collect()
-    };
-
-    for label in labels {
-        if let Some(webview) = app.get_webview(&label) {
-            let _ = webview.clear_all_browsing_data();
-        }
-    }
-    for label in ["w1-chrome"] {
+    // Every window, not just the caller's: the label used to be hardcoded to the primary
+    // strip, so a second window kept its signed-in sites while this one reported success.
+    let labels = super::all_webviews(&app);
+    for label in &labels {
         if let Some(webview) = app.get_webview(label) {
             let _ = webview.clear_all_browsing_data();
         }
     }
-    crate::logging::info("browsing data cleared");
+    let _ = window;
+    crate::logging::info(&format!(
+        "browsing data cleared across {} webview(s)",
+        labels.len()
+    ));
     Ok(())
 }

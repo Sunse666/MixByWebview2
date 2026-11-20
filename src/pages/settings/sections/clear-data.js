@@ -17,6 +17,8 @@ export function buildClearData({ settings, invoke }) {
     favicons: "Site icons",
     zoom: "Zoom levels",
     session: "Session",
+    cookies: "Cookies and site storage",
+    cache: "Cache",
   };
   const picked = new Set(["history"]);
 

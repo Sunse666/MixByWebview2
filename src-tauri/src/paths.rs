@@ -27,19 +27,16 @@ pub struct AppDirs {
     pub fell_back: bool,
 }
 
-/// A window that was dragged out of another one runs as its own process. It gets its
-/// own WebView2 profile, since one profile cannot be opened by two processes at once.
+/// A window that was dragged out of another one runs as its own process.
+///
+/// It is a window like any other, so it shares `UserData/profile` with the window it
+/// came from: the tab that was dragged out keeps the site it was signed in to. That is
+/// safe because the tab is closed in the window it came from before the drag ends, and
+/// because a WebView2 profile is per directory rather than per process - what is not
+/// allowed is one directory being held by two processes at the same instant, and the
+/// two never overlap: the new process opens it after the tab that owned it is gone.
 pub fn instance_mode() -> bool {
     std::env::args().any(|arg| arg == "--instance")
-}
-
-/// Identifies this process's profile folders; only set in instance mode.
-pub fn instance_id() -> Option<String> {
-    if instance_mode() {
-        Some(std::process::id().to_string())
-    } else {
-        None
-    }
 }
 
 impl AppDirs {
@@ -56,11 +53,10 @@ impl AppDirs {
 
     fn under(root: &Path) -> Self {
         let user_data = root.join("UserData");
-        let suffix = instance_id().map(|id| format!("-{id}")).unwrap_or_default();
         Self {
             root: root.to_path_buf(),
-            profile: user_data.join(format!("profile{suffix}")),
-            profile_ui: user_data.join(format!("profile-ui{suffix}")),
+            profile: user_data.join("profile"),
+            profile_ui: user_data.join("profile-ui"),
             logs: user_data.join("logs"),
             downloads: user_data.join("downloads"),
             extensions: user_data.join("extensions"),

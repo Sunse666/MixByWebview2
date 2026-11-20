@@ -267,8 +267,61 @@ pub async fn clear_data(
         done.push("zoom".to_string());
     }
 
+    // Cookies, storage and caches belong to the webviews, not to this process, so they
+    // are cleared through each of them. Every window is visited rather than the caller's
+    // own: a second window keeps its own tabs, and clearing only what the settings page
+    // can see used to leave those signed in.
+    if kinds
+        .iter()
+        .any(|kind| kind == "cookies" || kind == "cache")
+    {
+        let labels = all_webviews(&app);
+        for label in &labels {
+            if let Some(target) = app.get_webview(label) {
+                let _ = target.clear_all_browsing_data();
+            }
+        }
+        crate::logging::info(&format!(
+            "browsing data cleared across {} webview(s)",
+            labels.len()
+        ));
+        for kind in ["cookies", "cache"] {
+            if kinds.iter().any(|asked| asked == kind) {
+                done.push(kind.to_string());
+            }
+        }
+    }
+
     crate::logging::info(&format!("cleared: {}", done.join(", ")));
     Ok(done)
+}
+
+/// Every webview this app owns: each window's strip, its sidebar, its tabs and any panel.
+///
+/// Labels are built from the window rather than from the caller, because the point of
+/// visiting all of them is that a webview in another window is just as much ours.
+pub(crate) fn all_webviews(app: &AppHandle) -> Vec<String> {
+    let mut labels = Vec::new();
+    for window in app.windows().keys() {
+        labels.push(format!("{window}-chrome"));
+        labels.push(format!("{window}-side"));
+        let tabs = app
+            .try_state::<AppState>()
+            .map(|state| {
+                state
+                    .try_read_core(window)
+                    .map(|core| {
+                        core.tabs
+                            .iter()
+                            .map(|tab| tab.id.clone())
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_default()
+            })
+            .unwrap_or_default();
+        labels.extend(tabs);
+    }
+    labels
 }
 
 #[tauri::command]
