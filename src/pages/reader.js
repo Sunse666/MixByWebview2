@@ -1,7 +1,8 @@
 // The article this tab was opened from, without the page around it.
 //
-// The extraction ran in the page that had the document; this only lays it out. The hash
-// carries which tab to ask, and the markup comes back through a command.
+// The extraction ran in the page that had the document; this only lays it out, and
+// `article_get` hands over what it produced. It is a command rather than a url because a
+// data url is refused by the webview and an article does not fit in a hash.
 const { invoke } = window.__TAURI__.core;
 
 const title = document.getElementById("title");

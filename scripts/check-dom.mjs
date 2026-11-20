@@ -18,6 +18,8 @@ const PAGES = [
   ["src/pages/newtab.html", "src/pages/newtab.js"],
   ["src/pages/settings.html", "src/pages/settings.js"],
   ["src/pages/sidebar.html", "src/pages/sidebar.js"],
+  ["src/pages/source.html", "src/pages/source.js"],
+  ["src/pages/reader.html", "src/pages/reader.js"],
 ];
 
 const ids = (html) => new Set([...html.matchAll(/\bid="([^"]+)"/g)].map((m) => m[1]));

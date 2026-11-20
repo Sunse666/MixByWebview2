@@ -16,6 +16,10 @@ const PAGES = [
   "scripts",
   "newtab",
   "sidebar",
+  // Both ask a command for the document they show, so a throw while wiring them up would
+  // leave a blank tab with no clue - exactly what this check exists to catch.
+  "source",
+  "reader",
 ];
 
 class El {
