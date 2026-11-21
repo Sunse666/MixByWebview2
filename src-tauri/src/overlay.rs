@@ -379,7 +379,12 @@ fn fitted(frame: Frame, win_h: f64, height: f64) -> (f64, f64) {
 /// The width stays as it was: a panel's width is a design decision, its height is what
 /// the content needs. A panel hanging off the bottom edge grows upwards instead of
 /// running past it, and anything taller than the window afterwards scrolls.
-pub fn resize(app: &AppHandle, overlay_label: &str, height: f64) -> Result<(), String> {
+pub fn resize(
+    app: &AppHandle,
+    overlay_label: &str,
+    height: f64,
+    width: Option<f64>,
+) -> Result<(), String> {
     let state = app.state::<crate::ipc::AppState>();
     let found = {
         let slots = state.windows.overlay.read();
@@ -407,15 +412,19 @@ pub fn resize(app: &AppHandle, overlay_label: &str, height: f64) -> Result<(), S
 
     let (win_w, win_h) = logical_size(&win).map_err(|err| err.to_string())?;
     let (top, height) = fitted(frame, win_h, height);
-    let left = frame
-        .left()
-        .clamp(4.0, (win_w - frame.width - 4.0).max(4.0));
+
+    // A panel that opens a submenu grows sideways. It grows to the left when it hangs off
+    // the right edge, because that is the side a menu against the window edge has room on:
+    // the anchor is the edge it stays against, and `left` follows from the new width.
+    let width = width.unwrap_or(frame.width).clamp(MIN_W, win_w);
+    let left = frame.left().clamp(4.0, (win_w - width - 4.0).max(4.0));
 
     #[cfg(debug_assertions)]
-    crate::logging::info(&format!("overlay {overlay_label} measured {height:.0}"));
+    crate::logging::info(&format!(
+        "overlay {overlay_label} measured {height:.0}x{width:.0}"
+    ));
 
-    crate::window::set_bounds(&webview, left, top, frame.width, height)
-        .map_err(|err| err.to_string())
+    crate::window::set_bounds(&webview, left, top, width, height).map_err(|err| err.to_string())
 }
 
 /// Converts a logical position to physical pixels.

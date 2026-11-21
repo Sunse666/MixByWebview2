@@ -161,6 +161,113 @@ async function bootAppMenu() {
     await close();
   };
 
+  let NEXT_SUB = 0;
+
+  // A submenu, drawn beside the list rather than in a webview of its own.
+  //
+  // A child webview cannot be placed next to its parent, and opening a second overlay
+  // closes the first, so the only way two menus can stand side by side is for one panel
+  // to draw both. The panel widens by the width of the submenu and the host list keeps
+  // its place on the left; the submenu is taken away again and the panel narrows when the
+  // pointer leaves the row that opened it.
+  const SUBMENU_W = 240;
+  let openSub = null;
+
+  /// Takes the submenu away and narrows the panel back to the list.
+  ///
+  /// `narrow` is false when another submenu replaces this one: the panel is about to be
+  /// widened again, and going back to 320 for the instant between the two would show as a
+  /// flicker.
+  const closeSub = (narrow = true) => {
+    if (!openSub) return;
+    openSub.remove();
+    openSub = null;
+    document.body.classList.remove("has-sub");
+    if (narrow) {
+      invoke("overlay_resize", { height: currentHeight(), width: 320 }).catch(() => {});
+    }
+  };
+
+  // What the panel needs to be while a submenu is showing: the list it already had, plus
+  // the submenu, and tall enough for whichever of the two is taller.
+  const fitWidth = () => {
+    const sub = openSub ? openSub.getBoundingClientRect().height : 0;
+    const list = appMenu.getBoundingClientRect().height;
+    const height = Math.ceil(Math.max(list, sub));
+    invoke("overlay_resize", { height, width: 320 + SUBMENU_W }).catch(() => {});
+  };
+
+  const showSub = (host, build) => {
+    if (openSub && openSub.dataset.for === host.dataset.sub) return;
+    closeSub(false);
+    const panel = document.createElement("div");
+    panel.className = "submenu";
+    panel.dataset.for = host.dataset.sub;
+    document.body.append(panel);
+    document.body.classList.add("has-sub");
+    openSub = panel;
+    fitWidth();
+    // A list is read from the history, which is a command: the panel is on screen with a
+    // placeholder first and filled when the answer arrives, so hovering feels immediate.
+    if (build) Promise.resolve(build(panel)).then(() => {
+      if (openSub === panel) fitWidth();
+    });
+  };
+
+  const currentHeight = () => Math.ceil(appMenu.getBoundingClientRect().height);
+
+  /// A row that opens `build` beside it while the pointer is on it.
+  const rowMenu = (glyph, label, hint, build) => {
+    const button = row(glyph, label, hint || "\u203a", null);
+    button.dataset.sub = String(NEXT_SUB++);
+    button.addEventListener("pointerenter", () => showSub(button, build));
+    button.addEventListener("click", () => showSub(button, build));
+    return button;
+  };
+
+  async function buildHistorySub(panel) {
+    const visits = (await invoke("history_list", { limit: 30 }).catch(() => [])) || [];
+    const seen = new Set();
+    const unique = visits.filter((entry) => {
+      if (seen.has(entry.url)) return false;
+      seen.add(entry.url);
+      return true;
+    });
+
+    if (!unique.length) {
+      const empty = document.createElement("div");
+      empty.className = "menu-note";
+      empty.textContent = "No history yet.";
+      panel.append(empty);
+      return;
+    }
+    for (const visit of unique) {
+      const entry = document.createElement("button");
+      entry.className = "row plain";
+      const label = document.createElement("span");
+      label.className = "label";
+      label.textContent = visit.title || visit.url;
+      entry.title = visit.url;
+      entry.append(label);
+      entry.addEventListener("click", async () => {
+        await invoke("tab_navigate", { url: visit.url }).catch(() => {});
+        await close();
+      });
+      panel.append(entry);
+    }
+    const more = document.createElement("button");
+    more.className = "row plain sub-more";
+    const moreLabel = document.createElement("span");
+    moreLabel.className = "label";
+    moreLabel.textContent = t("Open history page");
+    more.append(moreLabel);
+    more.addEventListener("click", async () => {
+      await invoke("tab_new", { url: "http://tauri.localhost/pages/history.html" }).catch(() => {});
+      await close();
+    });
+    panel.append(more);
+  }
+
   const pages = {
     root: async () => {
       row("+", "New tab", "Ctrl+T", act(() => invoke("tab_new", {})));
@@ -241,9 +348,10 @@ async function bootAppMenu() {
         await close();
       });
       row("\u2606", "Bookmarks", "", act(() => invoke("tab_new", { url: "http://tauri.localhost/pages/bookmarks.html" })));
-      // A sub-menu rather than a tab: the list is short enough to read in place, and the
-      // page is still one row away for the search and the filters it carries.
-      row("\u21ba", "History", "", () => render("history"), { page: true });
+      // The visits open beside the row while the pointer is on it: reading the last few
+      // should not cost a click, and the page is still at the bottom of the list for the
+      // search and the per-site filter it carries.
+      rowMenu("\u21ba", "History", "", (panel) => buildHistorySub(panel));
       divider();
       row("\u25a4", "Extensions", "", act(() => invoke("tab_new", { url: "http://tauri.localhost/pages/extensions.html" })));
       row("\u2699", "Diagnose super drag", "", act(() => invoke("drag_probe")));
@@ -365,48 +473,6 @@ async function bootAppMenu() {
         await invoke("open_dir", { which: "diag" });
         await close();
       });
-    },
-
-    // The history page itself is a whole page of tab; this is the same list without
-    // leaving the menu. A visit opens in the tab in front of the user, which is what the
-    // back button of the page it came from would have done.
-    history: async () => {
-      header("History");
-      const visits = (await invoke("history_list", { limit: 40 }).catch(() => [])) || [];
-      const seen = new Set();
-      const unique = visits.filter((entry) => {
-        if (seen.has(entry.url)) return false;
-        seen.add(entry.url);
-        return true;
-      });
-
-      if (!unique.length) {
-        const empty = document.createElement("div");
-        empty.className = "menu-note";
-        empty.textContent = "No history yet.";
-        appMenu.append(empty);
-      }
-
-      for (const visit of unique) {
-        // The title is what a reader recognises; the address is the fallback for a page
-        // that has none, and the tooltip either way.
-        const entry = document.createElement("button");
-        entry.className = "row plain";
-        const label = document.createElement("span");
-        label.className = "label";
-        label.textContent = visit.title || visit.url;
-        entry.title = visit.url;
-        entry.append(label);
-        entry.addEventListener("click", async () => {
-          await invoke("tab_navigate", { url: visit.url }).catch(() => {});
-          await close();
-        });
-        appMenu.append(entry);
-      }
-
-      divider();
-      row("\u21ba", "Open history page", "", act(() =>
-        invoke("tab_new", { url: "http://tauri.localhost/pages/history.html" })));
     },
 
     language: async () => {
@@ -546,6 +612,15 @@ async function bootAppMenu() {
     await show();
     report("menu page=" + page + " nodes=" + appMenu.children.length);
   }
+
+  // The submenu belongs to the row under the pointer: moving to another row takes it away,
+  // and so does moving off the rows into the space between the two panels.
+  appMenu.addEventListener("pointerleave", () => {
+    setTimeout(() => {
+      const over = document.body.matches(":hover");
+      if (!over) closeSub();
+    }, 120);
+  });
 
   appMenu.addEventListener("pointerdown", (event) => {
     if (event.target === appMenu) invoke("overlay_close");

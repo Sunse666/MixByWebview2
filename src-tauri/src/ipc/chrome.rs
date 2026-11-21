@@ -537,12 +537,17 @@ pub async fn overlay_close(app: AppHandle, window: tauri::Window) -> Result<(), 
 /// The panel measured its own content; put the window's bounds there.
 ///
 /// A panel's height belongs to its content and only the page can see it, so the page is
-/// the one that says how tall it is. The width is left alone: that is a design decision.
+/// the one that says how tall it is.
+///
+/// `width` is optional and only a panel that opens a submenu asks for one: the list and the
+/// menu it came from have to sit side by side, and a child webview cannot be placed beside
+/// its parent, so the parent grows and draws both.
 #[tauri::command]
 pub async fn overlay_resize(
     app: AppHandle,
     webview: tauri::Webview,
     height: f64,
+    width: Option<f64>,
 ) -> Result<(), AppError> {
     require_trusted(&webview)?;
     let label = webview.label().to_string();
@@ -552,5 +557,5 @@ pub async fn overlay_resize(
             "only an overlay panel may size itself",
         ));
     }
-    crate::overlay::resize(&app, &label, height).map_err(|err| AppError::new("overlay", err))
+    crate::overlay::resize(&app, &label, height, width).map_err(|err| AppError::new("overlay", err))
 }

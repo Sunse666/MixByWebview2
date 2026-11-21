@@ -113,6 +113,39 @@ footer { margin-top: auto; display: flex; justify-content: flex-end; gap: 8px; }
   font: var(--font-size) / 1.4 var(--font-family);
 }
 
+/* While a submenu is showing, the panel is wider than the list: the list keeps its own
+   width on the left and the submenu takes the rest, so widening the webview does not
+   stretch every row of the menu that was already on screen. */
+body.has-sub #app-menu {
+  width: 320px;
+}
+
+.submenu {
+  position: fixed;
+  top: 0;
+  left: 320px;
+  width: 240px;
+  box-sizing: border-box;
+  max-height: 100%;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  overflow-y: auto;
+  border-radius: 0 10px 10px 0;
+  background: color-mix(in srgb, var(--panel) 94%, #000 6%);
+  border: 1px solid var(--border);
+  border-left: 0;
+}
+
+.submenu::-webkit-scrollbar { width: 8px; }
+.submenu::-webkit-scrollbar-thumb { background: #4a4d51; border-radius: 4px; }
+
+/* The row that opened it stays lit, so the two panels read as one thing. */
+body.has-sub #app-menu .row[data-sub] {
+  background: var(--hover);
+}
+
 .menu::-webkit-scrollbar { width: 8px; }
 .menu::-webkit-scrollbar-thumb { background: #4a4d51; border-radius: 4px; }
 
