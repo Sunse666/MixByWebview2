@@ -113,46 +113,47 @@ footer { margin-top: auto; display: flex; justify-content: flex-end; gap: 8px; }
   font: var(--font-size) / 1.4 var(--font-family);
 }
 
-/* The app menu hangs against the right edge of the window, so its submenu opens to the
-   left: the panel grows leftwards from an edge that does not move, and what was the left
-   edge of the menu becomes the seam between the two columns.
+/* Two panels, not two halves of one.
 
-   Both columns are placed against the panel's own box rather than being laid out in flow,
-   so neither of them moves when the width changes: the menu keeps the right-hand 320 px
-   and the submenu the left-hand 240 px, whatever the webview happens to be at the moment. */
+   A browser opens the history list as its own box beside the app menu: separate corners,
+   a gap between them, and each the height its own content wants. One webview cannot be
+   two transparent regions on Windows - the platform gives it an opaque background - so
+   the box it is drawn into covers both, and what makes them read as two is the gap and
+   the separate rounding on either side of it. */
 body.has-sub #app-menu {
   position: fixed;
   top: 0;
-  left: 240px;
+  /* 300 px for the history box plus the 8 px gap. */
+  left: 308px;
   width: 320px;
-  /* The panel is a full-height box while a submenu is open, so the menu fills it: the two
-     columns share one background and one outline, and a menu that stopped short of the
-     bottom would leave a step in it. */
-  height: 100%;
+  /* Its own height, not the panel's: the menu is a box of its own beside the history list,
+     and the two do not have to end at the same place. */
+  height: auto;
+  max-height: 100%;
   box-sizing: border-box;
-  /* The two columns are one panel: the outline belongs to the outside edges only, and the
-     seam between them is where the submenu's right edge meets this one's left. A border
-     and a radius here would draw a second outline down the middle. */
-  border-radius: 0 10px 10px 0;
-  border-left: 0;
-  /* The columns share one background, so the seam is drawn on this side of it: a hairline
-     of the border colour instead of a second full border down the middle. */
-  box-shadow: inset 1px 0 0 var(--border);
+  /* A full outline and four rounded corners, because it is one of two boxes now rather
+     than the right half of one. */
+  border-radius: 10px;
+  border-left: 1px solid var(--border);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
 }
 
 /* It carries `menu` so its rows are the same rows, and overrides what that class brings:
    a full-height box with its own outline is the left half of the panel, not a panel. */
 .submenu {
   position: fixed;
-  /* The whole height of the panel, beside the menu rather than beside a row: this is a
-     column of the menu, and a browser opens it top to bottom. */
+  /* Tall, but its own box: it reaches from the top of the window to as far down as its
+     content wants, and the menu beside it does the same, which is why the two do not line
+     up at the bottom in a browser either. */
   top: 0;
   left: 0;
-  bottom: 0;
-  width: 240px;
+  width: 300px;
   height: auto;
-  border-radius: 10px 0 0 10px;
-  border-right: 0;
+  max-height: 100%;
+  /* A full outline with all four corners rounded, and a gap of 8 px to the menu: that gap is
+     what makes them read as two panels instead of one split down the middle. */
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
 }
 
 .submenu {

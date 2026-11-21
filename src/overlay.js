@@ -170,7 +170,10 @@ async function bootAppMenu() {
   // to draw both. The panel widens by the width of the submenu and the host list keeps
   // its place on the left; the submenu is taken away again and the panel narrows when the
   // pointer leaves the row that opened it.
-  const SUBMENU_W = 240;
+  // Wider than the menu, because the rows carry three things: a title, an icon and the site.
+  const SUBMENU_W = 300;
+  /// The gap between the two boxes; each has its own outline, so this is a space, not a seam.
+  const GAP_W = 8;
   /// Never shorter than this, even when the panel is nearly out of room.
   const MIN_ROW = 48;
   let openSub = null;
@@ -200,7 +203,7 @@ async function bootAppMenu() {
   const fitWidth = () => {
     const menuH = Math.ceil(menuContentHeight());
     const height = openSub ? 100000 : menuH;
-    invoke("overlay_resize", { height, width: 320 + SUBMENU_W }).catch(() => {});
+    invoke("overlay_resize", { height, width: 320 + GAP_W + SUBMENU_W }).catch(() => {});
   };
 
   const showSub = (host, build) => {

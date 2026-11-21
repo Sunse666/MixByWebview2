@@ -137,7 +137,14 @@ fn overlay_builder(app: &AppHandle, label: &str, page: &str) -> WebviewBuilder<t
         .focused(focused);
     let builder = crate::tabs::apply_extensions(builder, &opts);
 
-    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    // Transparent on every platform that can do it, Windows included: the history list is a
+    // box of its own beside the app menu, and what separates the two is the gap between
+    // them - a gap that has to show the page behind it. An opaque webview turns that gap
+    // into a stripe of its own background colour, which reads as one panel split in half,
+    // which is exactly what it looked like before.
+    //
+    // Each panel paints its own background in css now, so nothing depends on this being
+    // the same colour as the theme.
     let builder = builder.transparent(true);
 
     let _ = &builder;
