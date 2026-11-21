@@ -286,12 +286,23 @@ async function bootAppMenu() {
     // Three parts, like the panel a browser shows for this: a heading that stays at the top,
     // the visits in a column that scrolls, and the actions pinned to the bottom. The list is
     // what gives way when the window is short; the heading and the actions never move.
+    // A title bar with the shortcut it stands for, the way every other panel in this menu
+    // has one, and then the section its rows belong to.
     const head = document.createElement("div");
     head.className = "sub-head";
     const headTitle = document.createElement("span");
+    headTitle.className = "sub-title";
     headTitle.textContent = t("History");
-    head.append(headTitle);
+    const headKey = document.createElement("span");
+    headKey.className = "hint";
+    headKey.textContent = "Ctrl+H";
+    head.append(headTitle, headKey);
     panel.append(head);
+
+    const section = document.createElement("div");
+    section.className = "sub-section";
+    section.textContent = t("Recently opened");
+    panel.append(section);
 
     const list = document.createElement("div");
     list.className = "sub-list";
@@ -301,11 +312,11 @@ async function bootAppMenu() {
     foot.className = "sub-foot";
     panel.append(foot);
 
-    // Six, plus the two rows that follow. The list has to fit in the room the menu already
-    // occupies, and the panel cannot grow past the window: a column that has to be clipped
-    // to fit is a column whose last entries - the two that are actions rather than visits -
-    // are the ones that get cut. The page behind those rows is there for the rest.
-    const visits = (await invoke("history_list", { limit: 6 }).catch(() => [])) || [];
+    // As many as the panel can show, and it scrolls for the rest. The cap was six, from
+    // when the column was only as tall as its rows: a short list then meant a short panel,
+    // and anything longer was cut off rather than scrolled. The column fills the window
+    // now, so the number is what the history command returns and the rest is a scroll away.
+    const visits = (await invoke("history_list", { limit: 40 }).catch(() => [])) || [];
     const seen = new Set();
     const unique = visits.filter((entry) => {
       if (seen.has(entry.url)) return false;
@@ -360,20 +371,9 @@ async function bootAppMenu() {
       });
       list.append(entry);
     }
-    const more = document.createElement("button");
-    more.className = "row plain sub-more";
-    const moreLabel = document.createElement("span");
-    moreLabel.className = "label";
-    moreLabel.textContent = t("Open history page");
-    more.append(moreLabel);
-    more.addEventListener("click", async () => {
-      await invoke("tab_new", { url: "http://tauri.localhost/pages/history.html" }).catch(() => {});
-      await close();
-    });
-    foot.append(more);
-
-    // The last row of a browser's history menu, and the one that makes it usable: without
-    // it, clearing history means opening the page it is trying to save you a visit to.
+    // One action, at the bottom, where a browser puts it. The command existed before this
+    // panel did and nothing called it: clearing history meant opening the page it is trying
+    // to save you a visit to.
     const clear = document.createElement("button");
     clear.className = "row plain sub-more";
     const clearLabel = document.createElement("span");
