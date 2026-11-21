@@ -21,9 +21,18 @@
 
   <div id="addressbar">
     <div class="nav">
-      <button class="icon" data-nav="back" title="Back" data-i18n-title="Back">&lt;</button>
-      <button class="icon" data-nav="forward" title="Forward" data-i18n-title="Forward">&gt;</button>
-      <button class="icon" data-nav="reload" title="Reload" data-i18n-title="Reload">R</button>
+      <button class="icon nav-btn" data-nav="back" title="Back" data-i18n-title="Back">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M12.5 4.5 7 10l5.5 5.5"/></svg>
+      </button>
+      <button class="icon nav-btn" data-nav="forward" title="Forward" data-i18n-title="Forward">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M7.5 4.5 13 10l-5.5 5.5"/></svg>
+      </button>
+      <button class="icon nav-btn" data-nav="reload" title="Reload" data-i18n-title="Reload">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M15 10a5 5 0 1 1-1.6-3.7"/><path d="M15 4v3.2h-3.2"/></svg>
+      </button>
+      <button class="icon nav-btn" id="reopen" title="Reopen closed tab" data-i18n-title="Reopen closed tab">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 10a6 6 0 1 1 6 6"/><path d="M4 6v4h4"/></svg>
+      </button>
     </div>
 
     <div id="url-wrap">

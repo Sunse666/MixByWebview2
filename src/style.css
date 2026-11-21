@@ -215,7 +215,47 @@ button {
   background: var(--panel);
 }
 
-.nav { display: flex; align-items: center; gap: 2px; }
+.nav { display: flex; align-items: center; gap: 4px; }
+
+/* Round, on the address bar's own background, the way a browser draws its navigation
+   controls: they read as one group with the field beside them rather than as three
+   isolated glyphs. */
+.nav-btn {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: transparent;
+  opacity: 0.85;
+}
+
+.nav-btn:hover {
+  background: var(--hover);
+  opacity: 1;
+}
+
+.nav-btn svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* While a page is loading the reload button becomes a stop button: the arrow gives way to
+   a cross, drawn the same way. */
+.nav-btn.is-stop svg { display: none; }
+
+.nav-btn.is-stop::after {
+  content: "";
+  width: 11px;
+  height: 11px;
+  border-radius: 2px;
+  background: currentColor;
+}
 
 #url-wrap {
   display: flex;

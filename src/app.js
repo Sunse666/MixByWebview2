@@ -548,7 +548,9 @@ function syncLoading() {
   const reload = document.querySelector('[data-nav="reload"], [data-nav="stop"]');
   if (reload) {
     reload.dataset.nav = loading ? "stop" : "reload";
-    reload.textContent = loading ? "\u00d7" : "R";
+    // The button carries an svg, so its state is a class the stylesheet draws rather than a
+    // glyph replaced in the markup: setting `textContent` here would delete the icon.
+    reload.classList.toggle("is-stop", loading);
     reload.title = loading ? t("Stop loading") : t("Reload");
   }
 }
@@ -1303,6 +1305,10 @@ async function boot() {
   }
   for (const button of document.querySelectorAll("[data-nav]")) {
     button.addEventListener("click", () => invoke("tab_nav", { action: button.dataset.nav }));
+  }
+  const reopen = document.getElementById("reopen");
+  if (reopen) {
+    reopen.addEventListener("click", () => invoke("tab_reopen", {}).catch(() => {}));
   }
   for (const handle of document.querySelectorAll("[data-resize]")) {
     handle.addEventListener("mousedown", (event) => {
