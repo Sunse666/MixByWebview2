@@ -125,7 +125,10 @@ body.has-sub #app-menu {
   top: 0;
   left: 240px;
   width: 320px;
-  height: 100%;
+  /* Not `height: 100%`: the panel is sized to this column's content, and a column pinned
+     to the panel's height would report that height back as its content - the measurement
+     and the thing it measures would be the same number, so it could only ever get bigger. */
+  height: auto;
   box-sizing: border-box;
   /* The two columns are one panel: the outline belongs to the outside edges only, and the
      seam between them is where the submenu's right edge meets this one's left. A border
