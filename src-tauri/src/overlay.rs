@@ -418,13 +418,17 @@ pub fn resize(
     // frame: a panel against the right edge keeps its right edge, so its left edge is the
     // anchor minus the width it is about to have - reading `frame.left()` would hold the
     // old left edge and grow the panel outwards over the window instead of inwards.
-    let width = width.unwrap_or(frame.width).clamp(MIN_W, win_w);
+    let width = width.unwrap_or(frame.width).clamp(MIN_W, win_w.max(MIN_W));
+    // `max(4.0)` on the upper bound keeps `clamp` well formed when the window is narrower
+    // than the panel: a menu wider than its window is a panel that hangs off the edge, and
+    // that is better than a panic.
+    let highest_left = (win_w - width - 4.0).max(4.0);
     let left = match frame.anchor {
         Anchor::Right => frame.x - width,
         Anchor::Center => frame.x - width / 2.0,
         Anchor::Left => frame.x,
     }
-    .clamp(4.0, (win_w - width - 4.0).max(4.0));
+    .clamp(4.0, highest_left);
 
     #[cfg(debug_assertions)]
     crate::logging::info(&format!(

@@ -188,12 +188,16 @@ async function bootAppMenu() {
     }
   };
 
-  // What the panel needs to be while a submenu is showing: the list it already had, plus
-  // the submenu, and tall enough for whichever of the two is taller.
+  // What the panel needs to be while a submenu is showing: tall enough for whichever of
+  // the two columns is taller.
+  //
+  // Both heights are measured from `scrollHeight`, not from the box: the box of either
+  // column is already clamped to the panel it lives in, so measuring it would report the
+  // height the panel has instead of the height the content needs - the same closed loop
+  // that `height: 100%` caused on the chrome strip.
   const fitWidth = () => {
-    const sub = openSub ? openSub.getBoundingClientRect().height : 0;
-    const list = appMenu.getBoundingClientRect().height;
-    const height = Math.ceil(Math.max(list, sub));
+    const content = (node) => (node ? node.scrollHeight : 0);
+    const height = Math.ceil(Math.max(content(appMenu), content(openSub)));
     invoke("overlay_resize", { height, width: 320 + SUBMENU_W }).catch(() => {});
   };
 

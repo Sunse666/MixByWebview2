@@ -127,6 +127,14 @@ body.has-sub #app-menu {
   width: 320px;
   height: 100%;
   box-sizing: border-box;
+  /* The two columns are one panel: the outline belongs to the outside edges only, and the
+     seam between them is where the submenu's right edge meets this one's left. A border
+     and a radius here would draw a second outline down the middle. */
+  border-radius: 0 10px 10px 0;
+  border-left: 0;
+  /* The columns share one background, so the seam is drawn on this side of it: a hairline
+     of the border colour instead of a second full border down the middle. */
+  box-shadow: inset 1px 0 0 var(--border);
 }
 
 .submenu {
@@ -135,7 +143,9 @@ body.has-sub #app-menu {
   left: 0;
   width: 240px;
   box-sizing: border-box;
-  max-height: 100%;
+  /* No max-height: the panel is sized to whichever column is taller, so a cap here would
+     be `max-height: 100%` of a height this column is itself deciding. The page scrolls
+     only once the panel has been clamped to the window. */
   padding: 6px;
   display: flex;
   flex-direction: column;
@@ -153,6 +163,12 @@ body.has-sub #app-menu {
 /* The row that opened it stays lit, so the two panels read as one thing. */
 body.has-sub #app-menu .row[data-sub] {
   background: var(--hover);
+}
+
+/* The submenu's own rows lost the left padding the menu gives them, so the text of the
+   two columns starts at the same distance from their respective edges. */
+.submenu .row {
+  border-radius: 5px;
 }
 
 .menu::-webkit-scrollbar { width: 8px; }
