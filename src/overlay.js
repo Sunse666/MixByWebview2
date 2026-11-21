@@ -241,30 +241,23 @@ async function bootAppMenu() {
 
   /// Places the submenu beside its row, inside the room the menu actually occupies.
   ///
-  /// Two cases. Enough room under the row: the first entry lines up with the row, which is
-  /// what makes the lit row and the list read as one thing. Not enough: the column is put so
-  /// its bottom lines up with the row's, and capped at the top of the menu so it scrolls
-  /// rather than being clipped by the webview.
+  /// The top lines up with the row's top and the column runs downwards from there, which is
+  /// what a browser does: a list that reaches the bottom of the menu is clipped by it and
+  /// scrolls, rather than being moved up so its last entry clears the row. Moving it up was
+  /// tried and is wrong twice over - the list then reads bottom-to-top relative to the menu,
+  /// and the row that is meant to be its label ends up level with the entries below the ones
+  /// it points at.
   const placeSub = (host) => {
     if (!openSub) return;
     const padding = parseFloat(getComputedStyle(appMenu).paddingTop) || 0;
     const room = menuContentHeight();
-    const want = openSub.scrollHeight;
     openSub.style.paddingTop = `${padding}px`;
 
-    const below = room - (host.offsetTop + host.offsetHeight);
-    if (want <= below) {
-      // It fits under the row: line the tops up.
-      openSub.style.top = host.offsetTop + "px";
-      openSub.style.maxHeight = "";
-    } else {
-      // It has to open upwards. Its bottom meets the row's, but never past the top of the
-      // menu: whatever does not fit scrolls inside the column.
-      const top = Math.max(0, host.offsetTop + host.offsetHeight - want);
-      openSub.style.top = top + "px";
-      const fits = Math.max(MIN_ROW, room - top);
-      openSub.style.maxHeight = Math.round(fits) + "px";
-    }
+    // Never above the top of the menu, and never shorter than one row.
+    const top = Math.min(host.offsetTop, Math.max(0, room - MIN_ROW));
+    openSub.style.top = Math.max(0, top) + "px";
+    const fits = Math.max(MIN_ROW, room - Math.max(0, top));
+    openSub.style.maxHeight = Math.round(fits) + "px";
     fitWidth();
   };
 
@@ -293,11 +286,11 @@ async function bootAppMenu() {
   }
 
   async function buildHistorySub(panel) {
-    // Eight, not thirty. The list has to fit in the room the menu already occupies - the
-    // panel cannot grow past the window, and a column clamped to the window is a column
-    // whose last entries the reader cannot reach. Eight is what a browser shows, and the
-    // page behind the last row is there for the rest.
-    const visits = (await invoke("history_list", { limit: 8 }).catch(() => [])) || [];
+    // Six, plus the two rows that follow. The list has to fit in the room the menu already
+    // occupies, and the panel cannot grow past the window: a column that has to be clipped
+    // to fit is a column whose last entries - the two that are actions rather than visits -
+    // are the ones that get cut. The page behind those rows is there for the rest.
+    const visits = (await invoke("history_list", { limit: 6 }).catch(() => [])) || [];
     const seen = new Set();
     const unique = visits.filter((entry) => {
       if (seen.has(entry.url)) return false;
@@ -364,6 +357,20 @@ async function bootAppMenu() {
       await close();
     });
     panel.append(more);
+
+    // The last row of a browser's history menu, and the one that makes it usable: without
+    // it, clearing history means opening the page it is trying to save you a visit to.
+    const clear = document.createElement("button");
+    clear.className = "row plain sub-more";
+    const clearLabel = document.createElement("span");
+    clearLabel.className = "label";
+    clearLabel.textContent = t("Clear history");
+    clear.append(clearLabel);
+    clear.addEventListener("click", async () => {
+      await invoke("history_clear").catch((error) => report(String(error)));
+      await close();
+    });
+    panel.append(clear);
   }
 
   const pages = {
