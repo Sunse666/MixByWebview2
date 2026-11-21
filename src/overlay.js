@@ -289,7 +289,7 @@ async function bootAppMenu() {
     const head = document.createElement("div");
     head.className = "sub-head";
     const headTitle = document.createElement("span");
-    headTitle.textContent = t("Recently opened");
+    headTitle.textContent = t("History");
     head.append(headTitle);
     panel.append(head);
 
@@ -379,6 +379,8 @@ async function bootAppMenu() {
     const clearLabel = document.createElement("span");
     clearLabel.className = "label";
     clearLabel.textContent = t("Clear history");
+    // The row reads as the action, not as a confirmation: this is the list, and clearing it is
+    // what the bottom of the list is for.
     clear.append(clearLabel);
     clear.addEventListener("click", async () => {
       await invoke("history_clear").catch((error) => report(String(error)));

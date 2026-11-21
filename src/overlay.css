@@ -123,13 +123,13 @@ footer { margin-top: auto; display: flex; justify-content: flex-end; gap: 8px; }
 body.has-sub #app-menu {
   position: fixed;
   top: 0;
+  bottom: 0;
   /* 300 px for the history box plus the 8 px gap. */
   left: 308px;
   width: 320px;
-  /* Its own height, not the panel's: the menu is a box of its own beside the history list,
-     and the two do not have to end at the same place. */
-  height: auto;
-  max-height: 100%;
+  /* The same height as the list beside it. Two separate boxes, but a menu that stopped
+     halfway down while its neighbour filled the window reads as an accident. */
+  height: 100%;
   box-sizing: border-box;
   /* A full outline and four rounded corners, because it is one of two boxes now rather
      than the right half of one. */
@@ -142,23 +142,22 @@ body.has-sub #app-menu {
    a full-height box with its own outline is the left half of the panel, not a panel. */
 .submenu {
   position: fixed;
-  /* Tall, but its own box: it reaches from the top of the window to as far down as its
-     content wants, and the menu beside it does the same, which is why the two do not line
-     up at the bottom in a browser either. */
+  /* Top to bottom of the window, which is the height it fills: the heading sits at the top,
+     the actions at the bottom, and only the visits between them scroll. `height: auto` was
+     wrong - it makes the column as tall as its rows, so with a handful of visits the two
+     ends were a few hundred pixels apart in the middle of the window instead of being
+     where they belong. */
   top: 0;
+  bottom: 0;
   left: 0;
   width: 300px;
-  height: auto;
-  max-height: 100%;
+  height: 100%;
+  box-sizing: border-box;
   /* A full outline with all four corners rounded, and a gap of 8 px to the menu: that gap is
      what makes them read as two panels instead of one split down the middle. */
   border-radius: 10px;
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
-}
-
-.submenu {
-  /* Three parts that do not move relative to each other: the heading and the actions are
-     fixed to the top and bottom of the column and the visits scroll between them. */
+  /* Three parts that do not move relative to each other. */
   display: flex;
   flex-direction: column;
   overflow: hidden;
