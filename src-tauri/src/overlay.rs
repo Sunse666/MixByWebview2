@@ -413,11 +413,18 @@ pub fn resize(
     let (win_w, win_h) = logical_size(&win).map_err(|err| err.to_string())?;
     let (top, height) = fitted(frame, win_h, height);
 
-    // A panel that opens a submenu grows sideways. It grows to the left when it hangs off
-    // the right edge, because that is the side a menu against the window edge has room on:
-    // the anchor is the edge it stays against, and `left` follows from the new width.
+    // A panel that opens a submenu grows sideways. Which edge stays put is `frame.anchor`,
+    // and it is the reason this must be computed from the new width rather than from the
+    // frame: a panel against the right edge keeps its right edge, so its left edge is the
+    // anchor minus the width it is about to have - reading `frame.left()` would hold the
+    // old left edge and grow the panel outwards over the window instead of inwards.
     let width = width.unwrap_or(frame.width).clamp(MIN_W, win_w);
-    let left = frame.left().clamp(4.0, (win_w - width - 4.0).max(4.0));
+    let left = match frame.anchor {
+        Anchor::Right => frame.x - width,
+        Anchor::Center => frame.x - width / 2.0,
+        Anchor::Left => frame.x,
+    }
+    .clamp(4.0, (win_w - width - 4.0).max(4.0));
 
     #[cfg(debug_assertions)]
     crate::logging::info(&format!(

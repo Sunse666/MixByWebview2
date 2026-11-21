@@ -113,17 +113,26 @@ footer { margin-top: auto; display: flex; justify-content: flex-end; gap: 8px; }
   font: var(--font-size) / 1.4 var(--font-family);
 }
 
-/* While a submenu is showing, the panel is wider than the list: the list keeps its own
-   width on the left and the submenu takes the rest, so widening the webview does not
-   stretch every row of the menu that was already on screen. */
+/* The app menu hangs against the right edge of the window, so its submenu opens to the
+   left: the panel grows leftwards from an edge that does not move, and what was the left
+   edge of the menu becomes the seam between the two columns.
+
+   Both columns are placed against the panel's own box rather than being laid out in flow,
+   so neither of them moves when the width changes: the menu keeps the right-hand 320 px
+   and the submenu the left-hand 240 px, whatever the webview happens to be at the moment. */
 body.has-sub #app-menu {
+  position: fixed;
+  top: 0;
+  left: 240px;
   width: 320px;
+  height: 100%;
+  box-sizing: border-box;
 }
 
 .submenu {
   position: fixed;
   top: 0;
-  left: 320px;
+  left: 0;
   width: 240px;
   box-sizing: border-box;
   max-height: 100%;
@@ -132,10 +141,10 @@ body.has-sub #app-menu {
   flex-direction: column;
   gap: 1px;
   overflow-y: auto;
-  border-radius: 0 10px 10px 0;
+  border-radius: 10px 0 0 10px;
   background: color-mix(in srgb, var(--panel) 94%, #000 6%);
   border: 1px solid var(--border);
-  border-left: 0;
+  border-right: 0;
 }
 
 .submenu::-webkit-scrollbar { width: 8px; }
