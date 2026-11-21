@@ -277,8 +277,27 @@ async function bootAppMenu() {
     return button;
   };
 
+  /// The site behind a url, or the url itself when it does not parse.
+  function hostOf(url) {
+    try {
+      return new URL(url).host || url;
+    } catch (error) {
+      return url;
+    }
+  }
+
+  /// The letter a row shows when a site has no icon to show.
+  function initialOf(url) {
+    const host = hostOf(url).replace(/^www\./, "");
+    return (host[0] || "?").toUpperCase();
+  }
+
   async function buildHistorySub(panel) {
-    const visits = (await invoke("history_list", { limit: 30 }).catch(() => [])) || [];
+    // Eight, not thirty. The list has to fit in the room the menu already occupies - the
+    // panel cannot grow past the window, and a column clamped to the window is a column
+    // whose last entries the reader cannot reach. Eight is what a browser shows, and the
+    // page behind the last row is there for the rest.
+    const visits = (await invoke("history_list", { limit: 8 }).catch(() => [])) || [];
     const seen = new Set();
     const unique = visits.filter((entry) => {
       if (seen.has(entry.url)) return false;
@@ -293,14 +312,41 @@ async function bootAppMenu() {
       panel.append(empty);
       return;
     }
+    // A row is an icon, the page's title and the site it came from - the shape every
+    // browser uses for this list, and the one the history page itself already draws. A
+    // title alone leaves the reader guessing at which of ten pages called "Video" this
+    // is, which is the whole reason the icon is there.
     for (const visit of unique) {
       const entry = document.createElement("button");
-      entry.className = "row plain";
+      entry.className = "row history-row";
+      entry.title = visit.url;
+
+      const icon = document.createElement("span");
+      icon.className = "ico";
+      if (visit.icon) {
+        const img = document.createElement("img");
+        img.className = "fav";
+        img.src = visit.icon;
+        img.alt = "";
+        // A site whose icon cannot be fetched is not a row without an icon: the letter of
+        // its host takes the place, the way the history page does it.
+        img.addEventListener("error", () => {
+          icon.replaceChildren(document.createTextNode(initialOf(visit.url)));
+        });
+        icon.append(img);
+      } else {
+        icon.textContent = initialOf(visit.url);
+      }
+
       const label = document.createElement("span");
       label.className = "label";
       label.textContent = visit.title || visit.url;
-      entry.title = visit.url;
-      entry.append(label);
+
+      const site = document.createElement("span");
+      site.className = "hint";
+      site.textContent = hostOf(visit.url);
+
+      entry.append(icon, label, site);
       entry.addEventListener("click", async () => {
         await invoke("tab_navigate", { url: visit.url }).catch(() => {});
         await close();

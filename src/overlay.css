@@ -170,6 +170,39 @@ body.has-sub #app-menu .row[data-sub] {
   border-radius: 5px;
 }
 
+/* A history row: icon, title, site. The site is the smallest thing on the row and the
+   first to go when the column is narrow, because the title is what a reader picks by. */
+.submenu .history-row {
+  grid-template-columns: 20px 1fr auto;
+  gap: 8px;
+  min-height: 32px;
+}
+
+.submenu .history-row .ico {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  font-size: 11px;
+  font-weight: 600;
+  opacity: 0.9;
+}
+
+.submenu .history-row .ico img {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+}
+
+.submenu .history-row .hint {
+  font-size: 11px;
+  opacity: 0.5;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 84px;
+}
+
 .menu::-webkit-scrollbar { width: 8px; }
 .menu::-webkit-scrollbar-thumb { background: #4a4d51; border-radius: 4px; }
 
