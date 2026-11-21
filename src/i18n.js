@@ -34,6 +34,7 @@ const DICT = {
     "Copy image address": "复制图片地址",
     "Copy link address": "复制链接地址",
     "Clear history": "清除历史",
+    "Recently opened": "最近打开的标签页",
     "Delete": "删除",
     "Developer tools (debug)": "开发者工具（调试）",
     "Dock the window": "停靠窗口",

@@ -280,6 +280,24 @@ async function bootAppMenu() {
   }
 
   async function buildHistorySub(panel) {
+    // Three parts, like the panel a browser shows for this: a heading that stays at the top,
+    // the visits in a column that scrolls, and the actions pinned to the bottom. The list is
+    // what gives way when the window is short; the heading and the actions never move.
+    const head = document.createElement("div");
+    head.className = "sub-head";
+    const headTitle = document.createElement("span");
+    headTitle.textContent = t("Recently opened");
+    head.append(headTitle);
+    panel.append(head);
+
+    const list = document.createElement("div");
+    list.className = "sub-list";
+    panel.append(list);
+
+    const foot = document.createElement("div");
+    foot.className = "sub-foot";
+    panel.append(foot);
+
     // Six, plus the two rows that follow. The list has to fit in the room the menu already
     // occupies, and the panel cannot grow past the window: a column that has to be clipped
     // to fit is a column whose last entries - the two that are actions rather than visits -
@@ -296,8 +314,7 @@ async function bootAppMenu() {
       const empty = document.createElement("div");
       empty.className = "menu-note";
       empty.textContent = "No history yet.";
-      panel.append(empty);
-      return;
+      list.append(empty);
     }
     // A row is an icon, the page's title and the site it came from - the shape every
     // browser uses for this list, and the one the history page itself already draws. A
@@ -338,7 +355,7 @@ async function bootAppMenu() {
         await invoke("tab_navigate", { url: visit.url }).catch(() => {});
         await close();
       });
-      panel.append(entry);
+      list.append(entry);
     }
     const more = document.createElement("button");
     more.className = "row plain sub-more";
@@ -350,7 +367,7 @@ async function bootAppMenu() {
       await invoke("tab_new", { url: "http://tauri.localhost/pages/history.html" }).catch(() => {});
       await close();
     });
-    panel.append(more);
+    foot.append(more);
 
     // The last row of a browser's history menu, and the one that makes it usable: without
     // it, clearing history means opening the page it is trying to save you a visit to.
@@ -364,7 +381,7 @@ async function bootAppMenu() {
       await invoke("history_clear").catch((error) => report(String(error)));
       await close();
     });
-    panel.append(clear);
+    foot.append(clear);
   }
 
   const pages = {
@@ -712,13 +729,36 @@ async function bootAppMenu() {
     report("menu page=" + page + " nodes=" + appMenu.children.length);
   }
 
-  // The submenu belongs to the row under the pointer: moving to another row takes it away,
-  // and so does moving off the rows into the space between the two panels.
-  appMenu.addEventListener("pointerleave", () => {
-    setTimeout(() => {
-      const over = document.body.matches(":hover");
-      if (!over) closeSub();
-    }, 120);
+  // The submenu goes away when the pointer is in neither the row that opened it nor the
+  // column it opened: the two are one control, and a pointer crossing the seam between
+  // them must not close the thing it is on its way into.
+  //
+  // `document.body.matches(":hover")` was tried as the test and is always true - the body
+  // covers the whole panel - so the submenu never closed at all.
+  let leaveTimer = null;
+
+  /// True while the pointer is over either column.
+  const overMenu = () => appMenu.matches(":hover") || Boolean(openSub && openSub.matches(":hover"));
+
+  /// Closes once the pointer has settled somewhere that is neither column.
+  ///
+  /// The delay is what lets a diagonal move from a row to the column it opened cross the
+  /// gap between them without the column vanishing under the pointer. `pointerout` fires
+  /// for every element change inside the menu, so the check is what it decides on, not the
+  /// event.
+  const scheduleClose = () => {
+    clearTimeout(leaveTimer);
+    leaveTimer = setTimeout(() => {
+      if (!overMenu()) closeSub();
+    }, 160);
+  };
+
+  appMenu.addEventListener("pointerout", scheduleClose);
+  // The column is created after this handler is installed, so it listens on the document
+  // and filters by what is under the pointer.
+  document.addEventListener("pointerout", (event) => {
+    if (!openSub) return;
+    if (openSub.contains(event.target)) scheduleClose();
   });
 
   appMenu.addEventListener("pointerdown", (event) => {
