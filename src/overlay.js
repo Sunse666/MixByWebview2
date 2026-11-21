@@ -197,7 +197,11 @@ async function bootAppMenu() {
   // that `height: 100%` caused on the chrome strip.
   const fitWidth = () => {
     const content = (node) => (node ? node.scrollHeight : 0);
-    const height = Math.ceil(Math.max(content(appMenu), content(openSub)));
+    // The submenu starts partway down, so what it needs is its offset plus its own rows -
+    // not just its rows, which would cut it off at the bottom.
+    const subOffset = openSub ? parseFloat(openSub.style.top) || 0 : 0;
+    const subNeeds = openSub ? subOffset + content(openSub) : 0;
+    const height = Math.ceil(Math.max(content(appMenu), subNeeds));
     invoke("overlay_resize", { height, width: 320 + SUBMENU_W }).catch(() => {});
   };
 
@@ -205,11 +209,15 @@ async function bootAppMenu() {
     if (openSub && openSub.dataset.for === host.dataset.sub) return;
     closeSub(false);
     const panel = document.createElement("div");
-    panel.className = "submenu";
+    // `menu` as well as `submenu`: every row style in the stylesheet is written against
+    // `.menu .row`, so a column without that class draws its rows as bare buttons -
+    // boxed, bordered and centred, which is what the first attempt looked like.
+    panel.className = "menu submenu";
     panel.dataset.for = host.dataset.sub;
     document.body.append(panel);
     document.body.classList.add("has-sub");
     openSub = panel;
+    alignSub(host);
     fitWidth();
     // A list is read from the history, which is a command: the panel is on screen with a
     // placeholder first and filled when the answer arrives, so hovering feels immediate.
@@ -219,6 +227,20 @@ async function bootAppMenu() {
   };
 
   const currentHeight = () => Math.ceil(appMenu.getBoundingClientRect().height);
+
+  /// Puts the submenu's first row level with the row that opened it.
+  ///
+  /// Both columns start at the top of the panel and share one padding, so the offset is the
+  /// host row's own offset inside the menu - the two lists line up where they meet, which is
+  /// what makes the lit row and the list look like one thing.
+  const alignSub = (host) => {
+    if (!openSub) return;
+    const style = getComputedStyle(appMenu);
+    const padding = parseFloat(style.paddingTop) || 0;
+    const top = host.offsetTop;
+    openSub.style.top = Math.max(0, top) + "px";
+    openSub.style.paddingTop = `${padding}px`;
+  };
 
   /// A row that opens `build` beside it while the pointer is on it.
   const rowMenu = (glyph, label, hint, build) => {

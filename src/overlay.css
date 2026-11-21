@@ -137,23 +137,19 @@ body.has-sub #app-menu {
   box-shadow: inset 1px 0 0 var(--border);
 }
 
+/* It carries `menu` so its rows are the same rows, and overrides what that class brings:
+   a full-height box with its own outline is the left half of the panel, not a panel. */
 .submenu {
   position: fixed;
+  /* `top` is set inline to the row that opened it; 0 is only what it falls back to. */
   top: 0;
   left: 0;
   width: 240px;
-  box-sizing: border-box;
+  height: auto;
   /* No max-height: the panel is sized to whichever column is taller, so a cap here would
      be `max-height: 100%` of a height this column is itself deciding. The page scrolls
      only once the panel has been clamped to the window. */
-  padding: 6px;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  overflow-y: auto;
   border-radius: 10px 0 0 10px;
-  background: color-mix(in srgb, var(--panel) 94%, #000 6%);
-  border: 1px solid var(--border);
   border-right: 0;
 }
 
