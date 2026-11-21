@@ -241,7 +241,9 @@ async function bootAppMenu() {
         await close();
       });
       row("\u2606", "Bookmarks", "", act(() => invoke("tab_new", { url: "http://tauri.localhost/pages/bookmarks.html" })));
-      row("\u21ba", "History", "", act(() => invoke("tab_new", { url: "http://tauri.localhost/pages/history.html" })));
+      // A sub-menu rather than a tab: the list is short enough to read in place, and the
+      // page is still one row away for the search and the filters it carries.
+      row("\u21ba", "History", "", () => render("history"), { page: true });
       divider();
       row("\u25a4", "Extensions", "", act(() => invoke("tab_new", { url: "http://tauri.localhost/pages/extensions.html" })));
       row("\u2699", "Diagnose super drag", "", act(() => invoke("drag_probe")));
@@ -363,6 +365,48 @@ async function bootAppMenu() {
         await invoke("open_dir", { which: "diag" });
         await close();
       });
+    },
+
+    // The history page itself is a whole page of tab; this is the same list without
+    // leaving the menu. A visit opens in the tab in front of the user, which is what the
+    // back button of the page it came from would have done.
+    history: async () => {
+      header("History");
+      const visits = (await invoke("history_list", { limit: 40 }).catch(() => [])) || [];
+      const seen = new Set();
+      const unique = visits.filter((entry) => {
+        if (seen.has(entry.url)) return false;
+        seen.add(entry.url);
+        return true;
+      });
+
+      if (!unique.length) {
+        const empty = document.createElement("div");
+        empty.className = "menu-note";
+        empty.textContent = "No history yet.";
+        appMenu.append(empty);
+      }
+
+      for (const visit of unique) {
+        // The title is what a reader recognises; the address is the fallback for a page
+        // that has none, and the tooltip either way.
+        const entry = document.createElement("button");
+        entry.className = "row plain";
+        const label = document.createElement("span");
+        label.className = "label";
+        label.textContent = visit.title || visit.url;
+        entry.title = visit.url;
+        entry.append(label);
+        entry.addEventListener("click", async () => {
+          await invoke("tab_navigate", { url: visit.url }).catch(() => {});
+          await close();
+        });
+        appMenu.append(entry);
+      }
+
+      divider();
+      row("\u21ba", "Open history page", "", act(() =>
+        invoke("tab_new", { url: "http://tauri.localhost/pages/history.html" })));
     },
 
     language: async () => {

@@ -147,6 +147,8 @@ const DICT = {
     "QR code for this page": "为此页面创建二维码",
     "Open in reading mode": "在阅读模式下打开",
     "Search this image on Google": "用 Google 搜索这张图片",
+    "Open history page": "打开历史记录页",
+    "No history yet.": "还没有历史记录。",
     "restart to apply": "重启后生效",
     "Settings, history, bookmarks, theme and icons without the WebView2 profile": "设置、历史、书签、主题和图标（不含 WebView2 缓存）",
     "Export theme": "导出主题",

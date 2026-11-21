@@ -547,6 +547,13 @@ footer { margin-top: auto; display: flex; justify-content: flex-end; gap: 8px; }
   padding: 0 10px;
 }
 
+/* A page title is long and the menu is not, so the label shrinks and ends in an
+   ellipsis instead of pushing the row wider than the panel. */
+.menu .row.plain .label {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
 .find-status {
   flex: 0 0 auto;
   min-width: 0;
