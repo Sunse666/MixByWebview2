@@ -107,6 +107,10 @@ footer { margin-top: auto; display: flex; justify-content: flex-end; gap: 8px; }
   height: 100%;
   padding: 6px;
   overflow-y: auto;
+  /* The gutter is reserved whether or not a scrollbar is needed: this menu is usually
+     taller than its box, and without the reservation the moment one scrolls into view
+     shoves every row 8 px to the left. */
+  scrollbar-gutter: stable;
   border-radius: 10px;
   background: color-mix(in srgb, var(--panel) 94%, #000 6%);
   border: 1px solid var(--border);
@@ -127,16 +131,18 @@ body.has-sub #app-menu {
   /* 300 px for the history box plus the 8 px gap. */
   left: 308px;
   width: 320px;
-  /* The same height as the list beside it. Two separate boxes, but a menu that stopped
-     halfway down while its neighbour filled the window reads as an accident. */
+  /* The same height as the list beside it, but the rows inside do not move: the menu is a
+     box with a border and the same padding it always had, and the panel around it is what
+     grew. The scrolling is turned off here for the reason below. */
   height: 100%;
   box-sizing: border-box;
-  /* A full outline and four rounded corners, because it is one of two boxes now rather
-     than the right half of one. */
   border-radius: 10px;
   border-left: 1px solid var(--border);
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
 }
+
+/* Nothing above needs repeating here: the gutter is reserved on `.menu` itself, so the
+   list keeps its width before, during and after the panel beside it grows. */
 
 /* It carries `menu` so its rows are the same rows, and overrides what that class brings:
    a full-height box with its own outline is the left half of the panel, not a panel. */
@@ -195,6 +201,8 @@ body.has-sub #app-menu {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
+  /* Its own gutter, so a list that grows past the column does not shift its rows. */
+  scrollbar-gutter: stable;
   display: flex;
   flex-direction: column;
   gap: 1px;
