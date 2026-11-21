@@ -370,6 +370,8 @@ fn place(app: &AppHandle, win: &tauri::Window, kind: &str, frame: Frame) -> Resu
 fn fitted(frame: Frame, win_h: f64, height: f64) -> (f64, f64) {
     let floor = frame.floor.clamp(4.0, (win_h - MARGIN).max(4.0));
     let height = height.clamp(MIN_H, (win_h - floor - 4.0).max(MIN_H));
+    // The panel runs down from where it opened, and moves up when that would put its bottom
+    // past the window, the way a menu near the bottom of a screen is pulled inside it.
     let top = frame.y.min((win_h - height - 4.0).max(floor)).max(floor);
     (top, height)
 }

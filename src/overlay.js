@@ -190,13 +190,16 @@ async function bootAppMenu() {
     }
   };
 
-  // What the panel needs to be while a submenu is showing.
+  // The panel fills the room it is allowed while a submenu is open, and returns to the
+  // menu's own height when it closes.
   //
-  // Only the width changes. The height stays the menu's own: the submenu is placed inside
-  // that box and capped to it, so growing the panel would give the submenu room it does
-  // not have and undo the cap.
+  // A full-height column needs a full-height panel, because the webview clips anything
+  // outside its box. Rather than guess the window's height, this asks for more than any
+  // window has: `overlay_resize` clamps it to what the window can hold, which is the number
+  // wanted here and the one number the page cannot know.
   const fitWidth = () => {
-    const height = Math.ceil(menuContentHeight());
+    const menuH = Math.ceil(menuContentHeight());
+    const height = openSub ? 100000 : menuH;
     invoke("overlay_resize", { height, width: 320 + SUBMENU_W }).catch(() => {});
   };
 
@@ -212,25 +215,23 @@ async function bootAppMenu() {
     document.body.append(panel);
     document.body.classList.add("has-sub");
     openSub = panel;
-    placeSub(host);
+    placeSub();
     // A list is read from the history, which is a command: the panel is on screen with a
     // placeholder first and filled when the answer arrives, so hovering feels immediate.
     if (build) Promise.resolve(build(panel)).then(() => {
       if (openSub !== panel) return;
-      // Placed again now that the rows exist: which way it flips depends on how tall it is,
-      // and an empty column is always short enough to sit under its row.
-      placeSub(host);
+      // Sized again now that the rows exist: the panel follows the taller of the two.
+      placeSub();
     });
   };
 
   const currentHeight = () => Math.ceil(appMenu.getBoundingClientRect().height);
 
-  /// Puts the submenu beside the row that opened it, flipping up when there is no room below.
+  /// How tall the menu column needs to be, in its own right.
   ///
-  /// The space to fit into is the height the menu itself needs - its rows and its padding -
-  /// and not the panel's height. The panel is sized to whichever column is taller, so once a
-  /// submenu is open `appMenu.scrollHeight` has already grown to match it and every row would
-  /// look as though it had room underneath, which is exactly how the flip kept not happening.
+  /// Measured from the rows and the padding rather than from `scrollHeight`: the box is
+  /// already clamped to the panel that this number is going to size, so reading the box
+  /// back gives the height the panel already has and the two can only ever agree.
   const menuContentHeight = () => {
     const style = getComputedStyle(appMenu);
     const padding = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
@@ -239,25 +240,18 @@ async function bootAppMenu() {
     return rows + padding;
   };
 
-  /// Places the submenu beside its row, inside the room the menu actually occupies.
+  /// The submenu is a full-height column beside the menu, not a bubble beside a row.
   ///
-  /// The top lines up with the row's top and the column runs downwards from there, which is
-  /// what a browser does: a list that reaches the bottom of the menu is clipped by it and
-  /// scrolls, rather than being moved up so its last entry clears the row. Moving it up was
-  /// tried and is wrong twice over - the list then reads bottom-to-top relative to the menu,
-  /// and the row that is meant to be its label ends up level with the entries below the ones
-  /// it points at.
-  const placeSub = (host) => {
+  /// This is the shape a browser uses for a list that comes out of the app menu: the panel
+  /// grows to the whole height it is allowed and the column fills it from the top of the
+  /// window to the bottom. A box anchored to the row was tried and is what every earlier
+  /// attempt looked wrong about - it floats a few hundred pixels into the middle of the
+  /// window, attached to nothing, and the further down the menu its row sits the lower it
+  /// hangs and the less of it there is to see.
+  const placeSub = () => {
     if (!openSub) return;
-    const padding = parseFloat(getComputedStyle(appMenu).paddingTop) || 0;
-    const room = menuContentHeight();
-    openSub.style.paddingTop = `${padding}px`;
-
-    // Never above the top of the menu, and never shorter than one row.
-    const top = Math.min(host.offsetTop, Math.max(0, room - MIN_ROW));
-    openSub.style.top = Math.max(0, top) + "px";
-    const fits = Math.max(MIN_ROW, room - Math.max(0, top));
-    openSub.style.maxHeight = Math.round(fits) + "px";
+    openSub.style.top = "0";
+    openSub.style.maxHeight = "";
     fitWidth();
   };
 

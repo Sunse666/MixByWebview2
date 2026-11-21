@@ -125,10 +125,10 @@ body.has-sub #app-menu {
   top: 0;
   left: 240px;
   width: 320px;
-  /* Not `height: 100%`: the panel is sized to this column's content, and a column pinned
-     to the panel's height would report that height back as its content - the measurement
-     and the thing it measures would be the same number, so it could only ever get bigger. */
-  height: auto;
+  /* The panel is a full-height box while a submenu is open, so the menu fills it: the two
+     columns share one background and one outline, and a menu that stopped short of the
+     bottom would leave a step in it. */
+  height: 100%;
   box-sizing: border-box;
   /* The two columns are one panel: the outline belongs to the outside edges only, and the
      seam between them is where the submenu's right edge meets this one's left. A border
@@ -144,14 +144,13 @@ body.has-sub #app-menu {
    a full-height box with its own outline is the left half of the panel, not a panel. */
 .submenu {
   position: fixed;
-  /* `top` is set inline to the row that opened it; 0 is only what it falls back to. */
+  /* The whole height of the panel, beside the menu rather than beside a row: this is a
+     column of the menu, and a browser opens it top to bottom. */
   top: 0;
   left: 0;
+  bottom: 0;
   width: 240px;
   height: auto;
-  /* No max-height: the panel is sized to whichever column is taller, so a cap here would
-     be `max-height: 100%` of a height this column is itself deciding. The page scrolls
-     only once the panel has been clamped to the window. */
   border-radius: 10px 0 0 10px;
   border-right: 0;
 }
