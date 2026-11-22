@@ -245,8 +245,6 @@ async function bootAppMenu() {
     });
   };
 
-  const currentHeight = () => Math.ceil(appMenu.getBoundingClientRect().height);
-
   /// How tall the menu column needs to be, in its own right.
   ///
   /// Measured from the rows and the padding rather than from `scrollHeight`: the box is
@@ -259,6 +257,16 @@ async function bootAppMenu() {
     for (const child of appMenu.children) rows += child.offsetHeight;
     return rows + padding;
   };
+
+  /// How tall the menu column is, asked of its content rather than of its box.
+  ///
+  /// `getBoundingClientRect().height` reads the height the webview was given, not the
+  /// height the rows need - and while a submenu is open the webview is the whole window
+  /// and `.menu { height: 100% }` pulls the box out to match. Closing the submenu then
+  /// asked to shrink back to that inflated number, so the panel kept the height the
+  /// submenu had forced on it and never returned to the size of its own rows. It only
+  /// ever grew, once per time the history column was opened.
+  const currentHeight = () => Math.ceil(menuContentHeight());
 
   /// The submenu is a full-height column beside the menu, not a bubble beside a row.
   ///
