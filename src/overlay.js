@@ -1,8 +1,21 @@
 // The overlay page: menus, panels, permission prompts and the tab hover card.
 const { invoke } = window.__TAURI__.core;
 
-/// Leaving the overlay, whatever the reason, closes it: the pointer went somewhere else.
-window.addEventListener("blur", () => invoke("overlay_close").catch(() => {}));
+/// Leaving the overlay closes it: the pointer went somewhere else, or another window took
+/// the keyboard.
+///
+/// Not on every blur, though. Resizing a child webview - which is what opening the history
+/// column beside the menu does - takes the focus away from the page for a moment, and the
+/// panel closed itself a heartbeat after it was asked to draw a second column. A blur that
+/// the page causes on itself is not the pointer going anywhere.
+let resizingUntil = 0;
+window.__mixSizing = (hold) => {
+  resizingUntil = Date.now() + (hold || 400);
+};
+window.addEventListener("blur", () => {
+  if (Date.now() < resizingUntil) return;
+  invoke("overlay_close").catch(() => {});
+});
 import { applyStatic, setLanguage, t } from "./i18n.js";
 const { listen } = window.__TAURI__.event;
 
@@ -189,6 +202,7 @@ async function bootAppMenu() {
     openSub = null;
     document.body.classList.remove("has-sub");
     if (narrow) {
+      window.__mixSizing(400);
       invoke("overlay_resize", { height: currentHeight(), width: 320 }).catch(() => {});
     }
   };
@@ -203,6 +217,9 @@ async function bootAppMenu() {
   const fitWidth = () => {
     const menuH = Math.ceil(menuContentHeight());
     const height = openSub ? 100000 : menuH;
+    // Held for as long as the column is open: every resize takes the focus away for a
+    // moment, and the last one comes long after the first.
+    window.__mixSizing(openSub ? 60000 : 400);
     invoke("overlay_resize", { height, width: 320 + GAP_W + SUBMENU_W }).catch(() => {});
   };
 
@@ -742,29 +759,37 @@ async function bootAppMenu() {
   // covers the whole panel - so the submenu never closed at all.
   let leaveTimer = null;
 
-  /// True while the pointer is over either column.
-  const overMenu = () => appMenu.matches(":hover") || Boolean(openSub && openSub.matches(":hover"));
-
-  /// Closes once the pointer has settled somewhere that is neither column.
+  /// Whether the pointer is inside the panel's box, tracked from events rather than `:hover`.
   ///
-  /// The delay is what lets a diagonal move from a row to the column it opened cross the
-  /// gap between them without the column vanishing under the pointer. `pointerout` fires
-  /// for every element change inside the menu, so the check is what it decides on, not the
-  /// event.
+  /// `matches(':hover')` was the first attempt and it is not dependable here: the webview is
+  /// resized while the pointer is over it, which is exactly when the browser recomputes hover
+  /// state, and the reading it gave back was "not over anything" - so the column closed a
+  /// moment after it opened. A flag set by the pointer events themselves says what happened
+  /// rather than what the layout currently looks like.
+  let pointerInside = false;
+
   const scheduleClose = () => {
     clearTimeout(leaveTimer);
     leaveTimer = setTimeout(() => {
-      if (!overMenu()) closeSub();
-    }, 160);
+      if (!pointerInside) closeSub();
+    }, 200);
   };
 
-  appMenu.addEventListener("pointerout", scheduleClose);
-  // The column is created after this handler is installed, so it listens on the document
-  // and filters by what is under the pointer.
+  const enter = () => {
+    pointerInside = true;
+    clearTimeout(leaveTimer);
+  };
+  const leave = () => {
+    pointerInside = false;
+    scheduleClose();
+  };
+
+  document.addEventListener("pointerover", enter, true);
+  document.addEventListener("pointermove", enter, true);
   document.addEventListener("pointerout", (event) => {
-    if (!openSub) return;
-    if (openSub.contains(event.target)) scheduleClose();
-  });
+    if (!event.relatedTarget) leave();
+    else enter();
+  }, true);
 
   appMenu.addEventListener("pointerdown", (event) => {
     if (event.target === appMenu) invoke("overlay_close");
