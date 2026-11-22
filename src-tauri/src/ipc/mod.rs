@@ -116,10 +116,18 @@ pub struct Ui {
     pub source: Option<String>,
     /// The article the reader tab is waiting to lay out.
     pub article: Option<Article>,
+    /// The tab `reading_mode` asked for that article, and has not reported it yet.
+    ///
+    /// The reader page inserts the markup it is handed as markup, and it lives on the app's
+    /// own origin - so whoever can answer `article_ready` can put markup in a page that can
+    /// run privileged commands. The extraction has to run inside the page being read, which
+    /// means that command stays reachable from a site; what this bounds is *which* site: the
+    /// one that was asked. Any other answer is dropped.
+    pub article_from: Option<String>,
 }
 
 /// One page's article, as the reader page receives it.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Article {
     pub title: String,
     pub byline: String,
@@ -200,6 +208,7 @@ impl AppState {
                 find_hit: true,
                 source: None,
                 article: None,
+                article_from: None,
             }),
             nav: parking_lot::RwLock::new(Nav {
                 app_base: String::new(),

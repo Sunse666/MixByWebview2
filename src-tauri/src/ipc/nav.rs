@@ -353,9 +353,16 @@ pub async fn url_type(
 pub async fn url_key(
     app: AppHandle,
     window: tauri::Window,
-    _state: State<'_, AppState>,
+    state: State<'_, AppState>,
     key: String,
 ) -> Result<(), AppError> {
+    // Only while the address bar has the keyboard. The command is reachable from a remote
+    // page, and without this an "enter" from any site would commit whatever is in the field
+    // - which is a navigation the user did not ask for. `url_type` next door already had
+    // this test; this one had the state argument and never read it.
+    if !state.windows.url_edit.read().contains_key(window.label()) {
+        return Ok(());
+    }
     match key.as_str() {
         "enter" => {
             exit_url_edit(&app, window.label());
@@ -588,10 +595,13 @@ pub async fn reading_mode(
     let Some(webview) = app.get_webview(&id) else {
         return Err(AppError::new("no_tab", id));
     };
+    // Forgotten until this tab answers: an answer that arrives after the user asked for a
+    // different page would be laid out as if it belonged to the new one.
+    state.ui.write().article_from = Some(id.clone());
     let _ = webview.eval(
         "var a = window.__mixExtractArticle && window.__mixExtractArticle();\
-         if (a) window.__TAURI_INTERNALS__.invoke('article_ready', {
-           title: a.title, byline: a.byline, html: a.html, source: a.url });",
+         if (a) window.__TAURI_INTERNALS__.invoke('article_ready', { article: {
+           title: a.title, byline: a.byline, html: a.html, source: a.url } });",
     );
     Ok(())
 }
@@ -601,22 +611,34 @@ pub async fn reading_mode(
 /// The extraction already ran in the page, so this only keeps it: the built-in reader page
 /// lays it out, and asking for the markup through a command is what keeps a whole article
 /// out of the url.
+///
+/// Only the tab that was asked may answer. The reader collects without scripts, so this is
+/// not the page's own defence - it is what stops a page from handing an article to the
+/// reader that a different page asked to show, which would let a site plant markup in a
+/// document on the app's origin.
 #[tauri::command]
 pub async fn article_ready(
     app: AppHandle,
     window: tauri::Window,
+    webview: tauri::Webview,
     state: State<'_, AppState>,
-    title: String,
-    byline: String,
-    html: String,
-    source: String,
+    article: Article,
 ) -> Result<(), AppError> {
-    state.ui.write().article = Some(Article {
-        title,
-        byline,
-        html,
-        source,
-    });
+    let caller = webview.label().to_string();
+    {
+        let mut ui = state.ui.write();
+        if ui.article_from.as_deref() != Some(caller.as_str()) {
+            crate::logging::warn(&format!(
+                "article from {caller} dropped: nothing asked it for one"
+            ));
+            return Err(AppError::new(
+                "untrusted",
+                "no article was asked of this tab",
+            ));
+        }
+        ui.article_from = None;
+        ui.article = Some(article);
+    }
     let page = "http://tauri.localhost/pages/reader.html".to_string();
     tab_new(app, window, state, Some(page), None, None).await?;
     Ok(())
@@ -704,6 +726,66 @@ pub async fn url_action(
 #[cfg(test)]
 mod tests {
     use super::find_script;
+    use crate::ipc::{Article, Ui};
+
+    /// The shape `permission_request` remembers a decision by.
+    ///
+    /// It is `scheme://host[:port]` and nothing after it: a decision belongs to a site, not
+    /// to one of its pages. This is the string the command builds from the caller's own url
+    /// now that the page no longer names its origin.
+    #[test]
+    fn a_decision_is_remembered_against_the_site_and_not_the_page() {
+        let deep = tauri::Url::parse("https://example.com:8443/a/b?c=1#d").unwrap();
+        let other = tauri::Url::parse("https://example.com:8443/elsewhere").unwrap();
+        assert_eq!(
+            deep.origin().ascii_serialization(),
+            "https://example.com:8443"
+        );
+        assert_eq!(
+            deep.origin().ascii_serialization(),
+            other.origin().ascii_serialization()
+        );
+        // An opaque origin - a file: url, a sandboxed frame - has no site to remember, so
+        // the command refuses it instead of writing a decision under "null".
+        let opaque = tauri::Url::parse("data:text/html,<p>hi</p>").unwrap();
+        assert_eq!(opaque.origin().ascii_serialization(), "null");
+    }
+
+    /// The article is handed to the reader, which inserts it as markup on the app's own
+    /// origin - so only the tab that was asked may answer, and only once.
+    #[test]
+    fn only_the_tab_that_was_asked_may_hand_over_an_article() {
+        let mut ui = Ui {
+            menu_context: Default::default(),
+            suggest_width: 0.0,
+            translate_result: (0, None),
+            translated_tabs: Default::default(),
+            translate_skip: Default::default(),
+            find_hit: false,
+            source: None,
+            article: None,
+            article_from: Some("w1-tab-2".to_string()),
+        };
+        let article = || Article {
+            title: "t".into(),
+            byline: String::new(),
+            html: "<p>x</p>".into(),
+            source: String::new(),
+        };
+
+        // A page that was never asked cannot put markup in the reader.
+        assert_ne!(ui.article_from.as_deref(), Some("w1-tab-7"));
+
+        // The one that was asked can, and the request is spent doing so.
+        assert_eq!(ui.article_from.as_deref(), Some("w1-tab-2"));
+        ui.article_from = None;
+        ui.article = Some(article());
+        assert!(ui.article.is_some());
+        assert_eq!(
+            ui.article_from, None,
+            "a second answer from the same tab is not a second article"
+        );
+    }
 
     #[test]
     fn a_partial_word_is_not_searched_as_a_whole_word() {

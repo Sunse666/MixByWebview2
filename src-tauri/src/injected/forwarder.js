@@ -446,8 +446,9 @@
     var tauri = window.__TAURI_INTERNALS__;
     if (!tauri || !tauri.invoke) return Promise.resolve(false);
     var invoke = function (command, payload) { return tauri.invoke(command, payload); };
+    // The origin is not sent: the command reads it from the webview that called it, because
+    // a page that can name its own origin can ask for permission as somebody else.
     return invoke("permission_request", {
-      origin: location.origin,
       kind: kind
     }).then(function (answer) {
       if (!answer) return false;

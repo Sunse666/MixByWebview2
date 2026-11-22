@@ -155,13 +155,30 @@ pub struct PermissionAsk {
 }
 
 /// Asked from the page before a sensitive API is used.
+///
+/// The origin is read from the webview, not from the argument. The injected script sends
+/// its own `location.origin`, and that is right for the script - but the command is also
+/// reachable by anything the page itself runs, and a page that can name its own origin can
+/// ask for permission as somebody else. What the user is shown and what is written to
+/// `permissions.json` has to be the page that really asked, so the caller's url is the only
+/// trustworthy source. A caller that is not a page at all (the strip) has no origin, and is
+/// refused rather than prompted under a blank one.
 #[tauri::command]
 pub async fn permission_request(
     app: AppHandle,
     window: tauri::Window,
-    origin: String,
+    webview: tauri::Webview,
     kind: String,
 ) -> Result<PermissionAsk, AppError> {
+    let Some(caller) = webview.url().ok() else {
+        return Err(AppError::new("untrusted", "no origin for this caller"));
+    };
+    // `origin` is scheme + host + port and nothing after it, which is what a decision is
+    // remembered against: a path would make every page of a site its own question.
+    let origin = caller.origin().ascii_serialization();
+    if origin == "null" {
+        return Err(AppError::new("untrusted", "no origin for this caller"));
+    }
     let key = crate::permissions::key(&origin, &kind);
     if let Some(known) = crate::permissions::remembered(&app, &key) {
         return Ok(PermissionAsk {
