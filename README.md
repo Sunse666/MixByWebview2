@@ -178,7 +178,6 @@ powershell -File ..\scripts\build-portable.ps1
 
 新增 IPC 命令后必须跑一次 `node scripts/gen-commands.js`：它把 `main.rs` 里的命令清单同步到
 `build.rs`（ACL 生成）和 `capabilities/default.json`（本地页面授权），三份清单不再手工维护。
-设计文档在 `docs/`，不随仓库分发。
 
 产物在 `dist/Mix-<version>-release.zip`。
 
