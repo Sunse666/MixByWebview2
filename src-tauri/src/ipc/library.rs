@@ -370,7 +370,12 @@ pub async fn bookmark_toggle(
 
     let (added, snapshot) = {
         let mut bookmarks = state.bookmarks_mut();
-        let added = crate::library::toggle_bookmark(&mut bookmarks, &url, &title);
+        let added = crate::library::toggle_bookmark_at(
+            &mut bookmarks,
+            &url,
+            &title,
+            state.settings.read().bookmark_newest_first,
+        );
         (added, bookmarks.clone())
     };
     crate::library::save_bookmarks(&state.dirs.bookmarks_file, &snapshot)?;
@@ -395,7 +400,12 @@ pub async fn bookmark_add(
     let snapshot = {
         let mut bookmarks = state.bookmarks_mut();
         if !bookmarks.iter().any(|bookmark| bookmark.url == url) {
-            crate::library::toggle_bookmark(&mut bookmarks, &url, &title);
+            crate::library::toggle_bookmark_at(
+                &mut bookmarks,
+                &url,
+                &title,
+                state.settings.read().bookmark_newest_first,
+            );
         }
         bookmarks.clone()
     };

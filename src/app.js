@@ -29,8 +29,25 @@ let selected = null;
 let hidePill = null;
 let hoverThumb = null;
 let thumbOpen = false;
+/// Whether the address bar has the keyboard: the one thing "show the bar in use" tests.
+let urlEditActive = false;
+/// The last bookmark list handed to the renderer, so the bar can be redrawn when its
+/// visibility changes without asking the backend for the list again.
+let lastBookmarks = [];
 const downloadPill = document.getElementById("download");
 let announcedDownload = 0;
+
+/// The site a url belongs to, for the fallback letter an icon-less bookmark shows.
+///
+/// Deliberately forgiving: a bookmark can hold anything, and a malformed one should draw
+/// with a "?" rather than take the whole bar down.
+function hostOf(url) {
+  try {
+    return new URL(url).host || url;
+  } catch (error) {
+    return String(url || "").replace(/^[a-z]+:\/\//i, "").split("/")[0];
+  }
+}
 
 // `announce` is false for the list read at boot. That list is history from disk, and
 // announcing its last entry is why the same "OK <file>" came back on every start, long
@@ -561,7 +578,7 @@ function syncLoading() {
  * The strip is rebuilt by moving the same elements around, which the browser does in one
  * paint: nothing can be transitioned between "before" and "after" unless the distance is
  * turned into a transform first. `before` holds where each element sat, so this plays the
- * difference back — and clears it again, so a leftover transform can never outlive a frame.
+ * difference back, and clears it again, so a leftover transform can never outlive a frame.
  */
 function slideFrom(before) {
   if (document.body.classList.contains("tab-dragging")) return;
@@ -909,7 +926,16 @@ function fitStrip() {
 function renderBookmarks(list) {
   const bar = document.getElementById("bookmarks");
   const items = list || [];
-  bar.hidden = !settings.show_bookmarks;
+  // Kept so focus and blur on the address bar can redraw the bar without another round
+  // trip to the backend for a list that has not changed.
+  lastBookmarks = items;
+  // How the bar appears: `bookmark_bar_mode` is "always", "never" or "address". The last one
+  // shows it while the address bar has the keyboard, which is when a reader is reaching for
+  // something to open; the strip is told to refit either way because the row is part of the
+  // chrome height.
+  const mode = settings.bookmark_bar_mode || (settings.show_bookmarks ? "always" : "never");
+  const reveals = mode === "address" && urlEditActive;
+  bar.hidden = !(mode === "always" || reveals);
   fitStrip();
   if (bar.hidden) return;
 
@@ -940,8 +966,33 @@ function renderBookmarks(list) {
     ...items.map((bookmark, index) => {
       const chip = document.createElement("button");
       chip.className = "bookmark";
-      chip.textContent = bookmark.title || bookmark.url;
-      chip.title = bookmark.url;
+      // Icons without names is what a reader wants when the bar holds twenty pages: the
+      // button keeps its address in the tooltip, so the name is still one hover away.
+      const iconsOnly = Boolean(settings.bookmark_icons_only);
+      if (iconsOnly) {
+        chip.classList.add("icon-only");
+        chip.textContent = "";
+        const mark = document.createElement("img");
+        mark.className = "fav";
+        mark.alt = bookmark.title || bookmark.url;
+        if (realIcon(bookmark.icon)) {
+          mark.src = bookmark.icon;
+        } else {
+          // The same fallback the other lists use: the first letter of the site.
+          const letter = document.createElement("span");
+          letter.className = "bookmark-letter";
+          letter.textContent = (hostOf(bookmark.url)[0] || "?").toUpperCase();
+          chip.append(letter);
+        }
+        if (mark.src) chip.append(mark);
+      } else {
+        chip.textContent = bookmark.title || bookmark.url;
+      }
+      chip.title = bookmark.title ? `${bookmark.title}\n${bookmark.url}` : bookmark.url;
+      // A name longer than the limit is cut by the stylesheet; the limit itself is a
+      // setting because a wide screen has room for more of a title than a narrow one.
+      const cap = Number(settings.bookmark_button_width);
+      if (cap > 0) chip.style.maxWidth = `${cap}px`;
       chip.draggable = true;
       chip.addEventListener("click", () => invoke("tab_new", { url: bookmark.url }));
       chip.addEventListener("dragstart", (event) => {
@@ -1481,6 +1532,19 @@ async function boot() {
     }
   });
   urlInput.addEventListener("input", () => feedSuggest(urlInput.value));
+
+  // The address bar having the keyboard is what "show the bookmarks bar while the address
+  // bar is in use" means. Driven from the field's own focus and blur rather than from the
+  // six places that call `.focus()`: the element already knows, and every one of those
+  // callers would otherwise have to remember to tell the bar as well.
+  urlInput.addEventListener("focus", () => {
+    urlEditActive = true;
+    if ((settings.bookmark_bar_mode || "") === "address") renderBookmarks(lastBookmarks);
+  });
+  urlInput.addEventListener("blur", () => {
+    urlEditActive = false;
+    if ((settings.bookmark_bar_mode || "") === "address") renderBookmarks(lastBookmarks);
+  });
 
   const urlInsert = (text) => {
     restoreQuery();

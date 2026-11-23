@@ -126,24 +126,35 @@ pub fn save_bookmarks(path: &Path, bookmarks: &[Bookmark]) -> std::io::Result<()
 }
 
 /// Returns true when the page was added, false when it was removed.
-pub fn toggle_bookmark(bookmarks: &mut Vec<Bookmark>, url: &str, title: &str) -> bool {
+///
+/// `newest_first` is a setting because both orders are defensible: a reader who adds pages
+/// while browsing wants the newest at hand, and one who curates a bar wants a new page to
+/// land at the end instead of in front of everything they arranged.
+pub fn toggle_bookmark_at(
+    bookmarks: &mut Vec<Bookmark>,
+    url: &str,
+    title: &str,
+    newest_first: bool,
+) -> bool {
     if let Some(index) = bookmarks.iter().position(|bookmark| bookmark.url == url) {
         bookmarks.remove(index);
         return false;
     }
-    bookmarks.insert(
-        0,
-        Bookmark {
-            url: url.to_string(),
-            title: if title.is_empty() {
-                url.to_string()
-            } else {
-                title.to_string()
-            },
-            at: now(),
-            folder: String::new(),
+    let entry = Bookmark {
+        url: url.to_string(),
+        title: if title.is_empty() {
+            url.to_string()
+        } else {
+            title.to_string()
         },
-    );
+        at: now(),
+        folder: String::new(),
+    };
+    if newest_first {
+        bookmarks.insert(0, entry);
+    } else {
+        bookmarks.push(entry);
+    }
     true
 }
 
@@ -172,9 +183,40 @@ mod tests {
     #[test]
     fn toggling_a_bookmark_adds_then_removes() {
         let mut bookmarks = Vec::new();
-        assert!(toggle_bookmark(&mut bookmarks, "https://a.test", "A"));
+        assert!(toggle_bookmark_at(
+            &mut bookmarks,
+            "https://a.test",
+            "A",
+            true
+        ));
         assert_eq!(bookmarks.len(), 1);
-        assert!(!toggle_bookmark(&mut bookmarks, "https://a.test", "A"));
+        assert!(!toggle_bookmark_at(
+            &mut bookmarks,
+            "https://a.test",
+            "A",
+            true
+        ));
         assert!(bookmarks.is_empty());
+    }
+
+    #[test]
+    fn a_new_bookmark_lands_where_the_setting_says() {
+        // Newest first is the default and the order the bar has always used.
+        let mut front = Vec::new();
+        toggle_bookmark_at(&mut front, "https://first.test", "First", true);
+        toggle_bookmark_at(&mut front, "https://second.test", "Second", true);
+        assert_eq!(
+            front.iter().map(|b| b.title.as_str()).collect::<Vec<_>>(),
+            ["Second", "First"]
+        );
+
+        // Appending instead leaves what the reader arranged alone.
+        let mut back = Vec::new();
+        toggle_bookmark_at(&mut back, "https://first.test", "First", false);
+        toggle_bookmark_at(&mut back, "https://second.test", "Second", false);
+        assert_eq!(
+            back.iter().map(|b| b.title.as_str()).collect::<Vec<_>>(),
+            ["First", "Second"]
+        );
     }
 }

@@ -28,7 +28,17 @@ for (const anchor of ['listen("tabs:changed"', 'listen("settings:changed"', "ren
 if (!/function fitStrip\(\)/.test(source)) {
   problems.push("app.js lost fitStrip(): nothing reports the strip's height any more");
 }
-if (!/bar\.hidden = !settings\.show_bookmarks;\s*\n\s*fitStrip\(\);/.test(source)) {
+// The row decides its own visibility and then reports the height, in that order: `fitStrip`
+// measures the body, so it has to run after the row is shown or hidden, not before.
+//
+// Matched as "an assignment to bar.hidden followed at some point by a fitStrip() call in
+// the same function", rather than as the exact line the first version of this check saw:
+// the condition grew a second setting (`bookmark_bar_mode` can hide the row while
+// `show_bookmarks` is true) and a check that fails when the expression changes is testing
+// the spelling, not the order it was written to protect.
+const hides = source.indexOf("bar.hidden =");
+const fits = source.indexOf("fitStrip();", hides);
+if (hides < 0 || fits < 0) {
   problems.push("renderBookmarks does not refit the strip: the bookmarks row would be clipped");
 }
 // A body pinned to the viewport measures the height the webview was given, not the height the

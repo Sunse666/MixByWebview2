@@ -28,6 +28,26 @@ fn default_true() -> bool {
     true
 }
 
+fn default_bar_mode() -> String {
+    "never".to_string()
+}
+
+fn default_bookmark_column() -> f64 {
+    200.0
+}
+
+fn default_bookmark_button() -> f64 {
+    132.0
+}
+
+fn default_bookmark_reveal_delay() -> u32 {
+    250
+}
+
+fn default_bookmark_hide_delay() -> u32 {
+    1200
+}
+
 fn default_sidebar_width() -> f64 {
     300.0
 }
@@ -42,6 +62,39 @@ pub struct Settings {
     pub chrome_height: f64,
     /// Adds a bookmarks row under the address bar, which also grows the chrome.
     pub show_bookmarks: bool,
+    /// How the bar appears: "always", "never" or "address" (while the address bar has the
+    /// keyboard). `show_bookmarks` is kept as the "always" answer for files written before
+    /// this existed; `sanitize` folds the two together.
+    #[serde(default = "default_bar_mode")]
+    pub bookmark_bar_mode: String,
+    /// Width of one column of the bookmarks menu, and the most a bar button may grow to.
+    #[serde(default = "default_bookmark_column")]
+    pub bookmark_column_width: f64,
+    #[serde(default = "default_bookmark_button")]
+    pub bookmark_button_width: f64,
+    /// Show the folders of the bookmarks bar as a menu of columns.
+    #[serde(default = "default_true")]
+    pub bookmark_menu_columns: bool,
+    /// Reveal that menu when the pointer reaches this many pixels inside the left edge.
+    /// Zero turns the reveal off.
+    #[serde(default)]
+    pub bookmark_reveal_edge: u32,
+    #[serde(default = "default_bookmark_reveal_delay")]
+    pub bookmark_reveal_delay: u32,
+    #[serde(default = "default_bookmark_hide_delay")]
+    pub bookmark_hide_delay: u32,
+    /// Put a bookmark added now at the top of its folder instead of the bottom.
+    #[serde(default)]
+    pub bookmark_newest_first: bool,
+    /// Draw icons without their titles on the bookmarks bar.
+    #[serde(default)]
+    pub bookmark_icons_only: bool,
+    /// Show the bar on the new tab page even when it is otherwise hidden.
+    #[serde(default)]
+    pub bookmark_bar_newtab: bool,
+    /// A middle click on a folder opens every bookmark it holds.
+    #[serde(default = "default_true")]
+    pub bookmark_folder_middle_click: bool,
     /// Proxy: "system", "off" or "manual" (uses proxy_server).
     #[serde(default = "default_proxy_mode")]
     pub proxy_mode: String,
@@ -183,6 +236,17 @@ impl Default for Settings {
             // real height on every start, and this field is only where it lands.
             chrome_height: 0.0,
             show_bookmarks: false,
+            bookmark_bar_mode: default_bar_mode(),
+            bookmark_column_width: default_bookmark_column(),
+            bookmark_button_width: default_bookmark_button(),
+            bookmark_menu_columns: true,
+            bookmark_reveal_edge: 0,
+            bookmark_reveal_delay: default_bookmark_reveal_delay(),
+            bookmark_hide_delay: default_bookmark_hide_delay(),
+            bookmark_newest_first: false,
+            bookmark_icons_only: false,
+            bookmark_bar_newtab: false,
+            bookmark_folder_middle_click: true,
             proxy_mode: default_proxy_mode(),
             proxy_server: String::new(),
             sidebar: default_sidebar(),
@@ -288,6 +352,28 @@ impl Settings {
         };
         self.sidebar_width =
             finite(self.sidebar_width, default_sidebar_width()).clamp(180.0, 640.0);
+
+        // The two spellings of "is the bar shown": `show_bookmarks` predates `bookmark_bar_mode`
+        // and is still what the older files carry, so a file with only the old field is read
+        // as "always" and a file with only the new one sets the old one for the callers that
+        // still ask it. After this the two never disagree.
+        self.bookmark_bar_mode = match self.bookmark_bar_mode.as_str() {
+            "always" | "never" | "address" => self.bookmark_bar_mode.clone(),
+            _ => default_bar_mode(),
+        };
+        if self.show_bookmarks && self.bookmark_bar_mode == "never" {
+            self.bookmark_bar_mode = "always".to_string();
+        }
+        self.show_bookmarks = self.bookmark_bar_mode != "never";
+        self.bookmark_column_width =
+            finite(self.bookmark_column_width, default_bookmark_column()).clamp(120.0, 400.0);
+        self.bookmark_button_width =
+            finite(self.bookmark_button_width, default_bookmark_button()).clamp(40.0, 320.0);
+        // The edge reveal is a distance inside the window's left edge; past a third of a
+        // window it stops being "the edge" and starts catching ordinary clicks.
+        self.bookmark_reveal_edge = self.bookmark_reveal_edge.min(200);
+        self.bookmark_reveal_delay = self.bookmark_reveal_delay.clamp(50, 2000);
+        self.bookmark_hide_delay = self.bookmark_hide_delay.clamp(100, 5000);
         // Only the panels this build knows, in their standard order, and never none.
         let known = default_sidebar_views();
         if self.sidebar_views.is_empty() || self.sidebar_views.iter().any(|id| !known.contains(id))
