@@ -227,7 +227,21 @@ window.addEventListener("resize", syncStripScroll);
 
 const tabNodes = new Map();
 
-/** The tab as it is now: handlers outlive several updates. */
+/// Puts `el` at position `index` of the strip, moving it only when it is somewhere else.
+///
+/// `append` and `insertBefore` both count as a move even when the element ends up where it
+/// already was, and a move between the two presses of a double click loses the event. The
+/// order is compared first so the common case - a tab that did not change position - touches
+/// nothing at all.
+function placeInStrip(el, index) {
+  const at = tabStrip.children[index];
+  if (at === el) return;
+  if (at) tabStrip.insertBefore(el, at);
+  else tabStrip.append(el);
+}
+
+
+/// The tab as it is now: handlers outlive several updates.
 function tabById(id) {
   return tabs.find((item) => item.id === id) || { id, title: "", url: "", alive: false };
 }
@@ -422,6 +436,18 @@ document.addEventListener("mousemove", onDragMove);
 document.addEventListener("mouseup", onDragEnd);
 
 /** Redraws the inside of a tab, keeping the element itself so drag and clicks live on. */
+/// Draws one tab, reusing the nodes it already has.
+///
+/// Rebuilding the children on every update is what stopped a double click from closing a
+/// tab, and the reason is not obvious: `dblclick` is composed only when both presses land on
+/// the same element, and the first press of a double click selects the tab, which comes back
+/// as `tabs:changed`, which calls this. The old version replaced every child node here, so
+/// the second press landed on a node that had not existed a moment earlier and the browser
+/// never composed the event at all. Updating in place leaves the element the pointer is over
+/// exactly where it was.
+///
+/// Each part is found by its class rather than remembered in a closure, because the element
+/// outlives several themes and several settings that add or remove the speaker badge.
 function fillTab(el, tab) {
   el.dataset.tab = tab.id;
   const classes = ["tab"];
@@ -439,64 +465,116 @@ function fillTab(el, tab) {
     el.title = tab.alive ? tab.url : tab.url + "\n" + t("Suspended to save memory");
   }
 
-  const label = document.createElement("span");
-  label.className = "tab-title";
-  label.textContent = tab.title || t(tab.incognito ? "Incognito" : "New tab");
+  // --- the title ---------------------------------------------------------
+  let label = el.querySelector(".tab-title");
+  if (!label) {
+    label = document.createElement("span");
+    label.className = "tab-title";
+  }
+  const wanted = tab.title || t(tab.incognito ? "Incognito" : "New tab");
+  if (label.textContent !== wanted) label.textContent = wanted;
 
-  const close = document.createElement("button");
-  close.className = "tab-close";
-  close.textContent = "x";
-  close.title = "Close tab";
-  close.addEventListener("mousedown", (event) => event.stopPropagation());
-  close.addEventListener("click", (event) => {
-    event.stopPropagation();
-    invoke("tab_close", { id: tab.id });
-  });
+  // --- the close button --------------------------------------------------
+  let close = el.querySelector(".tab-close");
+  if (!close) {
+    close = document.createElement("button");
+    close.className = "tab-close";
+    close.textContent = "x";
+    close.title = "Close tab";
+    close.addEventListener("mousedown", (event) => event.stopPropagation());
+    close.addEventListener("click", (event) => {
+      event.stopPropagation();
+      invoke("tab_close", { id: tab.id });
+    });
+  }
 
+  // --- the speaker -------------------------------------------------------
   // A tab making noise says so, and the badge silences it without switching to it. A muted
   // tab keeps the badge even in silence: otherwise there is no way to unmute it again from
   // the strip. Both states come from the Rust poller's cache, so drawing costs nothing.
   const speaking = Boolean(tab.playing);
   const silenced = Boolean(tab.muted);
-  const audio = document.createElement("button");
-  audio.className = "tab-audio" + (silenced ? " is-muted" : "");
-  audio.tabIndex = -1;
-  audio.textContent = silenced ? "\u{1F507}" : "\u{1F50A}";
-  audio.title = t(silenced ? "Unmute tab" : "Mute tab");
-  audio.addEventListener("mousedown", (event) => event.stopPropagation());
-  audio.addEventListener("click", (event) => {
-    event.stopPropagation();
-    invoke("tab_mute", { id: tab.id, muted: !silenced });
-  });
+  let audio = el.querySelector(".tab-audio");
+  if (speaking || silenced) {
+    if (!audio) {
+      audio = document.createElement("button");
+      audio.className = "tab-audio";
+      audio.tabIndex = -1;
+      audio.addEventListener("mousedown", (event) => event.stopPropagation());
+      audio.addEventListener("click", (event) => {
+        event.stopPropagation();
+        invoke("tab_mute", { id: tab.id, muted: !Boolean(tabById(tab.id).muted) });
+      });
+    }
+    audio.className = "tab-audio" + (silenced ? " is-muted" : "");
+    audio.textContent = silenced ? "\u{1F507}" : "\u{1F50A}";
+    audio.title = t(silenced ? "Unmute tab" : "Mute tab");
+  } else if (audio) {
+    audio.remove();
+    audio = null;
+  }
 
+  // --- the icon ----------------------------------------------------------
   const iconUrl = String(tab.icon || "");
   const looksReal =
     (iconUrl.startsWith("data:image/") && iconUrl.length > 64) ||
     iconUrl.startsWith("http://") ||
     iconUrl.startsWith("https://");
   const hasIcon = looksReal && !tab.loading;
-  const icon = document.createElement(tab.loading ? "span" : hasIcon ? "img" : "span");
-  icon.className = tab.loading ? "tab-icon spinner" : "tab-icon";
-  if (hasIcon) {
-    icon.src = tab.icon;
-    icon.alt = "";
-    icon.addEventListener("error", () => {
-      icon.removeAttribute("src");
-      icon.replaceWith(document.createElement("span"));
+  const wantedIconClass = tab.loading ? "tab-icon spinner" : "tab-icon";
+  let icon = el.querySelector(".tab-icon");
+  if (!icon) {
+    icon = document.createElement(hasIcon ? "img" : "span");
+    icon.className = wantedIconClass;
+  }
+  if (icon.tagName === "IMG" && !hasIcon) {
+    // A picture that stopped being one: the loading spinner and the letter both need a span.
+    const replacement = document.createElement("span");
+    replacement.className = wantedIconClass;
+    icon.replaceWith(replacement);
+    icon = replacement;
+  } else if (icon.tagName === "SPAN" && hasIcon) {
+    const replacement = document.createElement("img");
+    replacement.className = wantedIconClass;
+    replacement.alt = "";
+    replacement.addEventListener("error", () => {
+      const fallback = document.createElement("span");
+      fallback.className = "tab-icon";
+      replacement.replaceWith(fallback);
     });
+    icon.replaceWith(replacement);
+    icon = replacement;
+  }
+  icon.className = wantedIconClass;
+  if (hasIcon && icon.src !== tab.icon) icon.src = tab.icon;
+  if (!hasIcon) icon.textContent = "";
+
+  // --- the pin -----------------------------------------------------------
+  let pin = el.querySelector(".tab-pin");
+  if (tab.pinned) {
+    if (!pin) {
+      pin = document.createElement("span");
+      pin.className = "tab-pin";
+      pin.textContent = "\u25C6";
+      pin.title = "Pinned";
+    }
+  } else if (pin) {
+    pin.remove();
+    pin = null;
   }
 
-  if (tab.pinned) {
-    const pin = document.createElement("span");
-    pin.className = "tab-pin";
-    pin.textContent = "\u25C6";
-    pin.title = "Pinned";
-    el.replaceChildren(icon, label, ...(speaking || silenced ? [audio] : []), pin);
-  } else if (settings.tab_show_close === false) {
-    el.replaceChildren(icon, label, ...(speaking || silenced ? [audio] : []));
-  } else {
-    el.replaceChildren(icon, label, ...(speaking || silenced ? [audio] : []), close);
-  }
+  // --- the order ---------------------------------------------------------
+  // The nodes are moved rather than replaced, and each is put in its place only if it is not
+  // already there: an `append` of a node that is already the last child still counts as a
+  // move, and a move between the two halves of a double click is enough to lose the event.
+  const wanted_nodes = [icon, label];
+  if (audio) wanted_nodes.push(audio);
+  if (tab.pinned && pin) wanted_nodes.push(pin);
+  else if (settings.tab_show_close !== false) wanted_nodes.push(close);
+  wanted_nodes.forEach((node, index) => {
+    if (el.children[index] !== node) el.insertBefore(node, el.children[index] || null);
+  });
+  while (el.children.length > wanted_nodes.length) el.lastElementChild.remove();
 }
 
 /** Milliseconds of stillness before the card appears. */
@@ -716,6 +794,9 @@ function renderTabs() {
   }
 
   const keep = new Set();
+  // Where the loop is in the strip. The elements are placed by position and moved only when
+  // they are not already there - see `placeInStrip` for why an unnecessary move matters.
+  let slot = 0;
   for (const item of order) {
     if (item.kind === "group") {
       const group = groupById(item.id);
@@ -737,7 +818,8 @@ function renderTabs() {
           count.classList.toggle("on", group.collapsed);
         }
       }
-      tabStrip.append(el);
+      placeInStrip(el, slot);
+      slot += 1;
       continue;
     }
 
@@ -752,7 +834,8 @@ function renderTabs() {
       enterStrip(el);
     }
     fillTab(el, tab);
-    tabStrip.append(el);
+    placeInStrip(el, slot);
+    slot += 1;
   }
 
   syncStripScroll();

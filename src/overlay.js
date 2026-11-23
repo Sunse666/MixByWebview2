@@ -1123,60 +1123,7 @@ async function bootAppMenu() {
       });
     });
   }
-
-  // TEMPORARY probe driver.
-  if (location.hash.includes("probe")) {
-    const dump = (tag) => {
-      const b = appMenu.getBoundingClientRect();
-      const sub = openSub ? openSub.getBoundingClientRect() : null;
-      const rows = openSub ? openSub.querySelectorAll(".row").length : 0;
-      report(
-        `PROBE ${tag} menu=${b.left.toFixed(0)}w${b.width.toFixed(0)}h${b.height.toFixed(0)}` +
-          ` onScreen=${b.right > 0 && b.left < window.innerWidth}` +
-          ` sub=${sub ? `${sub.left.toFixed(0)}w${sub.width.toFixed(0)}h${sub.height.toFixed(0)} rows${rows}` : "none"}`,
-      );
-    };
-    setTimeout(async () => {
-      dump("before");
-      const subs = [...appMenu.querySelectorAll(".row")].filter(
-        (r) => r.dataset.sub !== undefined,
-      );
-      const plain = [...appMenu.querySelectorAll(".row")].find(
-        (r) => r.dataset.sub === undefined && r.querySelector(".label"),
-      );
-      report(`PROBE subrows=${subs.length} plain="${plain?.querySelector(".label")?.textContent}"`);
-
-      // Open one column, then move the pointer onto a plain row the way the browser would
-      // report it: a pointerover whose target is neither the row nor its column.
-      const first = subs[0];
-      first.dispatchEvent(new PointerEvent("pointerenter"));
-      await new Promise((r) => setTimeout(r, 1800));
-      report(`PROBE opened "${first.querySelector(".label").textContent}" sub=${Boolean(openSub)}`);
-
-      if (plain) {
-        plain.dispatchEvent(
-          new PointerEvent("pointerover", { bubbles: true, relatedTarget: first }),
-        );
-        await new Promise((r) => setTimeout(r, 600));
-        report(
-          `PROBE after moving to plain row sub=${Boolean(openSub)}` +
-            ` lit=${JSON.stringify([...appMenu.querySelectorAll(".row.open")].map((r) => r.querySelector(".label")?.textContent))}`,
-        );
-      }
-
-      // And the column itself must not close when the pointer is inside it.
-      first.dispatchEvent(new PointerEvent("pointerenter"));
-      await new Promise((r) => setTimeout(r, 1800));
-      if (openSub) {
-        openSub.dispatchEvent(
-          new PointerEvent("pointerover", { bubbles: true, relatedTarget: first }),
-        );
-        await new Promise((r) => setTimeout(r, 600));
-        report(`PROBE pointer inside column keeps it sub=${Boolean(openSub)}`);
-      }
-      report("PROBE done");
-    }, 900);
-  }
+}
 }
 async function bootSuggest() {
   window.addEventListener("blur", () => invoke("overlay_close").catch(() => {}));
