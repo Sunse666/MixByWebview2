@@ -19,6 +19,13 @@ const MIN_H: f64 = 32.0;
 /// Gap kept between a panel and the window edge.
 const MARGIN: f64 = 8.0;
 
+/// Width of the app menu itself, in the css pixels its page draws in.
+const MENU_W: f64 = 320.0;
+/// The column a menu row can open beside it.
+const SUBMENU_W: f64 = 300.0;
+/// The space between the two, which is what reads them as two boxes and not one split.
+const GAP_W: f64 = 8.0;
+
 /// Which point of a panel stays where it was when the content changes its size.
 #[derive(Clone, Copy, Debug)]
 pub enum Anchor {
@@ -65,7 +72,16 @@ impl Frame {
 /// there the size is the design rather than a measurement.
 pub fn initial_size(kind: &str) -> (f64, f64) {
     match base(kind) {
-        "app_menu" | "ext_info" => (320.0, 566.0),
+        // The menu and the column it can open beside itself, which the page parks against
+        // this box's right edge. `MENU_W` is what the menu draws in; the rest is the room a
+        // submenu is drawn into, transparent until one is asked for.
+        //
+        // Opening at the wide size is what keeps the panel from flashing on hover: a child
+        // webview clips what is outside it, so the column cannot be drawn beside the menu
+        // unless the box already covers both - and growing the box on hover meant a frame
+        // where the column was up and the menu was pushed outside a 320 px viewport.
+        "app_menu" => (MENU_W + GAP_W + SUBMENU_W, 566.0),
+        "ext_info" => (MENU_W, 566.0),
         "context_menu" => (250.0, 184.0),
         "url_menu" => (190.0, 150.0),
         "tab_menu" => (200.0, 224.0),
@@ -190,8 +206,23 @@ pub fn open(app: &AppHandle, win: &tauri::Window, kind: &str) -> Result<(), Stri
         initial_size(kind)
     };
 
+    // The tab search panel opens where the settings say: against the right edge under the
+    // tab strip (what a browser does), under the left edge, or in the middle of the window.
+    let search_place = if base(kind) == "tab_search" {
+        app.try_state::<crate::ipc::AppState>()
+            .map(|state| state.settings.read().tab_search_place.clone())
+            .unwrap_or_else(|| "right".to_string())
+    } else {
+        String::new()
+    };
+
     let (anchor, x) = match base(kind) {
         "app_menu" | "find" | "zoom" => (Anchor::Right, win_w - MARGIN),
+        "tab_search" => match search_place.as_str() {
+            "left" => (Anchor::Left, MARGIN),
+            "center" => (Anchor::Center, win_w / 2.0),
+            _ => (Anchor::Right, win_w - MARGIN),
+        },
         _ => (Anchor::Center, win_w / 2.0),
     };
 
@@ -427,7 +458,21 @@ pub fn resize(
     // frame: a panel against the right edge keeps its right edge, so its left edge is the
     // anchor minus the width it is about to have - reading `frame.left()` would hold the
     // old left edge and grow the panel outwards over the window instead of inwards.
-    let width = width.unwrap_or(frame.width).clamp(MIN_W, win_w.max(MIN_W));
+    //
+    // A caller that sends only a height means "keep the width I have", and the width it has
+    // is the one this webview was last given - not `frame.width`, which is a snapshot taken
+    // when the panel opened and is never updated afterwards. Falling back to the frame is
+    // what put a widened menu back to its opening width a frame after the submenu opened
+    // it: the page asked for 320 px wide, then the generic height measurement sent a
+    // height with no width and snapped it back to the 320 in the frame.
+    let current_w = webview
+        .size()
+        .map(|size| {
+            let scale = win.scale_factor().unwrap_or(1.0).max(f64::EPSILON);
+            size.width as f64 / scale
+        })
+        .unwrap_or(frame.width);
+    let width = width.unwrap_or(current_w).clamp(MIN_W, win_w.max(MIN_W));
     // `max(4.0)` on the upper bound keeps `clamp` well formed when the window is narrower
     // than the panel: a menu wider than its window is a panel that hangs off the edge, and
     // that is better than a panic.

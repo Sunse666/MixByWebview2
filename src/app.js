@@ -913,7 +913,30 @@ function renderBookmarks(list) {
   fitStrip();
   if (bar.hidden) return;
 
+  // The groups first, when the setting asks for them. A group is a chip that selects its
+  // first tab, which is what the strip's own group chip does: reading the same grouping in
+  // the bookmarks bar is only useful if picking one goes somewhere.
+  const groupChips = settings.groups_in_bookmarks
+    ? (groups || []).map((group) => {
+        const chip = document.createElement("button");
+        chip.className = "bookmark group-chip";
+        const name = document.createElement("span");
+        name.textContent = group.name || t("Group");
+        const tally = document.createElement("span");
+        tally.className = "group-count";
+        tally.textContent = String((group.members || []).length);
+        chip.append(name, tally);
+        chip.title = (group.members || []).join("\n");
+        chip.addEventListener("click", () => {
+          const first = (group.members || [])[0];
+          if (first) invoke("tab_select", { id: first }).catch(() => {});
+        });
+        return chip;
+      })
+    : [];
+
   bar.replaceChildren(
+    ...groupChips,
     ...items.map((bookmark, index) => {
       const chip = document.createElement("button");
       chip.className = "bookmark";

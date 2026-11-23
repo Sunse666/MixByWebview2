@@ -125,6 +125,19 @@ main h2 {
 
 .button:hover { background: var(--hover); }
 
+/* A button whose whole face is one glyph: the edit pencil on a row that opens an editor,
+   the chevron on one that unfolds. Square, so a row with one of these next to a word does
+   not look like it has two different controls of different weights. */
+.button.icon-button {
+  width: 32px;
+  padding: 0;
+  font-size: 15px;
+  line-height: 1;
+  color: var(--dim);
+}
+
+.button.icon-button:hover { color: var(--text); }
+
 .grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));

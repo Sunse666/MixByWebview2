@@ -1,4 +1,11 @@
 :root {
+  /* The scrollbars and the parts of a control the browser draws itself read this, not
+     `--bg`. Without it the menu scrolled with the light theme's scrollbar - a pale track
+     and a wide thumb - while every other surface in the app was dark, and it was only
+     visible once a panel actually scrolled: the menu on its own is exactly as tall as its
+     rows, so the history column opening is what puts a scrollbar on screen at all.
+     style.css, pages.css and sidebar.css each set it; this one was the one that did not. */
+  color-scheme: dark;
   --bg: #1F2020;
   --panel: #1F2020;
   --accent: #00FF00;
@@ -124,21 +131,48 @@ footer { margin-top: auto; display: flex; justify-content: flex-end; gap: 8px; }
    two transparent regions on Windows - the platform gives it an opaque background - so
    the box it is drawn into covers both, and what makes them read as two is the gap and
    the separate rounding on either side of it. */
-body.has-sub #app-menu {
+/* The panel the app menu is drawn in is wider than the menu itself.
+
+   A submenu has to appear beside the menu, and a child webview clips everything outside its
+   own box - so the only way to draw a column next to the menu is to own the room it will be
+   drawn in beforehand. The webview is opened at the width of both columns, and this rule
+   parks the menu against its right edge, which is the edge the window anchored it to. The
+   strip to the left of it is transparent until a column is asked for.
+
+   Sizing the webview on hover was tried and is what made the panel flash: the column's DOM
+   appeared at once but the webview only widened a frame or two later, so for that moment
+   the menu sat at `left: 308px` inside a 320 px viewport - off screen - and the next frame
+   brought it back. Nothing moves now, because nothing is resized. */
+body:not(.has-sub) #app-menu {
   position: fixed;
   top: 0;
-  bottom: 0;
-  /* 300 px for the history box plus the 8 px gap. */
-  left: 308px;
+  right: 0;
   width: 320px;
-  /* The same height as the list beside it, but the rows inside do not move: the menu is a
-     box with a border and the same padding it always had, and the panel around it is what
-     grew. The scrolling is turned off here for the reason below. */
   height: 100%;
   box-sizing: border-box;
   border-radius: 10px;
-  border-left: 1px solid var(--border);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+}
+
+body.has-sub #app-menu {
+  position: fixed;
+  top: 0;
+  /* The width of the column plus the gap it is separated by: the menu sits in the right
+     half of the panel the same way it does when nothing is open beside it. */
+  left: 308px;
+  right: 0;
+  /* As tall as its own rows, not as tall as the window. */
+  height: auto;
+  max-height: 100%;
+  box-sizing: border-box;
+  border-radius: 10px;
+  /* The seam against the history column, drawn outside the layout.
+     A `border-left` was the first way and it is 1 px of the content box: with
+     `box-sizing: border-box` the rows, the padding and the scrollbar gutter all shifted a
+     pixel left when the column opened, so the scrollbar read as a different width and the
+     text jumped. A ring costs nothing - the box it is drawn on is already the box the menu
+     had - and the shadow below is folded into the same declaration because two `box-shadow`
+     rules would replace rather than add. */
+  box-shadow: inset 1px 0 0 var(--border), 0 12px 32px rgba(0, 0, 0, 0.45);
 }
 
 /* Nothing above needs repeating here: the gutter is reserved on `.menu` itself, so the
@@ -223,8 +257,11 @@ body.has-sub #app-menu {
 .sub-list::-webkit-scrollbar { width: 8px; }
 .sub-list::-webkit-scrollbar-thumb { background: #4a4d51; border-radius: 4px; }
 
-/* The row that opened it stays lit, so the two panels read as one thing. */
-body.has-sub #app-menu .row[data-sub] {
+/* The row whose column is open stays lit, so the two panels read as one thing.
+   `[data-sub]` is not that row: it marks every row that *can* open a column, so keying on
+   it lit five rows at once the moment any one of them was hovered. The page puts `open`
+   on the one row the column belongs to. */
+body.has-sub #app-menu .row[data-sub].open {
   background: var(--hover);
 }
 

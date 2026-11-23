@@ -23,6 +23,11 @@ fn default_sidebar() -> String {
     "off".to_string()
 }
 
+/// For settings that are on unless the user turns them off.
+fn default_true() -> bool {
+    true
+}
+
 fn default_sidebar_width() -> f64 {
     300.0
 }
@@ -144,8 +149,28 @@ pub struct Settings {
     pub reset_extensions: bool,
     /// Wake a background tab to photograph it instead of reusing the stored picture.
     pub live_thumbs: bool,
+    /// Draw the memory and node count on the tab hover card.
+    ///
+    /// A second setting rather than one switch for the whole card: the numbers come from a
+    /// separate, slower read of the webview's process list, and a reader who wants the
+    /// picture rarely wants that read to happen on every hover.
+    #[serde(default = "default_true")]
+    pub thumb_show_memory: bool,
     pub max_live_tabs: usize,
     pub download_dir: Option<String>,
+    /// Draw the tab groups in the bookmarks bar as well as in the strip.
+    #[serde(default)]
+    pub groups_in_bookmarks: bool,
+    /// Pin a group to the bookmarks bar as soon as it is made.
+    #[serde(default)]
+    pub group_auto_pin: bool,
+    /// Where the tab search panel opens: "right", "left" or "center".
+    #[serde(default = "default_search_place")]
+    pub tab_search_place: String,
+}
+
+fn default_search_place() -> String {
+    "right".to_string()
 }
 
 impl Default for Settings {
@@ -214,8 +239,12 @@ impl Default for Settings {
             freeze_background: true,
             reset_extensions: false,
             live_thumbs: false,
+            thumb_show_memory: true,
             max_live_tabs: 12,
             download_dir: None,
+            groups_in_bookmarks: false,
+            group_auto_pin: false,
+            tab_search_place: default_search_place(),
         }
     }
 }
@@ -308,6 +337,13 @@ impl Settings {
             "light" => "light".to_string(),
             "system" => "system".to_string(),
             _ => "dark".to_string(),
+        };
+        // Only the three places the panel can actually open at; anything else is the
+        // default rather than a value the layout code has to defend against.
+        self.tab_search_place = match self.tab_search_place.as_str() {
+            "left" => "left".to_string(),
+            "center" => "center".to_string(),
+            _ => default_search_place(),
         };
         self.font_family = self.font_family.trim().to_string();
         self.font_mono = self.font_mono.trim().to_string();

@@ -496,6 +496,20 @@ pub async fn thumb_stats(
         .try_read_core(window_of_tab(&id))
         .map(|core| core.tabs.iter().filter(|tab| tab.alive).count().max(1) as u64)
         .unwrap_or(1);
+    // The counts come from a process list and a DevTools call, both of which are the
+    // expensive part of the card. With the numbers switched off there is nothing to report
+    // and no reason to ask: the row is not drawn, so this returns what an empty card shows.
+    if !state.settings.read().thumb_show_memory {
+        return Ok(ThumbStats {
+            memory_total: None,
+            memory_average: None,
+            memory_tab: None,
+            nodes: 0,
+            listeners: 0,
+            documents: 0,
+            live_tabs: live,
+        });
+    }
     let handle = app.clone();
     let worker_id = id.clone();
     let stats = tauri::async_runtime::spawn_blocking(move || ThumbStats {
@@ -931,7 +945,60 @@ pub async fn group_add(
     };
     emit_tabs(&app, window.label());
     save_sessions(&app);
+    pin_group_to_bookmarks(&app, window.label(), &target);
     Ok(target)
+}
+
+/// Writes a group's tabs into the bookmarks as a folder, when the setting asks for it.
+///
+/// A group is not a bookmark and the bookmarks bar draws bookmarks. Rather than teach the
+/// bar about a second kind of thing, the group's name becomes a folder: its members are
+/// written into it, which is what a reader would have done by hand to keep a set of pages
+/// together. A page that is already bookmarked is left where it is - moving it would silently
+/// re-file something the user put somewhere on purpose.
+pub(crate) fn pin_group_to_bookmarks(app: &AppHandle, label: &str, group_id: &str) {
+    let state = app.state::<AppState>();
+    if !state.settings.read().group_auto_pin {
+        return;
+    }
+    let Some(core) = state.try_read_core(label) else {
+        return;
+    };
+    let Some(group) = core.groups.iter().find(|group| group.id == group_id) else {
+        return;
+    };
+    let folder = group.name.trim().to_string();
+    let members: Vec<String> = group.members.clone();
+    let pages: Vec<(String, String)> = core
+        .tabs
+        .iter()
+        .filter(|tab| members.contains(&tab.id))
+        .map(|tab| (tab.url.clone(), tab.title.clone()))
+        .collect();
+    drop(core);
+
+    if folder.is_empty() || pages.is_empty() {
+        return;
+    }
+    {
+        let mut marks = state.bookmarks_mut();
+        for (url, title) in pages {
+            if url.is_empty() || marks.iter().any(|mark| mark.url == url) {
+                continue;
+            }
+            marks.push(crate::library::Bookmark {
+                url: url.clone(),
+                title: if title.is_empty() { url } else { title },
+                at: crate::library::now(),
+                folder: folder.clone(),
+            });
+        }
+    }
+    let snapshot = state.bookmarks().clone();
+    if let Err(err) = crate::library::save_bookmarks(&state.dirs.bookmarks_file, &snapshot) {
+        crate::logging::warn(&format!("cannot save the pinned group: {err}"));
+    }
+    let _ = app.emit("bookmarks:changed", ());
 }
 
 /// Opens or closes a tab group.

@@ -176,56 +176,85 @@ async function bootAppMenu() {
 
   let NEXT_SUB = 0;
 
-  // A submenu, drawn beside the list rather than in a webview of its own.
+  // A submenu, drawn beside the menu rather than in a webview of its own.
   //
   // A child webview cannot be placed next to its parent, and opening a second overlay
-  // closes the first, so the only way two menus can stand side by side is for one panel
-  // to draw both. The panel widens by the width of the submenu and the host list keeps
-  // its place on the left; the submenu is taken away again and the panel narrows when the
-  // pointer leaves the row that opened it.
-  // Wider than the menu, because the rows carry three things: a title, an icon and the site.
-  const SUBMENU_W = 300;
-  /// The gap between the two boxes; each has its own outline, so this is a space, not a seam.
-  const GAP_W = 8;
+  // closes the first, so the only way two menus can stand side by side is for one panel to
+  // draw both. That panel is opened wide enough for both from the start - see `MENU_W`,
+  // `GAP_W` and `SUBMENU_W` in overlay.rs - so the column appears in room that is already
+  // there and nothing about the panel's width changes when it does.
   /// Never shorter than this, even when the panel is nearly out of room.
   const MIN_ROW = 48;
   let openSub = null;
+  /// The row whose column is on screen, or null. Declared next to `openSub` because the
+  /// two describe the same open column and are set and cleared together.
+  let openHost = null;
 
-  /// Takes the submenu away and narrows the panel back to the list.
+  /// The height the panel had before the column opened, so closing returns to that one.
   ///
-  /// `narrow` is false when another submenu replaces this one: the panel is about to be
-  /// widened again, and going back to 320 for the instant between the two would show as a
-  /// flicker.
-  const closeSub = (narrow = true) => {
+  /// Deliberately not re-measured on the way out. Two numbers describe this menu and only
+  /// one of them is a height the panel can have: the content is taller than the window, so
+  /// `menuContentHeight()` answers ~835 while `overlay_resize` clamps whatever it is handed
+  /// to the room there is (~684). Asking for the content height on the way out sized the
+  /// menu to the clamp - taller than it opened - and it never came back down, because the
+  /// next open/close pair read that same inflated number again.
+  let openedHeight = 0;
+
+  /// Takes the column away.
+  ///
+  /// The width never changes: the panel was opened wide enough for both boxes and the
+  /// column is drawn into room that was already there, so there is no resize on the way out
+  /// and therefore no `narrow` flag. Only the height goes back, because the panel had to be
+  /// as tall as the window while a full-height column was standing in it.
+  const closeSub = () => {
     if (!openSub) return;
     openSub.remove();
     openSub = null;
+    openHost = null;
     document.body.classList.remove("has-sub");
-    if (narrow) {
-      window.__mixSizing(400);
-      invoke("overlay_resize", { height: currentHeight(), width: 320 }).catch(() => {});
-    }
+    // Only the row whose column this was loses the lit state; a row that opens a different
+    // column has already been lit by the call that got here.
+    for (const lit of appMenu.querySelectorAll(".row.open")) lit.classList.remove("open");
+    // Back to whatever `.menu` says: the pinned height was for the open column only, and
+    // leaving it would freeze the menu at today's size - a later build with one more row
+    // would keep the pin and scroll forever.
+    appMenu.style.height = "";
+    // Held as long as the previous resize takes to land, then released: this one takes the
+    // focus away as well, and the blur that follows is the page's own doing.
+    window.__mixSizing(400);
+    invoke("overlay_resize", { height: openedHeight || 566 }).catch(() => {});
   };
 
-  // The panel fills the room it is allowed while a submenu is open, and returns to the
-  // menu's own height when it closes.
-  //
-  // A full-height column needs a full-height panel, because the webview clips anything
-  // outside its box. Rather than guess the window's height, this asks for more than any
-  // window has: `overlay_resize` clamps it to what the window can hold, which is the number
-  // wanted here and the one number the page cannot know.
-  const fitWidth = () => {
-    const menuH = Math.ceil(menuContentHeight());
-    const height = openSub ? 100000 : menuH;
-    // Held for as long as the column is open: every resize takes the focus away for a
-    // moment, and the last one comes long after the first.
-    window.__mixSizing(openSub ? 60000 : 400);
-    invoke("overlay_resize", { height, width: 320 + GAP_W + SUBMENU_W }).catch(() => {});
+  // A column beside the menu is drawn into room the panel already had, so nothing here
+  // resizes anything. What the menu does need is one height: the column runs the full
+  // height of the window, and the webview clips whatever is below its box, so the panel has
+  // to be as tall as the window while the column is up. Asking for more than any window has
+  // is how that number is obtained - `overlay_resize` clamps it to the room there is, which
+  // is the one number the page cannot know.
+  const openColumnHeight = () => {
+    // Held open: the resize takes the focus away from the page for a moment, and the blur
+    // handler would read that as the pointer leaving and close the column it just opened.
+    window.__mixSizing(60000);
+    invoke("overlay_resize", { height: 100000 }).catch(() => {});
   };
 
   const showSub = (host, build) => {
     if (openSub && openSub.dataset.for === host.dataset.sub) return;
-    closeSub(false);
+    // Only on the way in: replacing one column with another must not overwrite the height
+    // being remembered with the height the open column forced on the panel.
+    if (!openSub) {
+      openedHeight = Math.ceil(appMenu.getBoundingClientRect().height);
+      // Pinned in pixels, because every other unit here follows the viewport and the
+      // viewport is about to grow. `.has-sub` sets `height: auto; max-height: 100%`, and
+      // for a fixed box `100%` is the webview - which is at this moment being enlarged to
+      // the whole window. The menu would then size itself to the room it was just given
+      // (684) instead of the height it opened at (567), and the rows would sit in a box
+      // taller than themselves. The height the panel had is the height it keeps.
+      appMenu.style.height = `${openedHeight}px`;
+    }
+    closeSub();
+    host.classList.add("open");
+    openHost = host;
     const panel = document.createElement("div");
     // `menu` as well as `submenu`: every row style in the stylesheet is written against
     // `.menu .row`, so a column without that class draws its rows as bare buttons -
@@ -258,16 +287,6 @@ async function bootAppMenu() {
     return rows + padding;
   };
 
-  /// How tall the menu column is, asked of its content rather than of its box.
-  ///
-  /// `getBoundingClientRect().height` reads the height the webview was given, not the
-  /// height the rows need - and while a submenu is open the webview is the whole window
-  /// and `.menu { height: 100% }` pulls the box out to match. Closing the submenu then
-  /// asked to shrink back to that inflated number, so the panel kept the height the
-  /// submenu had forced on it and never returned to the size of its own rows. It only
-  /// ever grew, once per time the history column was opened.
-  const currentHeight = () => Math.ceil(menuContentHeight());
-
   /// The submenu is a full-height column beside the menu, not a bubble beside a row.
   ///
   /// This is the shape a browser uses for a list that comes out of the app menu: the panel
@@ -280,7 +299,7 @@ async function bootAppMenu() {
     if (!openSub) return;
     openSub.style.top = "0";
     openSub.style.maxHeight = "";
-    fitWidth();
+    openColumnHeight();
   };
 
   /// A row that opens `build` beside it while the pointer is on it.
@@ -307,35 +326,143 @@ async function bootAppMenu() {
     return (host[0] || "?").toUpperCase();
   }
 
-  async function buildHistorySub(panel) {
-    // Three parts, like the panel a browser shows for this: a heading that stays at the top,
-    // the visits in a column that scrolls, and the actions pinned to the bottom. The list is
-    // what gives way when the window is short; the heading and the actions never move.
-    // A title bar with the shortcut it stands for, the way every other panel in this menu
-    // has one, and then the section its rows belong to.
+  /// A column beside the menu: a heading that stays put, a list that scrolls, and the
+  /// actions pinned to the bottom.
+  ///
+  /// Every one of these panels has that shape - history, downloads, bookmarks, extensions -
+  /// and the three parts are what make it read as a panel rather than a stack of rows: the
+  /// heading says which list this is while the middle scrolls under it, and the actions stay
+  /// where a reader expects them however long the list gets.
+  const column = (panel, title, key) => {
     const head = document.createElement("div");
     head.className = "sub-head";
-    const headTitle = document.createElement("span");
-    headTitle.className = "sub-title";
-    headTitle.textContent = t("History");
-    const headKey = document.createElement("span");
-    headKey.className = "hint";
-    headKey.textContent = "Ctrl+H";
-    head.append(headTitle, headKey);
+    const name = document.createElement("span");
+    name.className = "sub-title";
+    name.textContent = t(title);
+    head.append(name);
+    if (key) {
+      const hint = document.createElement("span");
+      hint.className = "hint";
+      hint.textContent = key;
+      head.append(hint);
+    }
     panel.append(head);
+    return head;
+  };
 
-    const section = document.createElement("div");
-    section.className = "sub-section";
-    section.textContent = t("Recently opened");
-    panel.append(section);
+  /// The section label under the heading, e.g. "Recently opened".
+  const section = (panel, label) => {
+    const bar = document.createElement("div");
+    bar.className = "sub-section";
+    bar.textContent = t(label);
+    panel.append(bar);
+  };
 
+  /// The scrolling part of a column.
+  const listArea = (panel) => {
     const list = document.createElement("div");
     list.className = "sub-list";
     panel.append(list);
+    return list;
+  };
 
+  /// The pinned part of a column.
+  const footArea = (panel) => {
     const foot = document.createElement("div");
     foot.className = "sub-foot";
     panel.append(foot);
+    return foot;
+  };
+
+  /// One line of a column, with the icon every browser puts in front of a page's name.
+  ///
+  /// The icon falls back to the first letter of the host: a site whose icon cannot be
+  /// fetched would otherwise leave the row with a blank square where the others have a
+  /// picture, which reads as a broken list rather than a missing picture.
+  const entryRow = (list, { icon, label, hint, title, onPick }) => {
+    const entry = document.createElement("button");
+    entry.className = list.dataset.rows === "history" ? "row history-row" : "row";
+    if (title) entry.title = title;
+
+    const mark = document.createElement("span");
+    mark.className = "ico";
+    if (icon) {
+      const img = document.createElement("img");
+      img.className = "fav";
+      img.src = icon;
+      img.alt = "";
+      img.addEventListener("error", () => {
+        mark.replaceChildren(document.createTextNode(labelLetter(label)));
+      });
+      mark.append(img);
+    } else {
+      mark.textContent = labelLetter(label);
+    }
+
+    const text = document.createElement("span");
+    text.className = "label";
+    text.textContent = label;
+
+    entry.append(mark, text);
+    if (hint) {
+      const side = document.createElement("span");
+      side.className = "hint";
+      side.textContent = hint;
+      entry.append(side);
+    }
+    if (onPick) entry.addEventListener("click", onPick);
+    list.append(entry);
+    return entry;
+  };
+
+  /// The letter to stand in for an icon when there is none.
+  function labelLetter(text) {
+    const clean = String(text || "").trim();
+    return (clean[0] || "?").toUpperCase();
+  }
+
+  /// A note in place of a list that has nothing in it.
+  const emptyNote = (list, text) => {
+    const note = document.createElement("div");
+    note.className = "menu-note";
+    note.textContent = t(text);
+    list.append(note);
+  };
+
+  /// url -> icon for a set of urls, from the host map the browser keeps.
+  ///
+  /// A bookmark and a download carry only an address, so the icon has to be looked up by
+  /// host; the map is keyed the way `favicons` stores it, without `www.` and in lower case.
+  const iconMapFor = async (urls) => {
+    const out = new Map();
+    if (!urls.length) return out;
+    const icons = (await invoke("favicon_map").catch(() => ({}))) || {};
+    for (const url of urls) {
+      const host = hostOf(url).replace(/^www\./, "").toLowerCase();
+      if (icons[host]) out.set(url, icons[host]);
+    }
+    return out;
+  };
+
+  /// An action pinned to the bottom of a column.
+  const footRow = (foot, label, onPick) => {
+    const button = document.createElement("button");
+    button.className = "row plain sub-more";
+    const text = document.createElement("span");
+    text.className = "label";
+    text.textContent = t(label);
+    button.append(text);
+    button.addEventListener("click", onPick);
+    foot.append(button);
+    return button;
+  };
+
+  async function buildHistorySub(panel) {
+    column(panel, "History", "Ctrl+H");
+    section(panel, "Recently opened");
+    const list = listArea(panel);
+    list.dataset.rows = "history";
+    const foot = footArea(panel);
 
     // As many as the panel can show, and it scrolls for the rest. The cap was six, from
     // when the column was only as tall as its rows: a short list then meant a short panel,
@@ -349,69 +476,247 @@ async function bootAppMenu() {
       return true;
     });
 
-    if (!unique.length) {
-      const empty = document.createElement("div");
-      empty.className = "menu-note";
-      empty.textContent = "No history yet.";
-      list.append(empty);
-    }
+    if (!unique.length) emptyNote(list, "No history yet.");
     // A row is an icon, the page's title and the site it came from - the shape every
     // browser uses for this list, and the one the history page itself already draws. A
     // title alone leaves the reader guessing at which of ten pages called "Video" this
     // is, which is the whole reason the icon is there.
     for (const visit of unique) {
-      const entry = document.createElement("button");
-      entry.className = "row history-row";
-      entry.title = visit.url;
-
-      const icon = document.createElement("span");
-      icon.className = "ico";
-      if (visit.icon) {
-        const img = document.createElement("img");
-        img.className = "fav";
-        img.src = visit.icon;
-        img.alt = "";
-        // A site whose icon cannot be fetched is not a row without an icon: the letter of
-        // its host takes the place, the way the history page does it.
-        img.addEventListener("error", () => {
-          icon.replaceChildren(document.createTextNode(initialOf(visit.url)));
-        });
-        icon.append(img);
-      } else {
-        icon.textContent = initialOf(visit.url);
-      }
-
-      const label = document.createElement("span");
-      label.className = "label";
-      label.textContent = visit.title || visit.url;
-
-      const site = document.createElement("span");
-      site.className = "hint";
-      site.textContent = hostOf(visit.url);
-
-      entry.append(icon, label, site);
-      entry.addEventListener("click", async () => {
-        await invoke("tab_navigate", { url: visit.url }).catch(() => {});
-        await close();
+      entryRow(list, {
+        icon: visit.icon,
+        label: visit.title || visit.url,
+        hint: hostOf(visit.url),
+        title: visit.url,
+        onPick: async () => {
+          await invoke("tab_navigate", { url: visit.url }).catch(() => {});
+          await close();
+        },
       });
-      list.append(entry);
     }
     // One action, at the bottom, where a browser puts it. The command existed before this
     // panel did and nothing called it: clearing history meant opening the page it is trying
     // to save you a visit to.
-    const clear = document.createElement("button");
-    clear.className = "row plain sub-more";
-    const clearLabel = document.createElement("span");
-    clearLabel.className = "label";
-    clearLabel.textContent = t("Clear history");
-    // The row reads as the action, not as a confirmation: this is the list, and clearing it is
-    // what the bottom of the list is for.
-    clear.append(clearLabel);
-    clear.addEventListener("click", async () => {
+    footRow(foot, "Clear history", async () => {
       await invoke("history_clear").catch((error) => report(String(error)));
       await close();
     });
-    foot.append(clear);
+  }
+
+  /// The pages this browser has been told about: what the reader bookmarked.
+  async function buildBookmarksSub(panel) {
+    column(panel, "Bookmarks", "Ctrl+Shift+O");
+    const list = listArea(panel);
+    list.dataset.rows = "history";
+    const foot = footArea(panel);
+
+    const marks = (await invoke("bookmark_list").catch(() => [])) || [];
+    // A bookmark carries no icon of its own - the store maps hosts to icons elsewhere - so
+    // the row falls back to the letter of the site, which is what the bookmarks page shows
+    // when its icon lookup misses as well.
+    const marksWithIcons = await iconMapFor(marks.map((mark) => mark.url));
+    // Folders first, then the loose bookmarks: the order the bookmarks page uses, so the two
+    // views of the same data do not disagree.
+    const byFolder = new Map();
+    for (const mark of marks) {
+      const folder = mark.folder || "";
+      if (!byFolder.has(folder)) byFolder.set(folder, []);
+      byFolder.get(folder).push(mark);
+    }
+    const folders = [...byFolder.keys()].filter(Boolean).sort();
+
+    if (!marks.length) {
+      emptyNote(list, "No bookmarks yet. Press Ctrl+D on a page you want to keep.");
+    } else {
+      const emit = (mark) => {
+        entryRow(list, {
+          icon: marksWithIcons.get(mark.url),
+          label: mark.title || mark.url,
+          hint: hostOf(mark.url),
+          title: mark.url,
+          onPick: async () => {
+            await invoke("tab_navigate", { url: mark.url }).catch(() => {});
+            await close();
+          },
+        });
+      };
+      for (const folder of folders) {
+        const bar = document.createElement("div");
+        bar.className = "sub-section";
+        bar.textContent = folder;
+        list.append(bar);
+        byFolder.get(folder).forEach(emit);
+      }
+      const loose = byFolder.get("") || [];
+      if (loose.length) {
+        if (folders.length) {
+          const bar = document.createElement("div");
+          bar.className = "sub-section";
+          bar.textContent = t("Other bookmarks");
+          list.append(bar);
+        }
+        loose.forEach(emit);
+      }
+    }
+
+    footRow(foot, "Bookmark manager", () =>
+      invoke("tab_new", { url: "http://tauri.localhost/pages/bookmarks.html" }),
+    );
+  }
+
+  /// What this browser has been downloading, newest last, and the folder they land in.
+  async function buildDownloadsSub(panel) {
+    column(panel, "Downloads", "Ctrl+J");
+    const list = listArea(panel);
+    list.dataset.rows = "history";
+    const foot = footArea(panel);
+
+    const tasks = (await invoke("download_list").catch(() => [])) || [];
+    if (!tasks.length) {
+      emptyNote(list, "Nothing downloaded yet.");
+    }
+    // Newest first, which is the order a reader wants here - the list on the downloads page
+    // is a log and reads downwards, but this column is shown for the thing just finished.
+    const newest = [...tasks].reverse();
+    const icons = await iconMapFor(
+      newest.filter((task) => task.state === "finished").map((task) => task.url),
+    );
+    for (const task of newest) {
+      const done = task.state === "finished";
+      // `total` is what the server announced; a transfer that never got a length shows the
+      // bytes written and no percentage, which is the honest answer.
+      const got = megabytes(task.bytes || 0);
+      const size = task.total ? `${got} of ${megabytes(task.total)}` : got;
+      entryRow(list, {
+        icon: done ? icons.get(task.url) || null : null,
+        label: task.file_name || task.url,
+        hint: task.state === "started" ? size : done ? size : t(task.state),
+        title: task.path || task.url,
+        onPick: done ? () => invoke("download_open", { id: task.id }).catch(() => {}) : null,
+      });
+    }
+
+    footRow(foot, "Open downloads folder", () => invoke("open_dir", { which: "downloads" }));
+    footRow(foot, "All downloads", () =>
+      invoke("tab_new", { url: "http://tauri.localhost/pages/downloads.html" }),
+    );
+  }
+
+  /// What the browser actually loaded, with the switch that keeps it off the toolbar.
+  async function buildExtensionsSub(panel) {
+    column(panel, "Extensions");
+    const list = listArea(panel);
+    list.dataset.rows = "history";
+    const foot = footArea(panel);
+
+    const settings = await invoke("settings_get").catch(() => ({}));
+    const hidden = new Set((settings && settings.hidden_extensions) || []);
+    const items = (await invoke("ext_list").catch(() => [])) || [];
+    const loaded = items.filter((ext) => ext.status === "loaded");
+
+    if (!loaded.length) {
+      emptyNote(list, "No extensions loaded. Drop an MV3 extension into crx/ and restart.");
+    }
+    for (const ext of loaded) {
+      const shown = !hidden.has(ext.name);
+      entryRow(list, {
+        icon: ext.icon || null,
+        label: ext.version ? `${ext.name} ${ext.version}` : ext.name,
+        hint: shown ? "\u2713" : "",
+        title: ext.description || ext.name,
+        // The row is the switch: hiding an extension here is the same write the extensions
+        // page makes, and the column redraws so the tick follows the pointer's click.
+        onPick: async () => {
+          const next = new Set(hidden);
+          if (next.has(ext.name)) next.delete(ext.name);
+          else next.add(ext.name);
+          await invoke("settings_set", { patch: { hidden_extensions: [...next] } });
+          const again = [...appMenu.querySelectorAll(".row")].find(
+            (row) => row.dataset.sub !== undefined && row.dataset.sub === openSub?.dataset.for,
+          );
+          if (again) again.dispatchEvent(new PointerEvent("pointerenter"));
+        },
+      });
+    }
+
+    footRow(foot, "Open extension folder", () => invoke("open_dir", { which: "extensions" }));
+    footRow(foot, "Extensions page", () =>
+      invoke("tab_new", { url: "http://tauri.localhost/pages/extensions.html" }),
+    );
+  }
+
+  /// The corners of the app that are not browsing: a debugger, the log, the profile.
+  async function buildToolsSub(panel) {
+    column(panel, "More tools");
+    const list = listArea(panel);
+    const foot = footArea(panel);
+
+    const add = (glyph, label, hint, run) => {
+      const button = document.createElement("button");
+      button.className = "row";
+      const icon = document.createElement("span");
+      icon.className = "ico";
+      icon.textContent = glyph;
+      const text = document.createElement("span");
+      text.className = "label";
+      text.textContent = t(label);
+      const side = document.createElement("span");
+      side.className = "hint";
+      side.textContent = hint || "";
+      button.append(icon, text, side);
+      button.addEventListener("click", run);
+      list.append(button);
+    };
+
+    add("\u2318", "Developer tools", "F12", () => invoke("shortcut", { action: "devtools" }));
+    add("\u2691", "Export diagnostics", "", async () => {
+      const path = await invoke("diag_export");
+      report("diagnostics saved to " + path);
+      await invoke("open_dir", { which: "diag" });
+      await close();
+    });
+    add("\u26a0", "Open log file", "", () => invoke("open_dir", { which: "logs" }));
+    add("\u2261", "Profile folder", "", () => invoke("open_dir", { which: "userdata" }));
+    add("\u2699", "Diagnose super drag", "", () => invoke("drag_probe"));
+    add("\u25a4", "Userscripts", "", () =>
+      invoke("tab_new", { url: "http://tauri.localhost/pages/scripts.html" }),
+    );
+
+    footRow(foot, "Settings", () =>
+      invoke("tab_new", { url: "http://tauri.localhost/pages/settings.html" }),
+    );
+  }
+
+  /// What this build is, and where to look when it misbehaves.
+  async function buildHelpSub(panel) {
+    column(panel, "Help");
+    const list = listArea(panel);
+    const foot = footArea(panel);
+
+    const note = document.createElement("div");
+    note.className = "menu-note";
+    note.textContent =
+      `Mix ${info.version} (${info.git})\n` +
+      "A Chromium shell over WebView2. Data lives in UserData next to the binary.";
+    list.append(note);
+
+    // The addresses the reader is most likely to want, each one a page this app serves.
+    const add = (glyph, label, url) => {
+      const button = document.createElement("button");
+      button.className = "row";
+      const icon = document.createElement("span");
+      icon.className = "ico";
+      icon.textContent = glyph;
+      const text = document.createElement("span");
+      text.className = "label";
+      text.textContent = t(label);
+      button.append(icon, text);
+      button.addEventListener("click", () => invoke("tab_new", { url }));
+      list.append(button);
+    };
+    add("\u2261", "Keyboard shortcuts", "http://tauri.localhost/pages/settings.html#shortcuts");
+    add("\u2691", "Export diagnostics", "http://tauri.localhost/pages/settings.html#backup");
+
+    footRow(foot, "Open log file", () => invoke("open_dir", { which: "logs" }));
   }
 
   const pages = {
@@ -428,7 +733,7 @@ async function bootAppMenu() {
       // newest one used to be reachable.
       const closed = (await invoke("tab_closed_list").catch(() => [])) || [];
       row("\u2261", "Recently closed", closed.length ? String(closed.length) : "", () => render("closed"));
-      row("\u2193", "Downloads", "Ctrl+J", act(() => invoke("tab_new", { url: "http://tauri.localhost/pages/downloads.html" })));
+      rowMenu("\u2193", "Downloads", "Ctrl+J", (panel) => buildDownloadsSub(panel));
       divider();
 
       const zoomRow = document.createElement("div");
@@ -493,19 +798,17 @@ async function bootAppMenu() {
         report("bookmark toggled -> " + added);
         await close();
       });
-      row("\u2606", "Bookmarks", "", act(() => invoke("tab_new", { url: "http://tauri.localhost/pages/bookmarks.html" })));
+      rowMenu("\u2606", "Bookmarks", "", (panel) => buildBookmarksSub(panel));
       // The visits open beside the row while the pointer is on it: reading the last few
       // should not cost a click, and the page is still at the bottom of the list for the
       // search and the per-site filter it carries.
       rowMenu("\u21ba", "History", "", (panel) => buildHistorySub(panel));
       divider();
-      row("\u25a4", "Extensions", "", act(() => invoke("tab_new", { url: "http://tauri.localhost/pages/extensions.html" })));
-      row("\u2699", "Diagnose super drag", "", act(() => invoke("drag_probe")));
-      row("\u2699", "Userscripts", "", act(() => invoke("tab_new", { url: "http://tauri.localhost/pages/scripts.html" })));
-      row("\u2261", "More tools", "", () => render("tools"), { page: true });
+      rowMenu("\u25a4", "Extensions", "", (panel) => buildExtensionsSub(panel));
+      rowMenu("\u2261", "More tools", "", (panel) => buildToolsSub(panel));
       divider();
       row("\u2699", "Settings", "", act(() => invoke("tab_new", { url: "http://tauri.localhost/pages/settings.html" })));
-      row("\u003f", "Help", "", () => render("help"), { page: true });
+      rowMenu("\u003f", "Help", "", (panel) => buildHelpSub(panel));
 
       const about = document.createElement("div");
       about.className = "about";
@@ -767,36 +1070,36 @@ async function bootAppMenu() {
   // covers the whole panel - so the submenu never closed at all.
   let leaveTimer = null;
 
-  /// Whether the pointer is inside the panel's box, tracked from events rather than `:hover`.
-  ///
-  /// `matches(':hover')` was the first attempt and it is not dependable here: the webview is
-  /// resized while the pointer is over it, which is exactly when the browser recomputes hover
-  /// state, and the reading it gave back was "not over anything" - so the column closed a
-  /// moment after it opened. A flag set by the pointer events themselves says what happened
-  /// rather than what the layout currently looks like.
-  let pointerInside = false;
-
   const scheduleClose = () => {
     clearTimeout(leaveTimer);
+    // Long enough for a diagonal move from the row into the column beside it to cross the
+    // gap between them, which is what the 8 px between the two boxes is for.
     leaveTimer = setTimeout(() => {
-      if (!pointerInside) closeSub();
-    }, 200);
+      if (!pointerOverColumn()) closeSub();
+    }, 180);
   };
 
-  const enter = () => {
-    pointerInside = true;
+  /// Whether the pointer is on the column or on the row that opened it.
+  ///
+  /// Both are tracked from the events rather than read off the layout, for the same reason
+  /// the row's own state is.
+  let overColumn = false;
+  const pointerOverColumn = () => overColumn;
+
+  document.addEventListener("pointerover", (event) => {
+    const onColumn = Boolean(openSub && openSub.contains(event.target));
+    const onHost = Boolean(openHost && openHost.contains(event.target));
+    overColumn = onColumn;
     clearTimeout(leaveTimer);
-  };
-  const leave = () => {
-    pointerInside = false;
-    scheduleClose();
-  };
-
-  document.addEventListener("pointerover", enter, true);
-  document.addEventListener("pointermove", enter, true);
+    // Anything that is neither the row nor its column ends the column: this is the whole
+    // point of the hover, and it is what keeps the menu from showing a list for a row the
+    // pointer has already left.
+    if (!onColumn && !onHost) scheduleClose();
+  }, true);
   document.addEventListener("pointerout", (event) => {
-    if (!event.relatedTarget) leave();
-    else enter();
+    if (event.relatedTarget) return;
+    overColumn = false;
+    scheduleClose();
   }, true);
 
   appMenu.addEventListener("pointerdown", (event) => {
@@ -804,6 +1107,76 @@ async function bootAppMenu() {
   });
 
   await render(params.get("page") || "root");
+
+  // The panel opens at the height `initial_size` guesses (566) and is corrected here to the
+  // height the rows need, which is the job `fitHeight` does for every other panel - the app
+  // menu is excluded from that loop because it reports its own size, so this is its one
+  // measurement. Held open for the resize that follows: it takes the focus away from the
+  // page, and the blur handler would read that as the pointer leaving and close the menu.
+  if (!appMenu.hidden) {
+    window.__mixSizing(600);
+    requestAnimationFrame(() => {
+      const wanted = Math.ceil(menuContentHeight());
+      openedHeight = wanted;
+      invoke("overlay_resize", { height: wanted }).catch((error) => {
+        report(`menu height failed: ${error && error.message ? error.message : error}`);
+      });
+    });
+  }
+
+  // TEMPORARY probe driver.
+  if (location.hash.includes("probe")) {
+    const dump = (tag) => {
+      const b = appMenu.getBoundingClientRect();
+      const sub = openSub ? openSub.getBoundingClientRect() : null;
+      const rows = openSub ? openSub.querySelectorAll(".row").length : 0;
+      report(
+        `PROBE ${tag} menu=${b.left.toFixed(0)}w${b.width.toFixed(0)}h${b.height.toFixed(0)}` +
+          ` onScreen=${b.right > 0 && b.left < window.innerWidth}` +
+          ` sub=${sub ? `${sub.left.toFixed(0)}w${sub.width.toFixed(0)}h${sub.height.toFixed(0)} rows${rows}` : "none"}`,
+      );
+    };
+    setTimeout(async () => {
+      dump("before");
+      const subs = [...appMenu.querySelectorAll(".row")].filter(
+        (r) => r.dataset.sub !== undefined,
+      );
+      const plain = [...appMenu.querySelectorAll(".row")].find(
+        (r) => r.dataset.sub === undefined && r.querySelector(".label"),
+      );
+      report(`PROBE subrows=${subs.length} plain="${plain?.querySelector(".label")?.textContent}"`);
+
+      // Open one column, then move the pointer onto a plain row the way the browser would
+      // report it: a pointerover whose target is neither the row nor its column.
+      const first = subs[0];
+      first.dispatchEvent(new PointerEvent("pointerenter"));
+      await new Promise((r) => setTimeout(r, 1800));
+      report(`PROBE opened "${first.querySelector(".label").textContent}" sub=${Boolean(openSub)}`);
+
+      if (plain) {
+        plain.dispatchEvent(
+          new PointerEvent("pointerover", { bubbles: true, relatedTarget: first }),
+        );
+        await new Promise((r) => setTimeout(r, 600));
+        report(
+          `PROBE after moving to plain row sub=${Boolean(openSub)}` +
+            ` lit=${JSON.stringify([...appMenu.querySelectorAll(".row.open")].map((r) => r.querySelector(".label")?.textContent))}`,
+        );
+      }
+
+      // And the column itself must not close when the pointer is inside it.
+      first.dispatchEvent(new PointerEvent("pointerenter"));
+      await new Promise((r) => setTimeout(r, 1800));
+      if (openSub) {
+        openSub.dispatchEvent(
+          new PointerEvent("pointerover", { bubbles: true, relatedTarget: first }),
+        );
+        await new Promise((r) => setTimeout(r, 600));
+        report(`PROBE pointer inside column keeps it sub=${Boolean(openSub)}`);
+      }
+      report("PROBE done");
+    }, 900);
+  }
 }
 async function bootSuggest() {
   window.addEventListener("blur", () => invoke("overlay_close").catch(() => {}));
@@ -1952,6 +2325,18 @@ async function bootPanel() {
 /** Panels whose size is the design rather than a measurement: Rust keeps it. */
 const FIXED_SIZE = new Set(["thumb", "palette", "tab_search", "settings"]);
 
+/// Panels that size themselves instead of being measured by `fitHeight`.
+///
+/// The app menu reports its own height, because it is the one panel whose height and width
+/// are decided together: it opens at the height its rows need and the panel it is drawn in
+/// is wide enough for the column beside it. The generic measurement below would fight it -
+/// it reports a height with no width, and the command keeps the current width for that, so
+/// the two loops used to rewrite each other's answer several times a second. The visible
+/// symptom was the column's scrollbar changing width and colour between the two sizes, and,
+/// once the width lost, the menu being pushed out of a viewport narrower than the
+/// `left: 308px` it is drawn at - a panel showing only the history column.
+const SELF_SIZED = new Set(["app_menu"]);
+
 /** The panel the boot function just revealed, if it revealed one. */
 function visiblePanel() {
   return [menu, appMenu, themePanel, permissionPanel].find(
@@ -1993,7 +2378,7 @@ function fitHeight(panel) {
 
 async function boot() {
   await bootPanel();
-  if (FIXED_SIZE.has(kind)) return;
+  if (FIXED_SIZE.has(kind) || SELF_SIZED.has(kind)) return;
   const panel = visiblePanel();
   if (panel) fitHeight(panel);
 }

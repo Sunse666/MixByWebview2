@@ -415,6 +415,28 @@ button {
 
 .bookmark.drop-target { box-shadow: inset 2px 0 0 0 var(--accent); }
 
+/* A tab group shown in the bookmarks bar: the name, then how many tabs it holds. The
+   count sits in a box of its own so a group reads as a set rather than as a bookmark with
+   a number stuck to the end of its title. */
+.bookmark.group-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 200px;
+}
+
+.bookmark.group-chip .group-count {
+  flex: 0 0 auto;
+  min-width: 14px;
+  padding: 0 4px;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--text) 14%, transparent);
+  font-size: 10px;
+  line-height: 14px;
+  text-align: center;
+  opacity: 0.8;
+}
+
 .bookmark-hint {
   padding: 0 8px;
   font-size: 11px;
