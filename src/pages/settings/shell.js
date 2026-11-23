@@ -10,6 +10,7 @@ const PREFERRED = [
   "Toolbar",
   "New tab page",
   "Bookmarks",
+  "Browsing",
   "Tab settings",
   "Super drag",
   "Mouse gestures",

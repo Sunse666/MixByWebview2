@@ -367,3 +367,28 @@ main h2 {
   width: 180px;
   accent-color: var(--accent);
 }
+
+/* A colour swatch: the native picker, sized to sit on a row next to its switch. The
+   border is there because a very light colour on a light card is otherwise invisible. */
+.swatch {
+  width: 64px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: transparent;
+}
+
+.swatch:disabled { opacity: 0.4; }
+
+/* A field that owns a whole row and needs the width to show a long list: the external
+   scheme list is a sentence of twenty names and reads terribly in a 240 px box. */
+.field-block {
+  display: flex;
+  padding: 2px 10px 8px;
+}
+
+.field-block .hex {
+  flex: 1;
+  min-width: 0;
+}

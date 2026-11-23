@@ -39,6 +39,35 @@ mod zoom;
 
 use tauri::Manager;
 
+/// Draws the app at 96 dpi when the settings ask for it.
+///
+/// `DPI_AWARENESS_CONTEXT_UNAWARE_GDISCALED` is the flavour that keeps text crisp: the
+/// window is laid out in real pixels and Windows stretches the result, which is what a
+/// reader who turns this on is asking for - every control the size it would be on a 100%
+/// display, at the cost of a slightly softer picture on a scaled one.
+///
+/// The setting is read from the file rather than from the running state, because this has
+/// to happen before the first window exists and the state is built later, inside `setup`.
+fn apply_dpi_preference(settings_file: &std::path::Path) {
+    #[cfg(windows)]
+    {
+        if !state::Settings::load(settings_file).ignore_system_dpi {
+            return;
+        }
+        use windows::Win32::UI::HiDpi::{
+            SetProcessDpiAwarenessContext, DPI_AWARENESS_CONTEXT_UNAWARE_GDISCALED,
+        };
+        match unsafe { SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_UNAWARE_GDISCALED) } {
+            Ok(()) => logging::info("dpi: drawing at 96 dpi, the display's scaling is ignored"),
+            Err(err) => logging::warn(&format!("dpi: cannot ignore the display's scaling: {err}")),
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = settings_file;
+    }
+}
+
 fn main() {
     let dirs = paths::AppDirs::resolve().ensure();
     logging::init(&dirs.logs);
@@ -47,6 +76,13 @@ fn main() {
         env!("CARGO_PKG_VERSION"),
         env!("MIX_GIT")
     ));
+
+    // Before any window exists. Windows fixes a process's dpi awareness when it starts and
+    // never re-decides it, so this is the only moment the setting can be honoured - which
+    // is why the row that changes it says a restart is needed. Reading it here rather than
+    // through `AppState` because the state is built inside `setup`, and `setup` runs after
+    // the first window would have been created.
+    apply_dpi_preference(&dirs.settings_file);
 
     let secondary = paths::instance_mode();
     let builder = tauri::Builder::default();

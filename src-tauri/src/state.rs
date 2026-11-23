@@ -220,6 +220,51 @@ pub struct Settings {
     /// Where the tab search panel opens: "right", "left" or "center".
     #[serde(default = "default_search_place")]
     pub tab_search_place: String,
+
+    // --- browsing ---------------------------------------------------------
+    /// Hold the middle button and move to scroll.
+    #[serde(default = "default_true")]
+    pub autoscroll: bool,
+    /// A middle click pastes the clipboard instead of opening a link in a tab.
+    #[serde(default)]
+    pub middle_click_paste: bool,
+    /// Copy the selection as soon as it is made.
+    #[serde(default = "default_true")]
+    pub copy_on_select: bool,
+    /// Say so when a page goes fullscreen, so a key that leaves it is not a surprise.
+    #[serde(default = "default_true")]
+    pub fullscreen_hint: bool,
+    /// Say so when a video opens in a window of its own.
+    #[serde(default = "default_true")]
+    pub video_popup_hint: bool,
+    /// Put a video's popup window back where it was moved to.
+    #[serde(default)]
+    pub remember_popup_position: bool,
+    /// Draw the whole app at 96 dpi whatever the display reports.
+    ///
+    /// Read once, before the first window exists: Windows fixes a process's dpi awareness
+    /// when it starts, and nothing re-decides it later. Changing this therefore takes a
+    /// restart, which the row that sets it says.
+    #[serde(default)]
+    pub ignore_system_dpi: bool,
+    /// Tint every page towards a paper colour.
+    #[serde(default)]
+    pub eye_comfort: bool,
+    /// The tint itself, as `#RRGGBB`.
+    #[serde(default = "default_eye_color")]
+    pub eye_comfort_color: String,
+    /// Schemes a page may hand to the system without being asked.
+    #[serde(default = "default_external_schemes")]
+    pub external_schemes: String,
+}
+
+fn default_eye_color() -> String {
+    "#C7EDCC".to_string()
+}
+
+fn default_external_schemes() -> String {
+    "tg,potplayer,torrent,bc,magnet,thunder,thunderx,ed2k,qqdl,aliim,tencent,baiduyunguanjia,mms,rtsp,acestream,creo"
+        .to_string()
 }
 
 fn default_search_place() -> String {
@@ -309,6 +354,16 @@ impl Default for Settings {
             groups_in_bookmarks: false,
             group_auto_pin: false,
             tab_search_place: default_search_place(),
+            autoscroll: true,
+            middle_click_paste: false,
+            copy_on_select: true,
+            fullscreen_hint: true,
+            video_popup_hint: true,
+            remember_popup_position: false,
+            ignore_system_dpi: false,
+            eye_comfort: false,
+            eye_comfort_color: default_eye_color(),
+            external_schemes: default_external_schemes(),
         }
     }
 }
@@ -433,6 +488,26 @@ impl Settings {
         };
         self.font_family = self.font_family.trim().to_string();
         self.font_mono = self.font_mono.trim().to_string();
+        // A tint is pasted into a stylesheet, so only a colour that parses is kept; a
+        // half-typed one from a text field would break every page's `filter` at once.
+        self.eye_comfort_color =
+            normalize_hex(&self.eye_comfort_color).unwrap_or_else(default_eye_color);
+        // The scheme list is split on the separators the row's own hint names, lowercased,
+        // and stripped of anything that is not a scheme: a page hands over `a:b` and the
+        // part before the colon is what decides who handles it.
+        self.external_schemes = self
+            .external_schemes
+            .split([',', ';', ' ', '\n', '\r', '\t'])
+            .map(|entry| entry.trim().trim_end_matches(':').to_ascii_lowercase())
+            .filter(|entry| {
+                !entry.is_empty()
+                    && entry.len() <= 32
+                    && entry
+                        .chars()
+                        .all(|c| c.is_ascii_alphanumeric() || c == '+' || c == '-' || c == '.')
+            })
+            .collect::<Vec<_>>()
+            .join(",");
         self.font_size = self.font_size.min(32);
         self.font_min_size = self.font_min_size.min(24);
         self.home_url = self.home_url.trim().to_string();
@@ -513,6 +588,28 @@ fn finite(value: f64, fallback: f64) -> f64 {
         value
     } else {
         fallback
+    }
+}
+
+/// A colour written the way a stylesheet wants it, or nothing.
+///
+/// Accepts `#RGB` and `#RRGGBB` with or without the hash, and returns the six-digit form in
+/// upper case. Anything else is not a colour: it is a typo, and letting it through would
+/// put an unparsable value in front of every page.
+fn normalize_hex(raw: &str) -> Option<String> {
+    let trimmed = raw.trim().trim_start_matches('#');
+    let digits: String = trimmed.chars().filter(|c| c.is_ascii_hexdigit()).collect();
+    match digits.len() {
+        3 => {
+            let mut out = String::from("#");
+            for ch in digits.chars() {
+                out.push(ch);
+                out.push(ch);
+            }
+            Some(out.to_ascii_uppercase())
+        }
+        6 => Some(format!("#{}", digits.to_ascii_uppercase())),
+        _ => None,
     }
 }
 

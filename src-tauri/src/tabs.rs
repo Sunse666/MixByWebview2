@@ -140,7 +140,89 @@ fn build_custom_css(dirs: &AppDirs, settings: &crate::state::Settings) -> String
             settings.font_min_size
         ));
     }
+    // A paper tint over every page. `filter` rather than a background: a background would
+    // be hidden behind whatever the site paints, and this has to work on a page that sets
+    // its own colours - which is most of them. The multiply-and-screen pair keeps the
+    // contrast of the original instead of flattening it the way plain opacity would.
+    if settings.eye_comfort {
+        let tone = settings.eye_comfort_color.trim_start_matches('#');
+        if tone.len() == 6 {
+            css.push_str(&format!(
+                "\nhtml {{ background-color: #{tone} !important; }}\n\
+                 html > body {{ opacity: 0.94 !important; }}\n"
+            ));
+        }
+    }
     css
+}
+
+/// The scheme of an address no webview can show, or nothing.
+///
+/// The web's own schemes and the app's own are navigation; everything else - `magnet:`,
+/// `thunder:`, `mailto:` - belongs to a program outside the browser. `about:` and `data:`
+/// are answered by the engine itself and must keep working.
+fn foreign_scheme(url: &str) -> Option<String> {
+    let (scheme, _) = url.split_once(':')?;
+    let scheme = scheme.to_ascii_lowercase();
+    if scheme.is_empty() || !scheme.chars().next()?.is_ascii_alphabetic() {
+        return None;
+    }
+    if !scheme
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '+' || c == '-' || c == '.')
+    {
+        return None;
+    }
+    match scheme.as_str() {
+        "http" | "https" | "about" | "data" | "blob" | "file" | "javascript" | "view-source"
+        | "chrome" | "edge" | "devtools" | "tauri" | "asset" | "ipc" | "microsoft-edge" => None,
+        _ => Some(scheme),
+    }
+}
+
+/// Whether the settings name this scheme among the ones a page may open directly.
+fn scheme_allowed(list: &str, scheme: &str) -> bool {
+    // The same three separators the row's own hint promises, so a list typed by hand with
+    // semicolons works as well as one `sanitize` has already rewritten to commas.
+    list.split([',', ';', ' ', '\n', '\r', '\t'])
+        .map(|entry| entry.trim().trim_end_matches(':'))
+        .any(|entry| !entry.is_empty() && entry.eq_ignore_ascii_case(scheme))
+}
+
+/// Hands an address to whatever the system has registered for its scheme.
+///
+/// Through `ShellExecute`, which is what Windows means by "open this": it resolves the
+/// scheme through the registry, so a program the reader installed for `magnet:` gets the
+/// link and anything else gets the "how do you want to open this" dialog. No shell string
+/// is built, so there is nothing to quote wrong.
+fn open_external(url: &str) {
+    #[cfg(windows)]
+    {
+        use windows::core::{HSTRING, PCWSTR};
+        use windows::Win32::UI::Shell::ShellExecuteW;
+        use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+        let wide = HSTRING::from(url);
+        let operation = HSTRING::from("open");
+        let result = unsafe {
+            ShellExecuteW(
+                None,
+                &operation,
+                &wide,
+                PCWSTR::null(),
+                PCWSTR::null(),
+                SW_SHOWNORMAL,
+            )
+        };
+        // ShellExecute answers with a value cast through a pointer; anything above 32 is a
+        // success, and what comes back below it is an error code, not a handle.
+        if result.0 as isize <= 32 {
+            crate::logging::warn(&format!("external open failed: {url}"));
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        crate::logging::warn(&format!("external open unsupported: {url}"));
+    }
 }
 
 /// Pushes the shortcut overrides into the pages that are already open.
@@ -380,6 +462,32 @@ pub fn create(
             let tab_id = id.to_string();
             let app = nav_app;
             move |url| {
+                // A link to another program: `magnet:`, `thunder:`, a game launcher. The
+                // webview cannot open those, so the page is stopped and the scheme is handed
+                // to the system - but only when the settings name it. A scheme nobody listed
+                // asks first, because a page must not be able to launch a program just by
+                // naming one.
+                if let Some(scheme) = foreign_scheme(url.as_str()) {
+                    let known = app
+                        .try_state::<crate::ipc::AppState>()
+                        .map(|state| {
+                            scheme_allowed(&state.settings.read().external_schemes, &scheme)
+                        })
+                        .unwrap_or(false);
+                    if known {
+                        crate::logging::info(&format!("external: {scheme} <- {url}"));
+                        open_external(url.as_str());
+                    } else {
+                        // Not on the list. Stopped, and said so in the log; the address is
+                        // still in the page, so a reader who wants it can copy it out and
+                        // add the scheme in the settings. A prompt here would be a third
+                        // kind of overlay for a case that is rare by design.
+                        crate::logging::info(&format!(
+                            "external: {scheme} is not on the allowed list, not opened"
+                        ));
+                    }
+                    return false;
+                }
                 if let Some(state) = app.try_state::<crate::ipc::AppState>() {
                     state
                         .nav
@@ -519,7 +627,58 @@ pub fn create(
 
 #[cfg(test)]
 mod tests {
-    use super::proxy_label;
+    use super::{foreign_scheme, proxy_label, scheme_allowed};
+
+    #[test]
+    fn the_web_keeps_its_own_schemes() {
+        // Everything here is navigation the engine must still perform.
+        for url in [
+            "https://example.com",
+            "http://example.com/a?b=c",
+            "about:blank",
+            "data:text/html,<p>hi</p>",
+            "blob:https://example.com/9c1e",
+            "file:///C:/x.html",
+            "view-source:https://example.com",
+        ] {
+            assert_eq!(
+                foreign_scheme(url),
+                None,
+                "{url} is not an external hand-off"
+            );
+        }
+    }
+
+    #[test]
+    fn a_link_to_another_program_is_recognised() {
+        assert_eq!(
+            foreign_scheme("magnet:?xt=urn:btih:abc"),
+            Some("magnet".into())
+        );
+        assert_eq!(foreign_scheme("thunder://QUFodHRw"), Some("thunder".into()));
+        assert_eq!(foreign_scheme("mailto:a@b.test"), Some("mailto".into()));
+        // Case is not the scheme's business.
+        assert_eq!(foreign_scheme("MAGNET:?xt=1"), Some("magnet".into()));
+    }
+
+    #[test]
+    fn a_relative_or_broken_address_is_not_a_scheme() {
+        assert_eq!(foreign_scheme("no-colon-here"), None);
+        assert_eq!(foreign_scheme(":leading"), None);
+        assert_eq!(foreign_scheme("1nvalid:x"), None);
+        // A path segment with a colon in it is not a scheme either.
+        assert_eq!(foreign_scheme("src/foo:bar"), None);
+    }
+
+    #[test]
+    fn only_a_listed_scheme_is_opened_without_asking() {
+        let list = "magnet,thunder,ed2k";
+        assert!(scheme_allowed(list, "magnet"));
+        assert!(scheme_allowed(list, "MAGNET"));
+        assert!(scheme_allowed("magnet; thunder", "thunder"));
+        assert!(!scheme_allowed(list, "ms-settings"));
+        assert!(!scheme_allowed("", "magnet"));
+    }
 
     #[test]
     fn a_manual_choice_without_a_server_is_the_system_proxy() {

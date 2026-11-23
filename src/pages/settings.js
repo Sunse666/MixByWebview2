@@ -5,6 +5,7 @@ import { addNavItem, groupSections } from "./settings/shell.js";
 import { buildClearData } from "./settings/sections/clear-data.js";
 import { buildStartup } from "./settings/sections/startup.js";
 import { buildBookmarks } from "./settings/sections/bookmarks.js";
+import { buildBrowsing } from "./settings/sections/browsing.js";
 import { buildSearch } from "./settings/sections/search.js";
 import { buildLanguage } from "./settings/sections/language.js";
 import { buildAppearance } from "./settings/sections/appearance.js";
@@ -27,6 +28,7 @@ const main = document.getElementById("main");
 const SECTIONS = [
   buildStartup,
   buildBookmarks,
+  buildBrowsing,
   buildSearch,
   buildLanguage,
   buildAppearance,
