@@ -500,7 +500,7 @@ pub async fn tab_pop_out(
         crate::logging::info(&format!("tab {id} stays: it is the only one in its window"));
         return Ok(());
     }
-    tab_close(app.clone(), window, app.state::<AppState>(), id).await?;
+    tab_close(app.clone(), window, app.state::<AppState>(), id, None).await?;
     Ok(())
 }
 

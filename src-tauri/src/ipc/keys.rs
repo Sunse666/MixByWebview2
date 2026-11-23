@@ -35,7 +35,7 @@ pub async fn shortcut(
         "close_tab" => {
             let id = selected_label(&state, &window);
             if !id.is_empty() {
-                tab_close(app, window.clone(), state, id).await?;
+                tab_close(app, window.clone(), state, id, None).await?;
             }
         }
         "next_tab" => cycle_tab(&app, &window, 1).await,
@@ -118,7 +118,7 @@ pub async fn shortcut(
             };
             for id in others {
                 let state = app.state::<AppState>();
-                tab_close(app.clone(), window.clone(), state, id).await?;
+                tab_close(app.clone(), window.clone(), state, id, None).await?;
             }
         }
         "toggle_pin" => {

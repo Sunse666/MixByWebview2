@@ -261,12 +261,18 @@ pub async fn tab_pin(
     crate::logging::info(&format!("tab {id} pinned={pinned}"));
     Ok(())
 }
+/// Closes one tab.
+///
+/// `from_menu` is true when the caller is the tab's own menu: the one route a pinned tab
+/// allows when the setting says it may only be closed from there. Every other caller leaves
+/// it out and the field defaults to the stricter answer.
 #[tauri::command]
 pub async fn tab_close(
     app: AppHandle,
     window: tauri::Window,
     state: State<'_, AppState>,
     id: String,
+    from_menu: Option<bool>,
 ) -> Result<(), AppError> {
     if window_of_tab(&id) != window.label() {
         crate::logging::warn(&format!(
@@ -274,6 +280,22 @@ pub async fn tab_close(
             window.label()
         ));
         return Ok(());
+    }
+    {
+        let settings = state.settings.read();
+        let pinned = state
+            .try_read_core(window.label())
+            .and_then(|core| {
+                core.tabs
+                    .iter()
+                    .find(|tab| tab.id == id)
+                    .map(|tab| tab.pinned)
+            })
+            .unwrap_or(false);
+        if pinned && settings.tab_pinned_menu_only && from_menu != Some(true) {
+            crate::logging::info(&format!("{id} is pinned; only its menu may close it"));
+            return Ok(());
+        }
     }
     if let Some(webview) = app.get_webview(&id) {
         let _ = webview.close();

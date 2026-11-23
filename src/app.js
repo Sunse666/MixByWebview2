@@ -296,6 +296,27 @@ function groupChip(group) {
 }
 
 let press = null;
+/// The element waiting for the pointer to move far enough to become a drag.
+///
+/// Kept apart from `press` because `press` is what the drag machinery reads, and the capture
+/// has to be taken one step earlier - on the move that proves this is a drag at all.
+let pressPointer = null;
+
+/// Takes the pointer capture for a press that has turned into a drag.
+///
+/// Called from the move handler, never from the press: a capture retargets the following
+/// events to this element, and taking it on the press is what stopped a double click from
+/// being composed at all.
+function capturePointerIfDragging() {
+  if (!pressPointer) return;
+  const { el, pointerId } = pressPointer;
+  pressPointer = null;
+  try {
+    el.setPointerCapture(pointerId);
+  } catch {
+    // Best effort: without it the drag simply stops at the edge of the strip.
+  }
+}
 
 function clearDropTargets() {
   for (const pill of tabStrip.querySelectorAll(".drop-target")) {
@@ -315,6 +336,8 @@ function onDragMove(event) {
   if (!press.moved) {
     if (Math.abs(event.clientX - press.x) + Math.abs(event.clientY - press.y) < 6) return;
     press.moved = true;
+    // Now it is a drag, and now the pointer is worth capturing.
+    capturePointerIfDragging();
     invoke("ui_log", { message: "tab drag start " + press.id }).catch(() => {});
     clearTimeout(hoverThumb);
     const source = tabNodes.get(press.id);
@@ -526,6 +549,18 @@ function wireTab(el, id) {
   el.addEventListener("contextmenu", (event) => {
     event.preventDefault();
     event.stopPropagation();
+    // A right click closes, unless Shift is held: the menu is still one key away, which is
+    // what the row in the settings says. A pinned tab that was told to close only from its
+    // menu always gets the menu - that is the whole point of the setting.
+    const pinned = tabById(id).pinned;
+    if (settings.tab_right_click_close && !event.shiftKey) {
+      if (pinned && settings.tab_pinned_menu_only) {
+        invoke("tab_menu", { id, x: event.clientX, y: event.clientY }).catch(() => {});
+        return;
+      }
+      invoke("tab_close", { id }).catch(() => {});
+      return;
+    }
     invoke("tab_menu", { id, x: event.clientX, y: event.clientY }).catch(() => {});
   });
   el.addEventListener("mousedown", (event) => {
@@ -537,11 +572,13 @@ function wireTab(el, id) {
     // A press on the close button is a click, not a drag: capturing the pointer here
     // would send that click to the tab instead of the button and swallow the close.
     if (event.target && event.target.closest && event.target.closest("button")) return;
-    try {
-      el.setPointerCapture(event.pointerId);
-    } catch {
-      // Capture is a best effort: without it the drag simply stops at the strip.
-    }
+    // The capture is taken when the pointer actually moves, not on the press.
+    //
+    // `setPointerCapture` retargets every following event to the capturing element, which
+    // includes the second press of a double click: the two clicks no longer land on the
+    // same target, so the browser never composes a `dblclick` and double-click-to-close
+    // stops working. Pressing without moving has to stay an ordinary click.
+    pressPointer = { el, pointerId: event.pointerId };
   });
   if (settings.tab_hover_preview) {
     el.addEventListener("mouseenter", (enter) => {

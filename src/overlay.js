@@ -2010,7 +2010,9 @@ async function bootChromeMenu(kind) {
     const divider = document.createElement("div");
     divider.className = "divider";
     menu.append(divider);
-    item("Close tab", () => invoke("tab_close", { id }).catch(() => {}));
+    // `from_menu` is what lets a pinned tab close at all: the command refuses a pinned tab
+    // from every other route when the setting asks for that.
+    item("Close tab", () => invoke("tab_close", { id, from_menu: true }).catch(() => {}));
     return;
   }
 
