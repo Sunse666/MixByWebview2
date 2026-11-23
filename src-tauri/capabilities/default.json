@@ -131,6 +131,7 @@
     "allow-context-menu",
     "allow-snap",
     "allow-settings-get",
+    "allow-font-list",
     "allow-settings-set",
     "allow-sidebar-resize",
     "allow-autostart-get",

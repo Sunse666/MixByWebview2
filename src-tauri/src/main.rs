@@ -11,6 +11,7 @@ mod ext_live;
 mod extensions;
 mod favicons;
 mod fetch;
+mod fonts;
 mod freeze;
 mod ipc;
 mod library;
@@ -242,6 +243,7 @@ fn main() {
             ipc::context_menu,
             ipc::snap,
             ipc::settings_get,
+            ipc::font_list,
             ipc::settings_set,
             ipc::sidebar_resize,
             ipc::autostart_get,

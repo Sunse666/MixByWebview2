@@ -35,6 +35,11 @@ windows = { version = "0.62", features = [
     "Win32_UI_HiDpi",
     "Win32_System_ProcessStatus",
     "Win32_System_Threading",
+    # The font list: DirectWrite is the only way to ask Windows for the family names a
+    # page can actually use. The registry lists every style as its own entry ("Arial Bold
+    # Italic"), and a css font-family cannot name those.
+    "Win32_Graphics_DirectWrite",
+    "Win32_System_Com",
 ] }
 raw-window-handle = "0.6"
 

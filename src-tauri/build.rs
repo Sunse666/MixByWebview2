@@ -148,6 +148,7 @@ fn main() {
         "context_menu",
         "snap",
         "settings_get",
+        "font_list",
         "settings_set",
         "sidebar_resize",
         "autostart_get",

@@ -85,6 +85,26 @@ pub async fn settings_get(
     Ok(state.settings.read().clone())
 }
 
+/// The fonts this machine has, for the two fields that name one.
+///
+/// Asked on a blocking thread and cached for the life of the process: enumerating a few
+/// hundred families through DirectWrite is quick but it is not instant, and a font
+/// installed while the browser runs is rare enough to be worth a restart.
+#[tauri::command]
+pub async fn font_list(webview: tauri::Webview) -> Result<Vec<crate::fonts::Family>, AppError> {
+    require_trusted(&webview)?;
+    static CACHE: std::sync::OnceLock<Vec<crate::fonts::Family>> = std::sync::OnceLock::new();
+    if let Some(list) = CACHE.get() {
+        return Ok(list.clone());
+    }
+    let list = tauri::async_runtime::spawn_blocking(crate::fonts::installed)
+        .await
+        .unwrap_or_default();
+    let _ = CACHE.set(list.clone());
+    crate::logging::info(&format!("fonts: {} families", list.len()));
+    Ok(list)
+}
+
 #[tauri::command]
 pub async fn settings_set(
     webview: tauri::Webview,
