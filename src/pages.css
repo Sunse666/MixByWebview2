@@ -392,3 +392,34 @@ main h2 {
   flex: 1;
   min-width: 0;
 }
+/* Two little drawings of a tab's corner, beside the radio that picks one. The difference
+   between the choices is a single corner radius, which is easier to see than to read. */
+.shape-choice {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.shape-option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.shape-sketch {
+  display: block;
+  width: 54px;
+  height: 18px;
+  border: 2px solid var(--line);
+  border-bottom-width: 0;
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+}
+
+.shape-sketch.rounded {
+  border-radius: 8px 8px 0 0;
+}
+
+.shape-sketch.square {
+  border-radius: 0;
+}

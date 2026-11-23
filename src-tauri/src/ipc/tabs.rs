@@ -289,9 +289,25 @@ pub async fn tab_close(
         ui.translate_skip.remove(&id);
     }
 
-    let (go_left, next_url) = {
+    // Where the selection lands, and what an empty strip means. `tab_close_to` is the
+    // setting the row offers; `tab_close_goes_left` is the older boolean and is still what a
+    // file written before it carries, so "auto" falls back to it.
+    let (close_to, go_left, next_url, last_close) = {
         let settings = state.settings.read();
-        (settings.tab_close_goes_left, settings.start_url.clone())
+        (
+            settings.tab_close_to.clone(),
+            settings.tab_close_goes_left,
+            settings.start_url.clone(),
+            settings.tab_last_close.clone(),
+        )
+    };
+    // The tab that had been used before this one, taken before the id is dropped from `mru`.
+    let previous = {
+        let core = state.read_core(window.label());
+        core.mru
+            .iter()
+            .find(|entry| entry.as_str() != id.as_str())
+            .cloned()
     };
     let remaining = {
         let mut core = state.write_core(window.label());
@@ -314,12 +330,21 @@ pub async fn tab_close(
         }
         core.groups.retain(|group| !group.members.is_empty());
         if core.selected.as_deref() == Some(id.as_str()) {
+            let pick = |index: usize| core.tabs.get(index).map(|tab| tab.id.clone());
             core.selected = match closed_at {
-                Some(index) if go_left => core
-                    .tabs
-                    .get(index.saturating_sub(1))
-                    .map(|tab| tab.id.clone()),
-                Some(index) => core.tabs.get(index).map(|tab| tab.id.clone()),
+                Some(index) => match close_to.as_str() {
+                    "left" => index.checked_sub(1).and_then(pick).or_else(|| pick(0)),
+                    "right" => pick(index).or_else(|| index.checked_sub(1).and_then(pick)),
+                    "last_used" => previous
+                        .clone()
+                        .filter(|entry| core.tabs.iter().any(|tab| &tab.id == entry))
+                        .or_else(|| pick(index))
+                        .or_else(|| index.checked_sub(1).and_then(pick)),
+                    // "auto" is the browser's own rule, and the older boolean picks a side
+                    // for the case where it matters.
+                    _ if go_left => index.checked_sub(1).and_then(pick).or_else(|| pick(0)),
+                    _ => pick(index).or_else(|| index.checked_sub(1).and_then(pick)),
+                },
                 None => None,
             }
             .or_else(|| core.tabs.last().map(|tab| tab.id.clone()));
@@ -328,8 +353,25 @@ pub async fn tab_close(
     };
 
     if remaining == 0 {
-        let _ = tab_new(app, window.clone(), state, Some(next_url), None, None).await;
-        return Ok(());
+        // The row offers three answers; the default opens a fresh tab rather than ending the
+        // browser, which is what a window with no tabs left has historically done here.
+        match last_close.as_str() {
+            "close_window" => {
+                if let Some(win) = app.get_window(window.label()) {
+                    let _ = win.close();
+                }
+                return Ok(());
+            }
+            "nothing" => {
+                emit_tabs(&app, window.label());
+                save_sessions(&app);
+                return Ok(());
+            }
+            _ => {
+                let _ = tab_new(app, window.clone(), state, Some(next_url), None, None).await;
+                return Ok(());
+            }
+        }
     }
 
     sync_visibility(&app, window.label());

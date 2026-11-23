@@ -113,12 +113,22 @@ button {
   align-items: center;
   gap: 6px;
   flex: 0 1 180px;
-  min-width: 84px;
+  /* Both come from the settings: the narrowest a tab may get, and whether its corners are
+     rounded. `--tab-min` falls back to the number this rule used to hard-code. */
+  min-width: var(--tab-min, 84px);
   height: 32px;
   padding: 0 4px 0 10px;
   border-radius: var(--tab-radius);
   border: 1px solid transparent;
   opacity: 0.7;
+}
+
+/* Square corners: the same box with the radius taken out. A separate class rather than a
+   value of `0` in the variable, because the selected tab and the hover wash both round
+   themselves off the variable and two of them would keep the old shape. */
+.tabs-square .tab,
+.tabs-square .tab.selected {
+  border-radius: 0;
 }
 
 .tab:hover { opacity: 1; background: var(--hover); }

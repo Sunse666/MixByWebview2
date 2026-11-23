@@ -48,6 +48,64 @@ fn default_bookmark_hide_delay() -> u32 {
     1200
 }
 
+fn default_tab_shape() -> String {
+    "rounded".to_string()
+}
+
+fn default_tab_min_width() -> f64 {
+    120.0
+}
+
+fn default_tab_scroll_speed() -> u32 {
+    3
+}
+
+fn default_audio_click() -> String {
+    "mute".to_string()
+}
+
+fn default_open_foreground() -> String {
+    "foreground".to_string()
+}
+
+fn default_open_current() -> String {
+    "current".to_string()
+}
+
+fn default_tab_position() -> String {
+    "after_current".to_string()
+}
+
+fn default_close_to() -> String {
+    "auto".to_string()
+}
+
+fn default_last_close() -> String {
+    "new_tab".to_string()
+}
+
+fn default_middle_tab() -> String {
+    "close".to_string()
+}
+
+fn default_middle_strip() -> String {
+    "new_tab".to_string()
+}
+
+/// Keeps a value only when it is one of the answers the row offers.
+///
+/// Every one of these settings is a `select`, so the set of legal values is fixed and known;
+/// a value outside it can only come from a hand-edited file or an older build. Falling back
+/// to the default is what keeps the code that reads them to a single `match` with no
+/// catch-all branch.
+fn one_of(value: &str, allowed: &[&str], fallback: fn() -> String) -> String {
+    if allowed.contains(&value) {
+        value.to_string()
+    } else {
+        fallback()
+    }
+}
+
 fn default_sidebar_width() -> f64 {
     300.0
 }
@@ -166,6 +224,79 @@ pub struct Settings {
     pub tab_show_close: bool,
     /// After closing, activate the tab to the left instead of the right.
     pub tab_close_goes_left: bool,
+    /// A right click on a tab closes it; holding Shift still opens the tab menu.
+    #[serde(default)]
+    pub tab_right_click_close: bool,
+    /// A link opened from the new tab page reuses that tab.
+    #[serde(default = "default_true")]
+    pub tab_reuse_blank: bool,
+    /// Every link opens in the tab it was clicked from.
+    #[serde(default)]
+    pub tab_force_current: bool,
+    /// Every link opens in the background of the tab it was clicked from.
+    #[serde(default)]
+    pub tab_force_background: bool,
+    /// A popup window becomes a tab instead of a denial.
+    #[serde(default)]
+    pub tab_from_popup: bool,
+    /// A pinned tab cannot be closed by a click or a shortcut, only from its menu.
+    #[serde(default)]
+    pub tab_pinned_menu_only: bool,
+    /// A new tab copies the small-tab state of the one it was opened from.
+    #[serde(default = "default_true")]
+    pub tab_small_inherit: bool,
+    /// The wheel over the strip walks the tabs.
+    #[serde(default)]
+    pub tab_wheel_switch: bool,
+    /// Ask before a command closes more than one tab.
+    #[serde(default)]
+    pub tab_close_warn: bool,
+    /// Tab shape: "rounded" or "square".
+    #[serde(default = "default_tab_shape")]
+    pub tab_shape: String,
+    /// Narrowest a tab may get before the strip starts scrolling.
+    #[serde(default = "default_tab_min_width")]
+    pub tab_min_width: f64,
+    /// Draw the small button that lists every tab.
+    #[serde(default = "default_true")]
+    pub tab_list_button: bool,
+    /// Draw the two scroll arrows beside the strip.
+    #[serde(default = "default_true")]
+    pub tab_scroll_buttons: bool,
+    /// Hover this many milliseconds and the tab activates. Zero turns it off.
+    #[serde(default)]
+    pub tab_hover_activate: u32,
+    /// How many tabs one notch of the wheel moves.
+    #[serde(default = "default_tab_scroll_speed")]
+    pub tab_scroll_speed: u32,
+    /// What the speaker on a tab does: "mute" or "activate".
+    #[serde(default = "default_audio_click")]
+    pub tab_audio_click: String,
+    /// Where a bookmark opens: "foreground", "background" or "current".
+    #[serde(default = "default_open_foreground")]
+    pub open_bookmark: String,
+    #[serde(default = "default_open_foreground")]
+    pub open_home: String,
+    #[serde(default = "default_open_foreground")]
+    pub open_search: String,
+    /// An address typed in the bar: "current", "foreground" or "background".
+    #[serde(default = "default_open_current")]
+    pub open_address: String,
+    /// Where a new tab is inserted: "after_current", "after_group" or "at_end".
+    #[serde(default = "default_tab_position")]
+    pub tab_new_position: String,
+    /// Which tab is selected after the current one closes.
+    #[serde(default = "default_close_to")]
+    pub tab_close_to: String,
+    /// What closing the last tab does: "new_tab", "close_window" or "nothing".
+    #[serde(default = "default_last_close")]
+    pub tab_last_close: String,
+    /// A middle click on a tab: "close", "reload" or "nothing".
+    #[serde(default = "default_middle_tab")]
+    pub tab_middle_click: String,
+    /// A middle click on the empty part of the strip: "new_tab", "close_others" or "nothing".
+    #[serde(default = "default_middle_strip")]
+    pub tab_middle_strip: String,
     /// New tab page: show the search field.
     pub newtab_show_search: bool,
     /// New tab page: show the frequent site tiles.
@@ -330,6 +461,31 @@ impl Default for Settings {
             tab_double_click_close: true,
             tab_show_close: true,
             tab_close_goes_left: true,
+            tab_right_click_close: false,
+            tab_reuse_blank: true,
+            tab_force_current: false,
+            tab_force_background: false,
+            tab_from_popup: false,
+            tab_pinned_menu_only: false,
+            tab_small_inherit: true,
+            tab_wheel_switch: false,
+            tab_close_warn: false,
+            tab_shape: default_tab_shape(),
+            tab_min_width: default_tab_min_width(),
+            tab_list_button: true,
+            tab_scroll_buttons: true,
+            tab_hover_activate: 0,
+            tab_scroll_speed: default_tab_scroll_speed(),
+            tab_audio_click: default_audio_click(),
+            open_bookmark: default_open_foreground(),
+            open_home: default_open_foreground(),
+            open_search: default_open_foreground(),
+            open_address: default_open_current(),
+            tab_new_position: default_tab_position(),
+            tab_close_to: default_close_to(),
+            tab_last_close: default_last_close(),
+            tab_middle_click: default_middle_tab(),
+            tab_middle_strip: default_middle_strip(),
             custom_search: String::new(),
             newtab_show_search: true,
             newtab_show_sites: true,
@@ -513,6 +669,62 @@ impl Settings {
         self.home_url = self.home_url.trim().to_string();
         self.default_zoom = finite(self.default_zoom, 1.0).clamp(0.5, 2.0);
 
+        // The tab strip: four fixed sets of answers, one shape, and the numbers the strip's
+        // own layout uses.
+        self.tab_shape = one_of(&self.tab_shape, &["rounded", "square"], default_tab_shape);
+        self.tab_min_width = finite(self.tab_min_width, default_tab_min_width()).clamp(60.0, 260.0);
+        self.tab_scroll_speed = self.tab_scroll_speed.clamp(1, 12);
+        self.tab_hover_activate = if self.tab_hover_activate == 0 {
+            0
+        } else {
+            self.tab_hover_activate.clamp(100, 2000)
+        };
+        self.tab_audio_click = one_of(
+            &self.tab_audio_click,
+            &["mute", "activate"],
+            default_audio_click,
+        );
+        for (field, fallback) in [
+            (
+                &mut self.open_bookmark,
+                default_open_foreground as fn() -> String,
+            ),
+            (&mut self.open_home, default_open_foreground),
+            (&mut self.open_search, default_open_foreground),
+        ] {
+            *field = one_of(field, &["foreground", "background", "current"], fallback);
+        }
+        self.open_address = one_of(
+            &self.open_address,
+            &["current", "foreground", "background"],
+            default_open_current,
+        );
+        self.tab_new_position = one_of(
+            &self.tab_new_position,
+            &["after_current", "after_group", "at_end"],
+            default_tab_position,
+        );
+        self.tab_close_to = one_of(
+            &self.tab_close_to,
+            &["auto", "left", "right", "last_used"],
+            default_close_to,
+        );
+        self.tab_last_close = one_of(
+            &self.tab_last_close,
+            &["new_tab", "close_window", "nothing"],
+            default_last_close,
+        );
+        self.tab_middle_click = one_of(
+            &self.tab_middle_click,
+            &["close", "reload", "nothing"],
+            default_middle_tab,
+        );
+        self.tab_middle_strip = one_of(
+            &self.tab_middle_strip,
+            &["new_tab", "close_others", "nothing"],
+            default_middle_strip,
+        );
+
         self.custom_search = self.custom_search.trim().to_string();
         self.newtab_url = self.newtab_url.trim().to_string();
         self.newtab_tiles = self.newtab_tiles.clamp(1, 40);
@@ -645,6 +857,45 @@ mod tests {
         let file = path.join("settings.json");
         std::fs::write(&file, body).unwrap();
         file
+    }
+
+    #[test]
+    fn the_tab_rows_fall_back_when_their_answer_is_not_one_of_them() {
+        // Every one of these is a select, so a value outside the list can only come from a
+        // hand-edited file or an older build. The default is the safe answer: the code that
+        // reads them matches exhaustively and would otherwise carry a branch nothing can
+        // reach.
+        let file = write(
+            "mix-settings-tabs",
+            r#"{"schema_version":1,"tab_shape":"hexagonal","tab_close_to":"somewhere",
+                "tab_last_close":"explode","tab_middle_click":"sing","tab_audio_click":"dance",
+                "open_bookmark":"orbit","tab_min_width":9000,"tab_scroll_speed":400,
+                "tab_hover_activate":17}"#,
+        );
+        let settings = Settings::load(&file);
+        assert_eq!(settings.tab_shape, "rounded");
+        assert_eq!(settings.tab_close_to, "auto");
+        assert_eq!(settings.tab_last_close, "new_tab");
+        assert_eq!(settings.tab_middle_click, "close");
+        assert_eq!(settings.tab_audio_click, "mute");
+        assert_eq!(settings.open_bookmark, "foreground");
+        assert_eq!(settings.tab_min_width, 260.0);
+        assert_eq!(settings.tab_scroll_speed, 12);
+        // Zero is the off position and is not a duration; anything else is a wait.
+        assert_eq!(settings.tab_hover_activate, 100);
+    }
+
+    #[test]
+    fn a_duration_that_was_off_stays_off() {
+        let mut settings = Settings {
+            tab_hover_activate: 0,
+            ..Settings::default()
+        };
+        settings.sanitize();
+        assert_eq!(
+            settings.tab_hover_activate, 0,
+            "a hover delay that is off must not become 100 ms"
+        );
     }
 
     #[test]

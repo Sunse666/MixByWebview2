@@ -178,8 +178,25 @@ tabStrip.after(stripRight);
 function syncStripScroll() {
   const more = tabStrip.scrollWidth - tabStrip.clientWidth;
   const left = tabStrip.scrollLeft;
-  stripLeft.hidden = more <= 1 || left <= 1;
-  stripRight.hidden = more <= 1 || left >= more - 1;
+  // The arrows are drawn only when the strip overflows AND the setting keeps them: a strip
+  // that fits needs neither, and a reader who turned them off never wants either.
+  const allowed = settings.tab_scroll_buttons !== false;
+  stripLeft.hidden = !allowed || more <= 1 || left <= 1;
+  stripRight.hidden = !allowed || more <= 1 || left >= more - 1;
+}
+
+/// The two tab settings that live in the stylesheet rather than in the layout code.
+///
+/// Both are read by `.tab`, which is built once per tab and never rebuilt, so they arrive as
+/// a custom property and a class on the body rather than as something the renderer applies
+/// to each element. Run at boot and again whenever the settings change.
+function applyTabShape() {
+  root.style.setProperty(
+    "--tab-min",
+    `${Math.round(Number(settings.tab_min_width) || 84)}px`,
+  );
+  document.body.classList.toggle("tabs-square", settings.tab_shape === "square");
+  syncStripScroll();
 }
 
 tabStrip.addEventListener("scroll", syncStripScroll, { passive: true });
@@ -187,8 +204,20 @@ tabStrip.addEventListener(
   "wheel",
   (event) => {
     if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
-    if (tabStrip.scrollWidth <= tabStrip.clientWidth) return;
     event.preventDefault();
+    // Two answers to the same gesture, and the setting decides which: walk the tabs, or
+    // scroll the strip. Scrolling is the default because the strip can be wider than the
+    // window and reaching a tab that is out of sight has to be possible somehow.
+    if (settings.tab_wheel_switch) {
+      const step = (event.deltaY > 0 ? 1 : -1) * Math.max(1, Number(settings.tab_scroll_speed) || 1);
+      const index = tabs.findIndex((tab) => tab.id === selected);
+      if (index >= 0 && tabs.length) {
+        const next = (index + step + tabs.length * 8) % tabs.length;
+        invoke("tab_select", { id: tabs[next].id }).catch(() => {});
+      }
+      return;
+    }
+    if (tabStrip.scrollWidth <= tabStrip.clientWidth) return;
     tabStrip.scrollLeft += event.deltaY;
     syncStripScroll();
   },
@@ -1253,6 +1282,9 @@ async function boot() {
   settings = await invoke("settings_get");
   setLanguage(settings.language || "en");
   applyStatic();
+  // Before the first strip is built: the shape and the minimum width are what the first
+  // measurement of that strip depends on.
+  applyTabShape();
 
   await listen("tabs:changed", (event) => {
     setTabs(event.payload);
@@ -1291,6 +1323,9 @@ async function boot() {
     // without a restart.
     setLanguage(settings.language || "en");
     applyStatic();
+    // Before the tabs are rebuilt, so the new shape and width are already in place when the
+    // first element measures itself.
+    applyTabShape();
     renderTabs();
     renderBookmarks(await invoke("bookmark_list"));
     renderToolbar(await invoke("ext_list"));
