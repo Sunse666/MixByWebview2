@@ -236,9 +236,6 @@ pub struct Settings {
     /// Every link opens in the background of the tab it was clicked from.
     #[serde(default)]
     pub tab_force_background: bool,
-    /// A popup window becomes a tab instead of a denial.
-    #[serde(default)]
-    pub tab_from_popup: bool,
     /// A pinned tab cannot be closed by a click or a shortcut, only from its menu.
     #[serde(default)]
     pub tab_pinned_menu_only: bool,
@@ -465,7 +462,6 @@ impl Default for Settings {
             tab_reuse_blank: true,
             tab_force_current: false,
             tab_force_background: false,
-            tab_from_popup: false,
             tab_pinned_menu_only: false,
             tab_small_inherit: true,
             tab_wheel_switch: false,

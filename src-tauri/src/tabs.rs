@@ -469,19 +469,12 @@ pub fn create(
         .incognito(incognito)
         .on_download(crate::downloads::handle)
         .on_new_window(move |url, _features| {
-            // A popup cannot be a window of its own here: a child webview has no browser
-            // chrome, so a second window would be a page with no way back. The setting is
-            // whether it becomes a tab at all - with it off the popup is simply denied, which
-            // is what a page that opens one has to cope with anyway.
-            let allowed = app
-                .try_state::<crate::ipc::AppState>()
-                .map(|state| state.settings.read().tab_from_popup)
-                .unwrap_or(false);
-            if allowed {
-                let _ = app.emit_to(owner.clone(), "ui:open-url", url.to_string());
-            } else {
-                crate::logging::info(&format!("popup refused: {url}"));
-            }
+            // A popup becomes a tab, always. A second window is not something this browser
+            // can offer - a child webview has no chrome of its own - so the choice is between
+            // a tab and nothing, and "nothing" is what a site expects least: a video on
+            // bilibili opens through `window.open`, and refusing it made the link do nothing
+            // at all, with no hint that anything had happened.
+            let _ = app.emit_to(owner.clone(), "ui:open-url", url.to_string());
             tauri::webview::NewWindowResponse::Deny
         })
         .initialization_script(custom_css_script())

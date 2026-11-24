@@ -152,7 +152,6 @@ export function buildTabs({ settings, invoke }) {
     switchRow("A new tab page opens links in itself", "tab_reuse_blank"),
     switchRow("Every link opens in the current tab", "tab_force_current"),
     switchRow("Every link opens in the background", "tab_force_background"),
-    switchRow("A popup opens as a tab", "tab_from_popup"),
     // The switch says "hide", the setting says "show": one of the two has to be inverted,
     // and the row's wording is what a reader looks for.
     row(
