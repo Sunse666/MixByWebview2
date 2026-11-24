@@ -255,7 +255,11 @@ pub struct Settings {
     #[serde(default = "default_tab_min_width")]
     pub tab_min_width: f64,
     /// Draw the small button that lists every tab.
-    #[serde(default = "default_true")]
+    ///
+    /// Off by default: a browser already shows its tabs in the strip, and an unexplained
+    /// glyph beside the new-tab button is worse than the feature is worth. It is here for a
+    /// strip too narrow to read, which is the case it was added for.
+    #[serde(default)]
     pub tab_list_button: bool,
     /// Draw the two scroll arrows beside the strip.
     #[serde(default = "default_true")]
@@ -468,7 +472,7 @@ impl Default for Settings {
             tab_close_warn: false,
             tab_shape: default_tab_shape(),
             tab_min_width: default_tab_min_width(),
-            tab_list_button: true,
+            tab_list_button: false,
             tab_scroll_buttons: true,
             tab_hover_activate: 0,
             tab_scroll_speed: default_tab_scroll_speed(),

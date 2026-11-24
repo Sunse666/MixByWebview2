@@ -1124,7 +1124,6 @@ async function bootAppMenu() {
     });
   }
 }
-}
 async function bootSuggest() {
   window.addEventListener("blur", () => invoke("overlay_close").catch(() => {}));
   window.addEventListener("keydown", (event) => {
