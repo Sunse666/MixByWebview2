@@ -167,7 +167,28 @@ pub async fn shortcut(
                 "open_extensions" => "http://tauri.localhost/pages/extensions.html".to_string(),
                 _ => "http://tauri.localhost/pages/downloads.html".to_string(),
             };
-            tab_new(app, window.clone(), state, Some(page), None, None).await?;
+            // Only the home page has a row of its own. The browser's own pages always open in
+            // a tab of their own: replacing the page a reader is on with one of the app's
+            // lists is not something any of those rows asked for.
+            let home_where = if action == "open_home" {
+                state.settings.read().open_home.clone()
+            } else {
+                String::new()
+            };
+            if home_where == "current" {
+                tab_navigate(app, window, state, page).await?;
+                return Ok(());
+            }
+            let background = home_where == "background";
+            tab_new(
+                app,
+                window.clone(),
+                state,
+                Some(page),
+                None,
+                if background { Some(true) } else { None },
+            )
+            .await?;
         }
         "translate" => {
             let target = selected_label(&state, &window);

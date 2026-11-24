@@ -41,6 +41,16 @@ fn gesture_setup() -> GestureSetup {
     GESTURES.read().clone().unwrap_or_default()
 }
 
+/// The browsing habits a page needs to know about.
+///
+/// Kept apart from the gesture setup because it is a different subject: these are things the
+/// page does with the pointer and the selection, not gestures the reader draws.
+static BROWSING: parking_lot::RwLock<Option<String>> = parking_lot::RwLock::new(None);
+
+fn browsing_config() -> String {
+    BROWSING.read().clone().unwrap_or_else(|| "{}".to_string())
+}
+
 /// Contents of UserData/custom.css, applied to every page.
 static CUSTOM_CSS: parking_lot::RwLock<Option<String>> = parking_lot::RwLock::new(None);
 
@@ -70,8 +80,8 @@ fn shortcut_prefix() -> String {
     let json = serde_json::to_string(&shortcut_map()).unwrap_or_else(|_| "{}".to_string());
     let gestures = gesture_setup();
     let out = format!(
-        "window.__mixShortcuts = {json};\nwindow.__mixGestures = {};\nwindow.__mixGestureConfig = {};\nwindow.__mixSuperDrag = {};\nwindow.__mixDragConfig = {};\n",
-        gestures.enabled, gestures.js, gestures.super_drag, gestures.drag_js
+        "window.__mixShortcuts = {json};\nwindow.__mixGestures = {};\nwindow.__mixGestureConfig = {};\nwindow.__mixSuperDrag = {};\nwindow.__mixDragConfig = {};\nwindow.__mixBrowsing = {};\n",
+        gestures.enabled, gestures.js, gestures.super_drag, gestures.drag_js, browsing_config()
     );
     out
 }
@@ -108,6 +118,11 @@ pub fn apply_settings(dirs: &AppDirs, settings: &crate::state::Settings) {
     });
     set_shortcuts(settings.shortcuts.clone());
     set_custom_css(build_custom_css(dirs, settings));
+    let browsing = serde_json::json!({
+        "autoscroll": settings.autoscroll,
+        "copyOnSelect": settings.copy_on_select,
+    });
+    *BROWSING.write() = Some(serde_json::to_string(&browsing).unwrap_or_else(|_| "{}".to_string()));
 }
 
 /// UserData/custom.css plus the font overrides from the settings.

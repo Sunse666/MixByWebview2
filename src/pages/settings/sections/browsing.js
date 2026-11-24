@@ -64,7 +64,21 @@ export function buildBrowsing({ settings, invoke }) {
 
   card.append(
     switchRow("Autoscroll with the middle button", "autoscroll"),
-    switchRow("A middle click pastes", "middle_click_paste"),
+    // Not offered as a switch. Pasting on a middle click needs the clipboard read from inside
+    // the page, and the command that reads it is deliberately reachable only from the app's
+    // own pages: a page that could read the clipboard could read it whenever it liked, not
+    // only when the reader pressed something. The row says what it would take instead of
+    // offering a switch that would do nothing.
+    row(
+      t("A middle click pastes"),
+      t("Not available: a page cannot read the clipboard without asking"),
+      (() => {
+        const note = document.createElement("span");
+        note.className = "card-note";
+        note.textContent = t("Not available");
+        return note;
+      })(),
+    ),
     switchRow("Copy the selection as soon as it is made", "copy_on_select"),
     switchRow("Say so when a page goes fullscreen", "fullscreen_hint"),
     switchRow("Say so when a video opens in its own window", "video_popup_hint"),

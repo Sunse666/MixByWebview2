@@ -275,6 +275,8 @@ const DICT = {
     "Browsing": "浏览",
     "Autoscroll with the middle button": "使用自动滚屏",
     "A middle click pastes": "单击中键粘贴",
+    "Not available": "暂不可用",
+    "Not available: a page cannot read the clipboard without asking": "暂不可用：网页不能未经询问读取剪贴板",
     "Copy the selection as soon as it is made": "自动复制选中文本",
     "Say so when a page goes fullscreen": "显示全屏提示",
     "Say so when a video opens in its own window": "显示视频独立窗口提示",

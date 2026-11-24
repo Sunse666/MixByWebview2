@@ -996,3 +996,90 @@
   window.__mixExtractArticle = extract;
 })();
 
+
+// Browsing habits: the things a reader expects from a desktop browser and notices when they
+// are missing. Each is off unless the settings say otherwise, because all three change what
+// a click or a selection does on every page.
+(function () {
+  var cfg = window.__mixBrowsing || {};
+  var tauri = window.__TAURI_INTERNALS__;
+  if (!tauri || !tauri.invoke) return;
+
+  var send = function (command, payload) {
+    return tauri.invoke(command, payload);
+  };
+
+  // --- copy on selection ---------------------------------------------------
+  // A selection that has settled is copied without a keystroke. Debounced, because a drag
+  // produces a selection in progress and copying each intermediate state would fill the
+  // clipboard with prefixes of the sentence the reader meant to take.
+  if (cfg.copyOnSelect) {
+    var copyTimer = null;
+    var lastCopied = "";
+    document.addEventListener("selectionchange", function () {
+      clearTimeout(copyTimer);
+      copyTimer = setTimeout(function () {
+        var text = String(window.getSelection ? window.getSelection() : "").trim();
+        if (!text || text === lastCopied || text.length > 20000) return;
+        // Never while the reader is typing: a selection inside an input is part of editing,
+        // and replacing the clipboard there would fight the field's own copy and paste.
+        var active = document.activeElement;
+        if (active && /^(INPUT|TEXTAREA)$/.test(active.tagName)) return;
+        lastCopied = text;
+        send("clipboard_write", { text: text }).catch(function () {});
+      }, 220);
+    });
+  }
+
+  // --- autoscroll ----------------------------------------------------------
+  // Hold the middle button and move: the page scrolls with the pointer, faster the further
+  // it is from where the press happened. Released by the button coming up anywhere.
+  if (cfg.autoscroll) {
+    var state = null;
+    var frame = null;
+
+    var stop = function () {
+      if (frame) cancelAnimationFrame(frame);
+      frame = null;
+      state = null;
+    };
+
+    var tick = function () {
+      if (!state) return;
+      // Distance from the anchor, squared off so small movements are gentle and large ones
+      // move quickly - the shape every autoscroll has.
+      var dx = state.x - state.anchorX;
+      var dy = state.y - state.anchorY;
+      var step = function (delta) {
+        if (Math.abs(delta) < 2) return 0;
+        var magnitude = Math.min(60, (Math.abs(delta) - 2) * 0.35);
+        return delta < 0 ? -magnitude : magnitude;
+      };
+      window.scrollBy(step(dx), step(dy));
+      frame = requestAnimationFrame(tick);
+    };
+
+    document.addEventListener("mousedown", function (event) {
+      if (event.button !== 1) return;
+      var target = event.target;
+      // A field, a link and anything editable keep their own middle-click meaning.
+      if (target && target.closest && target.closest("input, textarea, [contenteditable], a")) return;
+      event.preventDefault();
+      state = { anchorX: event.clientX, anchorY: event.clientY, x: event.clientX, y: event.clientY };
+      frame = requestAnimationFrame(tick);
+    }, true);
+
+    document.addEventListener("mousemove", function (event) {
+      if (!state) return;
+      state.x = event.clientX;
+      state.y = event.clientY;
+    }, true);
+
+    ["mouseup", "blur"].forEach(function (name) {
+      window.addEventListener(name, stop, true);
+    });
+    document.addEventListener("keydown", function (event) {
+      if (event.key === "Escape") stop();
+    }, true);
+  }
+})();

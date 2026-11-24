@@ -225,6 +225,26 @@ tabStrip.addEventListener(
 );
 window.addEventListener("resize", syncStripScroll);
 
+// Bound once, on the strip: see `watchHoverActivate` for why it is not per tab.
+watchHoverActivate();
+
+// A middle click on the empty part of the strip. Listened for on the strip and filtered to
+// the empty part, so a click on a tab keeps its own handler.
+tabStrip.addEventListener("auxclick", (event) => {
+  if (event.button !== 1) return;
+  if (event.target.closest && event.target.closest(".tab")) return;
+  event.preventDefault();
+  switch (settings.tab_middle_strip || "new_tab") {
+    case "close_others":
+      invoke("shortcut", { action: "close_other_tabs" }).catch(() => {});
+      break;
+    case "nothing":
+      break;
+    default:
+      invoke("tab_new", { url: null }).catch(() => {});
+  }
+});
+
 const tabNodes = new Map();
 
 /// Puts `el` at position `index` of the strip, moving it only when it is somewhere else.
@@ -240,6 +260,24 @@ function placeInStrip(el, index) {
   else tabStrip.append(el);
 }
 
+
+/// Opens a url the way one of the settings says that kind of link should open.
+///
+/// The four rows - bookmarks, the home button, search results, a typed address - share one
+/// question: foreground tab, background tab, or this tab. `tab_new` already takes a
+/// `background` flag, so the answer is turned into that plus the one case it cannot express:
+/// "the current tab" is a navigation rather than a new tab.
+///
+/// `kind` is the settings key, so a caller says where the link came from and nothing else.
+function openBy(kind, url, fallback = "foreground") {
+  const where = settings[kind] || fallback;
+  if (!url) return;
+  if (where === "current") {
+    invoke("tab_navigate", { url }).catch(() => {});
+    return;
+  }
+  invoke("tab_new", { url, background: where === "background" }).catch(() => {});
+}
 
 /// The tab as it is now: handlers outlive several updates.
 function tabById(id) {
@@ -622,7 +660,27 @@ function wireTab(el, id) {
   el.addEventListener("auxclick", (event) => {
     if (event.button !== 1) return;
     event.preventDefault();
-    invoke("tab_pin", { id, pinned: !tabById(id).pinned }).catch(() => {});
+    // What a middle click on a tab does. It used to pin, unconditionally, which is what the
+    // new row's default of "close" overrides - pinning is still reachable from the tab's own
+    // menu, and a reader who wants it back can pick it in the settings.
+    switch (settings.tab_middle_click || "close") {
+      case "reload": {
+        // `tab_nav` acts on the selected tab, so a reload of some other tab is a select
+        // followed by a reload. Asking for the reload of a tab the reader is not on is a
+        // request to look at it, which is what selecting it does.
+        const tab = tabById(id);
+        if (tab.id === selected) {
+          invoke("tab_nav", { action: "reload" }).catch(() => {});
+        } else if (tab.id) {
+          invoke("tab_select", { id }).then(() => invoke("tab_nav", { action: "reload" })).catch(() => {});
+        }
+        break;
+      }
+      case "nothing":
+        break;
+      default:
+        invoke("tab_close", { id }).catch(() => {});
+    }
   });
   el.addEventListener("contextmenu", (event) => {
     event.preventDefault();
@@ -673,7 +731,63 @@ function wireTab(el, id) {
       }
     });
   }
+  // Activating on hover is its own wait, independent of the preview card: a reader who wants
+  // tabs to follow the pointer usually wants no card, and the two delays answer different
+  // questions. Handled on the strip rather than on each element - see `watchHoverActivate` -
+  // because the elements are made once and a setting that turns this on afterwards would
+  // otherwise never reach the tabs that already exist.
 }
+
+/// Activates a tab the pointer has rested on, when the settings ask for it.
+///
+/// Listened for on the strip rather than on each tab: a tab element is made once and lives
+/// as long as the tab, so a handler bound inside `wireTab` would never see a setting that
+/// was turned on afterwards. The delay restarts on every move, so arriving on a tab is not
+/// the same as resting there.
+let hoverActivateTimer = null;
+let hoverActivateId = null;
+function watchHoverActivate() {
+  const stop = () => {
+    clearTimeout(hoverActivateTimer);
+    hoverActivateTimer = null;
+    hoverActivateId = null;
+  };
+  const start = (el) => {
+    const id = el.dataset.tab;
+    const delay = Number(settings.tab_hover_activate);
+    if (!id || !(delay > 0)) return;
+    if (id === selected) return;
+    stop();
+    hoverActivateId = id;
+    hoverActivateTimer = setTimeout(() => {
+      hoverActivateTimer = null;
+      const target = hoverActivateId;
+      hoverActivateId = null;
+      // Confirmed once more at the moment it fires: the pointer may have left, or the tab may
+      // have gone, during the wait.
+      if (target && target !== selected) invoke("tab_select", { id: target }).catch(() => {});
+    }, delay);
+  };
+
+  tabStrip.addEventListener("mouseover", (event) => {
+    const el = event.target.closest ? event.target.closest(".tab") : null;
+    if (!el) {
+      stop();
+      return;
+    }
+    // A move inside the same tab only restarts a wait that is actually running.
+    if (hoverActivateTimer && hoverActivateId === el.dataset.tab) return;
+    start(el);
+  });
+  tabStrip.addEventListener("mousemove", (event) => {
+    const el = event.target.closest ? event.target.closest(".tab") : null;
+    if (el && el.dataset.tab === hoverActivateId) return;
+    if (!el) stop();
+    else start(el);
+  });
+  tabStrip.addEventListener("mouseleave", stop);
+}
+
 
 /** 110ms of fade for a tab that has just appeared. */
 function enterStrip(el) {
@@ -1143,7 +1257,7 @@ function renderBookmarks(list) {
       const cap = Number(settings.bookmark_button_width);
       if (cap > 0) chip.style.maxWidth = `${cap}px`;
       chip.draggable = true;
-      chip.addEventListener("click", () => invoke("tab_new", { url: bookmark.url }));
+      chip.addEventListener("click", () => openBy("open_bookmark", bookmark.url));
       chip.addEventListener("dragstart", (event) => {
         draggingBookmark = bookmark.url;
         event.dataTransfer.effectAllowed = "move";
@@ -1499,7 +1613,23 @@ async function boot() {
   await listen("ui:new-tab", () => invoke("tab_new", {}));
   await listen("ui:open-url", (event) => invoke("tab_new", { url: event.payload }));
   await listen("url:commit", () => {
-    invoke("tab_navigate", { url: addressFor(urlInput.value) }).catch(flagBadUrl);
+    const text = urlInput.value;
+    // A typed address and a typed search are two different rows in the settings, and the
+    // bar is the one place that knows which of them this is: an address navigates somewhere
+    // known, a search asks a question.
+    const asAddress = looksLikeAddress(text);
+    const kind = asAddress ? "open_address" : "open_search";
+    const url = addressFor(text);
+    const where = settings[kind] || (asAddress ? "current" : "foreground");
+    if (where === "background") {
+      invoke("tab_new", { url, background: true }).catch(flagBadUrl);
+    } else if (where === "foreground" && asAddress) {
+      // A typed address that is meant to open in a new tab: a tab of its own is what the
+      // row asks for, not a navigation of the one in front.
+      invoke("tab_new", { url }).catch(flagBadUrl);
+    } else {
+      invoke("tab_navigate", { url }).catch(flagBadUrl);
+    }
     urlInput.blur();
   });
   await listen("url:cancel", () => {
