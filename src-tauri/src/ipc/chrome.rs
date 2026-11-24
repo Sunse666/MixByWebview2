@@ -313,6 +313,12 @@ pub async fn page_fullscreen(
             set.remove(&owner);
         }
     }
+    // The strip is hidden while a page is fullscreen, so the only thing that can tell a
+    // reader how to get out is a word from the browser itself. Sent only when the setting
+    // asks for it: a hint that appears every time is noise.
+    if on && state.settings.read().fullscreen_hint {
+        let _ = app.emit_to(&owner, "page:fullscreen", true);
+    }
     let _ = crate::window::relayout(&app, &owner);
     Ok(())
 }

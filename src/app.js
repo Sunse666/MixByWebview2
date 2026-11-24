@@ -196,6 +196,10 @@ function applyTabShape() {
     `${Math.round(Number(settings.tab_min_width) || 84)}px`,
   );
   document.body.classList.toggle("tabs-square", settings.tab_shape === "square");
+  // The list button is drawn or not, but the element stays: hiding it keeps the strip's
+  // layout from changing shape when the setting is toggled.
+  const listButton = document.getElementById("tab-list");
+  if (listButton) listButton.hidden = settings.tab_list_button === false;
   syncStripScroll();
 }
 
@@ -228,6 +232,30 @@ window.addEventListener("resize", syncStripScroll);
 // Bound once, on the strip: see `watchHoverActivate` for why it is not per tab.
 watchHoverActivate();
 
+// The all-tabs button: the same panel Ctrl+Shift+A opens, because a list of tabs is a list
+// of tabs whether it was asked for by a key or by a button.
+document.getElementById("tab-list")?.addEventListener("click", () => openSearchPanel("tab_search"));
+
+/// Closes every tab but the selected one, asking first when the settings say to.
+///
+/// The question is asked here rather than in the command: a command cannot show a dialog,
+/// and the count that makes the question worth asking is already known on this side.
+function closeOtherTabs() {
+  const others = tabs.filter((tab) => tab.id !== selected).length;
+  if (others < 2) {
+    invoke("shortcut", { action: "close_other_tabs" }).catch(() => {});
+    return;
+  }
+  if (settings.tab_close_warn) {
+    const asked = window.confirm(
+      t("Close {n} tabs?").replace("{n}", String(others)),
+    );
+    if (!asked) return;
+  }
+  invoke("shortcut", { action: "close_other_tabs" }).catch(() => {});
+}
+
+
 // A middle click on the empty part of the strip. Listened for on the strip and filtered to
 // the empty part, so a click on a tab keeps its own handler.
 tabStrip.addEventListener("auxclick", (event) => {
@@ -236,7 +264,7 @@ tabStrip.addEventListener("auxclick", (event) => {
   event.preventDefault();
   switch (settings.tab_middle_strip || "new_tab") {
     case "close_others":
-      invoke("shortcut", { action: "close_other_tabs" }).catch(() => {});
+      closeOtherTabs();
       break;
     case "nothing":
       break;
@@ -474,6 +502,19 @@ document.addEventListener("mousemove", onDragMove);
 document.addEventListener("mouseup", onDragEnd);
 
 /** Redraws the inside of a tab, keeping the element itself so drag and clicks live on. */
+/// What the speaker on a tab does when it is clicked.
+///
+/// Two answers, and the setting picks: silence the tab without leaving the page, or go to
+/// the tab that is making the noise. The second is what a reader wants when a video started
+/// in a tab they are not looking at; the first is what the icon looks like it does.
+function audioClick(id) {
+  if ((settings.tab_audio_click || "mute") === "activate") {
+    if (id !== selected) invoke("tab_select", { id }).catch(() => {});
+    return;
+  }
+  invoke("tab_mute", { id, muted: !Boolean(tabById(id).muted) }).catch(() => {});
+}
+
 /// Draws one tab, reusing the nodes it already has.
 ///
 /// Rebuilding the children on every update is what stopped a double click from closing a
@@ -541,7 +582,7 @@ function fillTab(el, tab) {
       audio.addEventListener("mousedown", (event) => event.stopPropagation());
       audio.addEventListener("click", (event) => {
         event.stopPropagation();
-        invoke("tab_mute", { id: tab.id, muted: !Boolean(tabById(tab.id).muted) });
+        audioClick(tab.id);
       });
     }
     audio.className = "tab-audio" + (silenced ? " is-muted" : "");
@@ -1672,7 +1713,25 @@ async function boot() {
   await listen("ui:palette", () => openPalette());
   await listen("ui:tab-search", () => openTabSearch());
   await listen("ui:new-tab", () => invoke("tab_new", {}));
-  await listen("ui:open-url", (event) => invoke("tab_new", { url: event.payload }));
+  await listen("page:fullscreen", () => {
+    // The strip is gone, so the toast is the only place this can be said.
+    showToast(t("Press Esc or F11 to leave fullscreen"));
+  });
+  await listen("ui:open-url", (event) => {
+    const url = event.payload;
+    // A link opened from a tab that is still on the new tab page belongs in that tab: the
+    // page was opened to be used, and leaving an empty new tab behind is what a reader
+    // notices. `tab_reuse_blank` turns that off for anyone who wants a new tab every time.
+    const here = tabById(selected);
+    const blank =
+      settings.tab_reuse_blank !== false &&
+      (!here.id || /\/pages\/newtab\.html(?:[?#]|$)/.test(here.url || ""));
+    if (blank && here.id) {
+      invoke("tab_navigate", { url }).catch(() => {});
+      return;
+    }
+    invoke("tab_new", { url }).catch(() => {});
+  });
   await listen("url:commit", () => {
     const text = urlInput.value;
     // A typed address and a typed search are two different rows in the settings, and the
