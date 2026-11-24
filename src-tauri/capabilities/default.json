@@ -130,6 +130,7 @@
     "allow-article-get",
     "allow-context-menu",
     "allow-bar-reveal",
+    "allow-video-pip",
     "allow-snap",
     "allow-settings-get",
     "allow-font-list",

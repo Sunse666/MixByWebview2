@@ -190,6 +190,23 @@
   });
 })();
 
+// Picture-in-picture.
+//
+// The small window belongs to the platform, so a page can only say that it happened - which
+// is all the browser needs to say something back. Both APIs are watched: the element one, and
+// the document one a newer engine offers.
+(function () {
+  var tauri = window.__TAURI_INTERNALS__;
+  if (!tauri || !tauri.invoke) return;
+  var send = function () {
+    tauri.invoke("video_pip", {}).catch(function () {});
+  };
+  document.addEventListener("enterpictureinpicture", send);
+  if ("documentPictureInPicture" in window && window.documentPictureInPicture) {
+    window.documentPictureInPicture.addEventListener("enter", send);
+  }
+})();
+
 // WebView2's own error page.
 (function () {
   var check = function () {

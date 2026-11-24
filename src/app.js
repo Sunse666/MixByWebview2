@@ -1778,6 +1778,11 @@ async function boot() {
     const payload = event.payload || {};
     onBarReveal(Boolean(payload.inside), Number(payload.delay) || 0);
   });
+  await listen("video:pip", () => {
+    // The small window is the platform's; the browser can only say that it opened, so that a
+    // video which has gone quiet in its tab is not mistaken for one that stopped.
+    showToast(t("The video is now in picture-in-picture"));
+  });
   await listen("ui:open-url", (event) => {
     const url = event.payload;
     // A link opened from a tab that is still on the new tab page belongs in that tab: the

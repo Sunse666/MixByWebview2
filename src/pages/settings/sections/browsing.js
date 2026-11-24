@@ -81,8 +81,23 @@ export function buildBrowsing({ settings, invoke }) {
     ),
     switchRow("Copy the selection as soon as it is made", "copy_on_select"),
     switchRow("Say so when a page goes fullscreen", "fullscreen_hint"),
-    switchRow("Say so when a video opens in its own window", "video_popup_hint"),
-    switchRow("Put that window back where it was left", "remember_popup_position"),
+    // Picture-in-Picture is the engine's, not this browser's: a page asks for it from inside a
+    // click or a key it receives, and `requestPictureInPicture` refuses to start from a script
+    // - measured on this build: `NotAllowedError ... Must be handling a user gesture`. So the
+    // hint is the whole of what this browser can add.
+    switchRow("Say so when a video goes into picture-in-picture", "video_popup_hint"),
+    // Not offered, and not because of a missing call: the small window is drawn by the
+    // platform, outside every window this process owns, so its position cannot be read or set.
+    row(
+      t("Put the video window back where it was left"),
+      t("Not available: picture-in-picture is drawn by the system"),
+      (() => {
+        const note = document.createElement("span");
+        note.className = "card-note";
+        note.textContent = t("Not available");
+        return note;
+      })(),
+    ),
     row(
       t("Draw everything at 96 dpi"),
       t("Ignores the display's scaling; applies after a restart"),

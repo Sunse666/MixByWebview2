@@ -278,6 +278,7 @@ fn main() {
             ipc::article_get,
             ipc::context_menu,
             ipc::bar_reveal,
+            ipc::video_pip,
             ipc::snap,
             ipc::settings_get,
             ipc::font_list,

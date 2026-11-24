@@ -147,6 +147,7 @@ fn main() {
         "article_get",
         "context_menu",
         "bar_reveal",
+        "video_pip",
         "snap",
         "settings_get",
         "font_list",

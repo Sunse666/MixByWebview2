@@ -33,6 +33,7 @@
     "allow-url-type",
     "allow-url-key",
     "allow-bar-reveal",
+    "allow-video-pip",
     "allow-context-menu",
     "allow-permission-request",
     "allow-permission-poll"

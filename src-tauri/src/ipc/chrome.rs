@@ -284,6 +284,25 @@ pub async fn bar_reveal(
     Ok(())
 }
 
+/// Reported by a page when one of its videos goes into picture-in-picture.
+///
+/// Nothing to do but say so: the small window is drawn by the platform, outside every window
+/// this process owns, so the browser can neither place it nor read where it is. What it can
+/// do is tell the reader that the video is still playing somewhere they may not be looking.
+#[tauri::command]
+pub async fn video_pip(
+    app: AppHandle,
+    webview: tauri::Webview,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    if !state.settings.read().video_popup_hint {
+        return Ok(());
+    }
+    let owner = window_of_tab(webview.label()).to_string();
+    let _ = app.emit_to(&owner, "video:pip", ());
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn snap(app: AppHandle, direction: String) -> Result<(), AppError> {
     let dir = match direction.as_str() {
