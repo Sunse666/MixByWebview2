@@ -369,6 +369,14 @@ pub struct Settings {
     /// Say so when a video opens in a window of its own.
     #[serde(default = "default_true")]
     pub video_popup_hint: bool,
+    /// Draw a button over a playing video that moves it into picture-in-picture.
+    ///
+    /// The button lives in the page rather than in the strip, and that is the whole reason it
+    /// can work: picture-in-picture may only be started from inside a trusted gesture, and a
+    /// click on the strip is a different webview's - the engine refuses it. A button injected
+    /// into the page is clicked inside the page.
+    #[serde(default = "default_true")]
+    pub video_pip_button: bool,
     /// Put a video's popup window back where it was moved to.
     #[serde(default)]
     pub remember_popup_position: bool,
@@ -515,6 +523,7 @@ impl Default for Settings {
             copy_on_select: true,
             fullscreen_hint: true,
             video_popup_hint: true,
+            video_pip_button: true,
             remember_popup_position: false,
             ignore_system_dpi: false,
             eye_comfort: false,

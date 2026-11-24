@@ -125,6 +125,7 @@ pub fn apply_settings(dirs: &AppDirs, settings: &crate::state::Settings) {
         "forceBackground": settings.tab_force_background,
         "revealEdge": settings.bookmark_reveal_edge,
         "revealDelay": settings.bookmark_reveal_delay,
+        "pipButton": settings.video_pip_button,
     });
     *BROWSING.write() = Some(serde_json::to_string(&browsing).unwrap_or_else(|_| "{}".to_string()));
 }

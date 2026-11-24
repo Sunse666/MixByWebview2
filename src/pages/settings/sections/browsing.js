@@ -81,10 +81,11 @@ export function buildBrowsing({ settings, invoke }) {
     ),
     switchRow("Copy the selection as soon as it is made", "copy_on_select"),
     switchRow("Say so when a page goes fullscreen", "fullscreen_hint"),
-    // Picture-in-Picture is the engine's, not this browser's: a page asks for it from inside a
-    // click or a key it receives, and `requestPictureInPicture` refuses to start from a script
-    // - measured on this build: `NotAllowedError ... Must be handling a user gesture`. So the
-    // hint is the whole of what this browser can add.
+    // The button lives in the page, not on the strip, and that is the only shape this can
+    // take: picture-in-picture may only start inside a trusted click, and a click on the strip
+    // belongs to a different webview - the engine refuses it. A button injected into the page
+    // is clicked inside the page, so the engine allows it.
+    switchRow("A button on a playing video opens picture-in-picture", "video_pip_button"),
     switchRow("Say so when a video goes into picture-in-picture", "video_popup_hint"),
     // Not offered, and not because of a missing call: the small window is drawn by the
     // platform, outside every window this process owns, so its position cannot be read or set.
