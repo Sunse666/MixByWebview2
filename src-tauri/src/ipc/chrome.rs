@@ -259,6 +259,31 @@ pub async fn permission_forget(
     Ok(())
 }
 
+/// Told by a page that the pointer reached, or left, the window's left edge.
+///
+/// The bookmarks bar is the strip's business, so this only forwards the news: the strip knows
+/// whether the setting is on, how long to wait and when to hide again. A page cannot ask for
+/// the bar to appear without the pointer actually being at the edge, because the position it
+/// reports is its own - but the command does not trust the position either, only the crossing.
+#[tauri::command]
+pub async fn bar_reveal(
+    app: AppHandle,
+    _webview: tauri::Webview,
+    window: tauri::Window,
+    inside: bool,
+    delay: u32,
+) -> Result<(), AppError> {
+    let _ = app.emit_to(
+        window.label(),
+        "bar:reveal",
+        serde_json::json!({
+            "inside": inside,
+            "delay": delay,
+        }),
+    );
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn snap(app: AppHandle, direction: String) -> Result<(), AppError> {
     let dir = match direction.as_str() {

@@ -32,6 +32,7 @@
     "allow-tab-scroll",
     "allow-url-type",
     "allow-url-key",
+    "allow-bar-reveal",
     "allow-context-menu",
     "allow-permission-request",
     "allow-permission-poll"

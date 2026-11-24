@@ -129,6 +129,7 @@
     "allow-article-ready",
     "allow-article-get",
     "allow-context-menu",
+    "allow-bar-reveal",
     "allow-snap",
     "allow-settings-get",
     "allow-font-list",

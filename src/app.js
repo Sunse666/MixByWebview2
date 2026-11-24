@@ -236,6 +236,58 @@ watchHoverActivate();
 // of tabs whether it was asked for by a key or by a button.
 document.getElementById("tab-list")?.addEventListener("click", () => openSearchPanel("tab_search"));
 
+/// Whether the bookmarks bar is out because the pointer reached the left edge.
+///
+/// A second way for the bar to be shown, on top of `bookmark_bar_mode`: that setting says
+/// whether the bar is part of the strip, this says it may also slide out on demand. The two
+/// are independent - a reader who hides the bar and reveals it at the edge is the reader
+/// this is for.
+let barRevealed = false;
+let barHideTimer = null;
+
+/// Called from the page, through `bar_reveal`, when the pointer crosses into or out of the
+/// left edge.
+function onBarReveal(inside, delay) {
+  if (!(Number(settings.bookmark_reveal_edge) > 0)) return;
+  clearTimeout(barHideTimer);
+  if (inside) {
+    if (barRevealed) return;
+    // The walk to the edge is a movement, not a rest: the wait is what keeps brushing past
+    // the edge from pulling the strip open.
+    barHideTimer = setTimeout(() => {
+      barHideTimer = null;
+      barRevealed = true;
+      renderBookmarks(lastBookmarks);
+    }, Math.max(0, Number(delay) || 0));
+    return;
+  }
+  if (!barRevealed) return;
+  barHideTimer = setTimeout(() => {
+    barHideTimer = null;
+    barRevealed = false;
+    renderBookmarks(lastBookmarks);
+  }, Math.max(0, Number(settings.bookmark_hide_delay) || 0));
+}
+
+// Holding the pointer over the strip keeps a revealed bar out. Without this the row would
+// slide away again while the reader is reaching for it: the page stops reporting the edge
+// the moment they leave it, and the strip they are aiming at is above the page.
+for (const id of ["titlebar", "addressbar", "bookmarks"]) {
+  const el = document.getElementById(id);
+  if (!el) continue;
+  el.addEventListener("pointerenter", () => clearTimeout(barHideTimer));
+  el.addEventListener("pointerleave", () => {
+    if (!barRevealed) return;
+    clearTimeout(barHideTimer);
+    barHideTimer = setTimeout(() => {
+      barHideTimer = null;
+      barRevealed = false;
+      renderBookmarks(lastBookmarks);
+    }, Math.max(0, Number(settings.bookmark_hide_delay) || 0));
+  });
+}
+
+
 /// Closes every tab but the selected one, asking first when the settings say to.
 ///
 /// The question is asked here rather than in the command: a command cannot show a dialog,
@@ -1239,7 +1291,12 @@ function renderBookmarks(list) {
   // chrome height.
   const mode = settings.bookmark_bar_mode || (settings.show_bookmarks ? "always" : "never");
   const reveals = mode === "address" && urlEditActive;
-  bar.hidden = !(mode === "always" || reveals);
+  // Three ways for the row to be out: the setting keeps it there, the address bar has the
+  // keyboard and the setting says so, or the pointer reached the left edge and it slid out.
+  // A new tab page may also ask for it, which is the last setting in this group.
+  const here = tabById(selected);
+  const onBlank = settings.bookmark_bar_newtab && /\/pages\/newtab\.html(?:[?#]|$)/.test(here.url || "");
+  bar.hidden = !(mode === "always" || reveals || barRevealed || onBlank);
   fitStrip();
   if (bar.hidden) return;
 
@@ -1716,6 +1773,10 @@ async function boot() {
   await listen("page:fullscreen", () => {
     // The strip is gone, so the toast is the only place this can be said.
     showToast(t("Press Esc or F11 to leave fullscreen"));
+  });
+  await listen("bar:reveal", (event) => {
+    const payload = event.payload || {};
+    onBarReveal(Boolean(payload.inside), Number(payload.delay) || 0);
   });
   await listen("ui:open-url", (event) => {
     const url = event.payload;

@@ -1009,6 +1009,31 @@
     return tauri.invoke(command, payload);
   };
 
+  // --- the bar revealed at the left edge ------------------------------------
+  // The pointer touching the window's left edge brings the bookmarks bar out. Only the
+  // crossing is reported, not every move: the wait and the hiding are the strip's business,
+  // and a message per mousemove would be one ipc call per pixel.
+  if (cfg.revealEdge > 0) {
+    // `wasInside` starts false because the pointer starts outside the edge. Only a change of
+    // that answer is worth a message.
+    var wasInside = false;
+    document.addEventListener("mousemove", function (event) {
+      var inside = event.clientX <= Number(cfg.revealEdge);
+      if (inside === wasInside) return;
+      wasInside = inside;
+      send("bar_reveal", {
+        inside: inside,
+        delay: Number(cfg.revealDelay) || 0
+      }).catch(function () {});
+    }, { passive: true });
+    // Leaving the window entirely is also leaving the edge.
+    window.addEventListener("mouseout", function (event) {
+      if (event.relatedTarget) return;
+      if (!wasInside) return;
+      wasInside = false;
+      send("bar_reveal", { inside: false, delay: 0 }).catch(function () {});
+    });
+  }
   // --- where a link opens --------------------------------------------------
   // A page decides where a link goes: a new tab, a named window, the same tab. Two settings
   // override that decision, and they are the pair a reader turns on when a site insists on

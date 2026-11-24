@@ -146,6 +146,7 @@ fn main() {
         "article_ready",
         "article_get",
         "context_menu",
+        "bar_reveal",
         "snap",
         "settings_get",
         "font_list",

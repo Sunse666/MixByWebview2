@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-bar-reveal"
+description = "Enables the bar_reveal command without any pre-configured scope."
+commands.allow = ["bar_reveal"]
+
+[[permission]]
+identifier = "deny-bar-reveal"
+description = "Denies the bar_reveal command without any pre-configured scope."
+commands.deny = ["bar_reveal"]
