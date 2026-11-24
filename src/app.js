@@ -1224,9 +1224,68 @@ function renderBookmarks(list) {
       })
     : [];
 
+  // A folder becomes one button that opens its contents, and the pages that are in no
+  // folder stay as buttons of their own. The folder's position is the position of its first
+  // page, so arranging a bar by dragging still works: the folders and the loose pages are
+  // interleaved the way the bookmark list is, not split into two runs.
+  const barOrder = [];
+  const foldersSeen = new Map();
+  items.forEach((bookmark) => {
+    const folder = bookmark.folder || "";
+    if (!folder) {
+      barOrder.push({ kind: "page", bookmark });
+      return;
+    }
+    if (!foldersSeen.has(folder)) {
+      foldersSeen.set(folder, []);
+      barOrder.push({ kind: "folder", folder, members: foldersSeen.get(folder) });
+    }
+    foldersSeen.get(folder).push(bookmark);
+  });
+
   bar.replaceChildren(
     ...groupChips,
-    ...items.map((bookmark, index) => {
+    ...barOrder.map((entry) => {
+      if (entry.kind === "folder") {
+        const button = document.createElement("button");
+        button.className = "bookmark folder-chip";
+        const name = document.createElement("span");
+        name.className = "folder-name";
+        name.textContent = entry.folder;
+        const tally = document.createElement("span");
+        tally.className = "folder-count";
+        tally.textContent = String(entry.members.length);
+        button.append(name, tally);
+        button.title = entry.members.map((mark) => mark.title || mark.url).join("\n");
+        const cap = Number(settings.bookmark_button_width);
+        if (cap > 0) button.style.maxWidth = `${cap}px`;
+        button.addEventListener("click", (event) => {
+          const box = button.getBoundingClientRect();
+          const where = settings.open_bookmark || "foreground";
+          invoke("overlay_open_at", {
+            kind:
+              "bookmark_menu&folder=" +
+              encodeURIComponent(entry.folder) +
+              "&where=" +
+              encodeURIComponent(where),
+            x: Math.round(box.left),
+            y: Math.round(box.bottom + 2),
+          }).catch(() => {});
+          event.stopPropagation();
+        });
+        // A folder has no address of its own, so the middle click opens every page in it -
+        // which is what the setting says when it is on, and does nothing when it is not.
+        button.addEventListener("auxclick", (event) => {
+          if (event.button !== 1) return;
+          event.preventDefault();
+          if (settings.bookmark_folder_middle_click === false) return;
+          for (const mark of entry.members) {
+            invoke("tab_new", { url: mark.url, background: true }).catch(() => {});
+          }
+        });
+        return button;
+      }
+      const bookmark = entry.bookmark;
       const chip = document.createElement("button");
       chip.className = "bookmark";
       // Icons without names is what a reader wants when the bar holds twenty pages: the
@@ -1279,7 +1338,9 @@ function renderBookmarks(list) {
         chip.classList.remove("drop-target");
         const source = draggingBookmark;
         if (!source || source === bookmark.url) return;
-        invoke("bookmark_move", { from: source, to: index }).catch(() => {});
+        // The index is the page's position in the bookmark list, not in the bar: a folder
+        // stands for several entries, so the two do not line up any more.
+        invoke("bookmark_move", { from: source, to: items.indexOf(bookmark) }).catch(() => {});
       });
       return chip;
     }),

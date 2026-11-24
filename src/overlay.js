@@ -1937,6 +1937,61 @@ async function bootChromeMenu(kind) {
     return;
   }
 
+  // The contents of one folder of the bookmarks bar.
+  //
+  // The bar draws a folder as one button, and this is what that button opens: the pages the
+  // folder holds, in the order the bar would have drawn them. Entries are ordinary rows so a
+  // list of twenty is readable, and each one opens through the same setting the bar uses.
+  if (kind === "bookmark") {
+    const folder = params.get("folder") || "";
+    const marks = (await invoke("bookmark_list").catch(() => [])) || [];
+    const inside = marks.filter((mark) => (mark.folder || "") === folder);
+    if (!inside.length) {
+      const note = document.createElement("div");
+      note.className = "menu-note";
+      note.textContent = t("This folder is empty.");
+      menu.append(note);
+      return;
+    }
+    // A heading with the folder's name, and its count, so a column of rows says which list
+    // it is without the reader having to remember which button they pressed.
+    const head = document.createElement("div");
+    head.className = "menu-header";
+    const label = document.createElement("span");
+    label.textContent = folder || t("Bookmarks");
+    const tally = document.createElement("span");
+    tally.className = "hint";
+    tally.textContent = String(inside.length);
+    head.append(label, tally);
+    menu.append(head);
+
+    for (const mark of inside) {
+      const row = document.createElement("button");
+      row.className = "row";
+      row.title = mark.url;
+      const icon = document.createElement("span");
+      icon.className = "ico";
+      icon.textContent = (hostOf(mark.url)[0] || "?").toUpperCase();
+      const text = document.createElement("span");
+      text.className = "label";
+      text.textContent = mark.title || mark.url;
+      row.append(icon, text);
+      row.addEventListener("click", async () => {
+        const where = params.get("where") || "foreground";
+        if (where === "current") {
+          await invoke("tab_navigate", { url: mark.url }).catch(() => {});
+        } else {
+          await invoke("tab_new", { url: mark.url, background: where === "background" }).catch(
+            () => {},
+          );
+        }
+        await invoke("overlay_close").catch(() => {});
+      });
+      menu.append(row);
+    }
+    return;
+  }
+
   if (kind === "tab") {
     const context = await invoke("menu_context_get").catch(() => null);
     const id = context && context.tab;
@@ -2176,6 +2231,10 @@ async function bootPanel() {
   }
   if (kind === "tab_menu") {
     await bootChromeMenu("tab");
+    return;
+  }
+  if (kind === "bookmark_menu") {
+    await bootChromeMenu("bookmark");
     return;
   }
   if (kind === "ext_info") {

@@ -272,6 +272,7 @@ const DICT = {
     "No extensions loaded. Drop an MV3 extension into crx/ and restart.": "没有加载扩展。把 MV3 扩展放进 crx/ 后重启。",
     "All downloads": "全部下载",
     "Bookmark manager": "书签管理器",
+    "This folder is empty.": "这个文件夹是空的。",
     "Browsing": "浏览",
     "Autoscroll with the middle button": "使用自动滚屏",
     "A middle click pastes": "单击中键粘贴",

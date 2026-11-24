@@ -751,3 +751,31 @@ body.tab-dragging, body.tab-dragging * {
      says "still working" better than a fixed line. */
   transition: opacity 120ms ease, width 6s cubic-bezier(0.1, 0.8, 0.2, 1);
 }
+
+/* A folder on the bookmarks bar: the name, then how many pages it holds. The count sits in
+   its own box so a folder reads as a set rather than as a bookmark with a number stuck to
+   the end of its name - the same shape the tab-group chip uses. */
+.bookmark.folder-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 200px;
+}
+
+.bookmark.folder-chip .folder-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bookmark.folder-chip .folder-count {
+  flex: 0 0 auto;
+  min-width: 14px;
+  padding: 0 4px;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--text) 14%, transparent);
+  font-size: 10px;
+  line-height: 14px;
+  text-align: center;
+  opacity: 0.75;
+}

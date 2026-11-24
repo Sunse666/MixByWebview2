@@ -85,6 +85,9 @@ pub fn initial_size(kind: &str) -> (f64, f64) {
         "context_menu" => (250.0, 184.0),
         "url_menu" => (190.0, 150.0),
         "tab_menu" => (200.0, 224.0),
+        // One folder of the bookmarks bar: wide enough for a page title, tall enough for a
+        // dozen rows before it scrolls.
+        "bookmark_menu" => (260.0, 320.0),
         "chrome_menu" => (190.0, 110.0),
         "group_menu" => (214.0, 138.0),
         "downloads" => (360.0, 320.0),
