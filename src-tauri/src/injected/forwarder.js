@@ -1009,6 +1009,38 @@
     return tauri.invoke(command, payload);
   };
 
+  // --- where a link opens --------------------------------------------------
+  // A page decides where a link goes: a new tab, a named window, the same tab. Two settings
+  // override that decision, and they are the pair a reader turns on when a site insists on
+  // opening everything in a tab they did not want. Only the two "new tab" answers are
+  // intercepted; a link that would replace the page it is on already does what the current-tab
+  // answer would ask for.
+  if (cfg.forceCurrent || cfg.forceBackground) {
+    var hijack = function (event) {
+      if (event.defaultPrevented) return;
+      if (event.button !== undefined && event.button !== 0) return;
+      // A modified click is the reader asking for something specific.
+      if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+      var anchor = event.target && event.target.closest ? event.target.closest("a[href]") : null;
+      if (!anchor) return;
+      var target = String(anchor.getAttribute("target") || "").toLowerCase();
+      var href = anchor.href;
+      if (!href || !/^https?:/i.test(href)) return;
+      var opensElsewhere = target && target !== "_self" && target !== "_top" && target !== "_parent";
+      if (!opensElsewhere) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (cfg.forceCurrent) {
+        location.href = href;
+        return;
+      }
+      // `drag_action` is what a page is allowed to ask for: `tab_new` is reachable only
+      // from the app's own pages, so a site could not call it even from here.
+      send("drag_action", { kind: "open", url: href, background: true }).catch(function () {});
+    };
+    document.addEventListener("click", hijack, true);
+    document.addEventListener("auxclick", hijack, true);
+  }
   // --- copy on selection ---------------------------------------------------
   // A selection that has settled is copied without a keystroke. Debounced, because a drag
   // produces a selection in progress and copying each intermediate state would fill the

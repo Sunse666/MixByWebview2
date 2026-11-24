@@ -178,7 +178,7 @@ pub async fn tab_new(
         core.tick += 1;
         let tick = core.tick;
         let previous = core.selected.clone();
-        core.tabs.push(Tab {
+        let fresh = Tab {
             id: id.clone(),
             url: target.clone(),
             // Left empty on purpose: the ui names a tab that has not loaded yet, in
@@ -192,7 +192,15 @@ pub async fn tab_new(
             scroll: 0.0,
             alive: true,
             last_active: tick,
-        });
+        };
+        // Where the new tab goes. A pinned tab always starts at the front, because the front
+        // section is what "pinned" means; the setting only decides among the ordinary ones.
+        let place = state.settings.read().tab_new_position.clone();
+        let at = crate::tabs::insertion_point(&core.tabs, &core.groups, &previous, &place);
+        match at {
+            Some(index) if index <= core.tabs.len() => core.tabs.insert(index, fresh),
+            _ => core.tabs.push(fresh),
+        }
         core.selected = Some(id.clone());
         touch_mru(&mut core.mru, &id);
         (id, target, previous)

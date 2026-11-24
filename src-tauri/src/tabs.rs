@@ -121,6 +121,8 @@ pub fn apply_settings(dirs: &AppDirs, settings: &crate::state::Settings) {
     let browsing = serde_json::json!({
         "autoscroll": settings.autoscroll,
         "copyOnSelect": settings.copy_on_select,
+        "forceCurrent": settings.tab_force_current,
+        "forceBackground": settings.tab_force_background,
     });
     *BROWSING.write() = Some(serde_json::to_string(&browsing).unwrap_or_else(|_| "{}".to_string()));
 }
@@ -467,7 +469,19 @@ pub fn create(
         .incognito(incognito)
         .on_download(crate::downloads::handle)
         .on_new_window(move |url, _features| {
-            let _ = app.emit_to(owner.clone(), "ui:open-url", url.to_string());
+            // A popup cannot be a window of its own here: a child webview has no browser
+            // chrome, so a second window would be a page with no way back. The setting is
+            // whether it becomes a tab at all - with it off the popup is simply denied, which
+            // is what a page that opens one has to cope with anyway.
+            let allowed = app
+                .try_state::<crate::ipc::AppState>()
+                .map(|state| state.settings.read().tab_from_popup)
+                .unwrap_or(false);
+            if allowed {
+                let _ = app.emit_to(owner.clone(), "ui:open-url", url.to_string());
+            } else {
+                crate::logging::info(&format!("popup refused: {url}"));
+            }
             tauri::webview::NewWindowResponse::Deny
         })
         .initialization_script(custom_css_script())
@@ -640,9 +654,121 @@ pub fn create(
     Ok(webview)
 }
 
+/// Where a new tab belongs in the strip, given the setting and the tab it was opened from.
+///
+/// `None` means "at the end". The two grouped answers depend on the anchor tab: right of it,
+/// or right of the last member of its group. Both fall back to the anchor's own position, so
+/// a group setting on a tab that belongs to no group behaves like the plain one.
+///
+/// Split out of `tab_new` so the arithmetic can be tested without a window: the command needs
+/// an app handle, a window and a webview to do anything, and the question here is only where
+/// an index goes.
+pub(crate) fn insertion_point(
+    tabs: &[Tab],
+    groups: &[crate::ipc::TabGroup],
+    anchor: &Option<String>,
+    place: &str,
+) -> Option<usize> {
+    if place == "at_end" {
+        return None;
+    }
+    let anchor_at = tabs
+        .iter()
+        .position(|tab| Some(&tab.id) == anchor.as_ref())?;
+    if place == "after_group" {
+        let members: Vec<&str> = groups
+            .iter()
+            .find(|group| group.members.iter().any(|id| Some(id) == anchor.as_ref()))
+            .map(|group| group.members.iter().map(String::as_str).collect())
+            .unwrap_or_default();
+        if !members.is_empty() {
+            // The last member as the strip stands, not as the group lists it: a member can
+            // have been dragged elsewhere, and the new tab belongs next to where the group
+            // actually ends.
+            let last = tabs
+                .iter()
+                .enumerate()
+                .filter(|(_, tab)| members.contains(&tab.id.as_str()))
+                .map(|(index, _)| index)
+                .max()
+                .unwrap_or(anchor_at);
+            return Some(last + 1);
+        }
+    }
+    Some(anchor_at + 1)
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{foreign_scheme, proxy_label, scheme_allowed};
+    use super::{foreign_scheme, insertion_point, proxy_label, scheme_allowed, Tab};
+    use crate::ipc::TabGroup;
+
+    /// A tab with nothing but an id: the only field the placement question looks at.
+    fn tab(id: &str) -> Tab {
+        Tab {
+            id: id.to_string(),
+            url: format!("https://{id}.test/"),
+            title: id.to_string(),
+            zoom: 1.0,
+            pinned: false,
+            incognito: false,
+            icon: None,
+            loading: false,
+            scroll: 0.0,
+            alive: true,
+            last_active: 0,
+        }
+    }
+
+    fn strip(ids: &[&str]) -> Vec<Tab> {
+        ids.iter().map(|id| tab(id)).collect()
+    }
+
+    fn group(id: &str, members: &[&str]) -> TabGroup {
+        TabGroup {
+            id: id.to_string(),
+            name: id.to_string(),
+            color: "#4c8dff".to_string(),
+            collapsed: false,
+            members: members.iter().map(|m| m.to_string()).collect(),
+        }
+    }
+
+    #[test]
+    fn a_new_tab_goes_where_the_setting_says() {
+        let tabs = strip(&["a", "b", "c"]);
+        let anchor = Some("b".to_string());
+
+        // Right of the tab it was opened from.
+        assert_eq!(
+            insertion_point(&tabs, &[], &anchor, "after_current"),
+            Some(2)
+        );
+        // At the end, which is not an index: the caller pushes.
+        assert_eq!(insertion_point(&tabs, &[], &anchor, "at_end"), None);
+        // An anchor that is not in the strip: the same as "at the end" rather than a panic.
+        assert_eq!(
+            insertion_point(&tabs, &[], &Some("gone".to_string()), "after_current"),
+            None
+        );
+    }
+
+    #[test]
+    fn a_group_setting_lands_after_the_group_and_not_after_the_anchor() {
+        // c is the anchor and sits second, but the group ends at e.
+        let tabs = strip(&["a", "c", "d", "e", "f"]);
+        let groups = vec![group("g1", &["c", "e"])];
+        assert_eq!(
+            insertion_point(&tabs, &groups, &Some("c".to_string()), "after_group"),
+            Some(4),
+            "right of the last member, not right of the anchor"
+        );
+        // A tab in no group: the group answer falls back to the plain one.
+        assert_eq!(
+            insertion_point(&tabs, &groups, &Some("a".to_string()), "after_group"),
+            Some(1)
+        );
+    }
 
     #[test]
     fn the_web_keeps_its_own_schemes() {
