@@ -273,6 +273,8 @@ const DICT = {
     "All downloads": "全部下载",
     "Bookmark manager": "书签管理器",
     "This folder is empty.": "这个文件夹是空的。",
+    "Custom stylesheet": "自定义样式",
+    "Applies to every page; new pages pick it up, open ones need a reload": "对所有页面生效；新打开的页面自动应用，已打开的需重新加载",
     "All tabs": "所有标签页",
     "Close {n} tabs?": "要关闭 {n} 个标签页吗？",
     "Press Esc or F11 to leave fullscreen": "按 Esc 或 F11 退出全屏",

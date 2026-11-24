@@ -273,6 +273,24 @@ export function buildAppearance({ settings, invoke }) {
     row(t("Custom fonts"), "", fontToggle),
     fontPanel,
     row(t("Page zoom"), "", zoomSelect),
+    // The stylesheet is applied by the browser, not by this page, so the row only has to get
+    // the reader to the file: `custom_css_open` writes a starter one if it does not exist and
+    // reveals it in the file manager. The change applies to newly opened pages, which is what
+    // the detail says rather than pretending it is live.
+    row(
+      t("Custom stylesheet"),
+      t("Applies to every page; new pages pick it up, open ones need a reload"),
+      (() => {
+        const button = document.createElement("button");
+        button.className = "button";
+        button.textContent = t("Edit");
+        button.addEventListener("click", async () => {
+          const path = await invoke("custom_css_open").catch((error) => "error: " + String(error));
+          button.title = String(path);
+        });
+        return button;
+      })(),
+    ),
   );
 
   return [head, card];

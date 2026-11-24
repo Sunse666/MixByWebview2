@@ -113,12 +113,32 @@ function installDom() {
     if (command === "settings_get") return SETTINGS;
     if (command === "theme_get") return { colors: {}, radius: 15, tab_radius: 8, font_size: 13, font_family: "" };
     if (command === "favicon_map") return {};
+    // The overlay's menu footer prints the build it is running; a null here is a throw, and
+    // a throw inside a render is not a page that failed to build - it is the stub lying.
+    if (command === "app_info") return { version: "0.0.0", git: "check" };
+    if (command === "zoom_get") return 1;
+    if (command === "translate_state" || command === "translate_site_state") return false;
+    if (command === "tab_closed_list") return [];
     if (command.endsWith("_list")) return [];
     return null;
   };
   globalThis.document = document;
   globalThis.location = { hash: "", origin: "http://tauri.localhost", reload() {} };
   globalThis.matchMedia = () => ({ matches: false, addEventListener() {} });
+  // The overlay measures itself to size its panel; without these it throws inside a boot
+  // that reports rather than rejects, so the failure would be a line in the log and nothing
+  // else. A measured height of zero is what an element with no layout reports.
+  globalThis.getComputedStyle = () => ({
+    paddingTop: "0px",
+    paddingBottom: "0px",
+    height: "0px",
+    maxHeight: "none",
+    opacity: "1",
+  });
+  globalThis.ResizeObserver = class {
+    observe() {}
+    disconnect() {}
+  };
   // The pages animate a few things; running the callback immediately keeps the stub
   // synchronous, and lets a render that moves tabs run the code that follows it.
   globalThis.requestAnimationFrame = (run) => {
@@ -165,6 +185,42 @@ async function check(name) {
   return true;
 }
 
+/**
+ * Loads the overlay page, which none of the other checks ever executed.
+ *
+ * It is the one bundle with no test of its own: `check-dom` compares its element ids with
+ * its html and `check-invoke` reads its call sites, both as text, and neither runs it. A
+ * stray closing brace once sat in that file for a whole commit - `node --check` accepts it
+ * because a surplus `}` closes a block that was already closed - and the only symptom was
+ * that every menu opened as an empty box. Importing it, the way the browser does, is what
+ * turns that class of mistake into a red gate instead of a blank panel.
+ *
+ * The hash is the plain app menu: the kind decides which of the boot functions runs, and
+ * the app menu is the one that touches the most of the page.
+ */
+async function checkOverlay() {
+  pageErrors = [];
+  installDom();
+  globalThis.location = { hash: "#app_menu", origin: "http://tauri.localhost", reload() {} };
+  globalThis.window.innerWidth = 628;
+  globalThis.window.innerHeight = 684;
+  const file = path.join(__dirname, "..", "src", "overlay.js");
+  let failure = null;
+  try {
+    await import(pathToFileURL(file).href + "?check=" + Date.now());
+    await new Promise((resolve) => setTimeout(resolve, 200));
+  } catch (error) {
+    failure = describe(error);
+  }
+  if (!failure && pageErrors.length) failure = pageErrors[0];
+  if (failure) {
+    console.log("FAIL overlay: " + failure);
+    return false;
+  }
+  console.log("ok   overlay");
+  return true;
+}
+
 (async () => {
   const only = process.argv[2];
   const wanted = only ? [only] : PAGES;
@@ -172,6 +228,9 @@ async function check(name) {
   for (const name of wanted) {
     if (!(await check(name))) failures += 1;
   }
+  // Run once, with the whole list: the overlay is not one of the pages, and it needs the
+  // default hash to reach the boot function that draws the most.
+  if (!only && !(await checkOverlay())) failures += 1;
   console.log(failures ? failures + " page(s) failed" : "all pages build");
   await import("./check-chrome.mjs");
   await import("./check-strings.mjs");
