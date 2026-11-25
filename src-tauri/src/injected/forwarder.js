@@ -404,22 +404,63 @@
     if (rateButton) rateButton.textContent = next === 1 ? "1x" : next + "x";
   };
 
+  /// Says something in the page, for a reader who is looking at the page.
+  ///
+  /// `say` writes to the log, which nobody watching a video will read. Every refusal on this
+  /// bar used to be one of those - a download that did nothing at all and left no trace the
+  /// reader could see.
+  var notify = function (text) {
+    var pill = document.createElement("div");
+    pill.textContent = text;
+    pill.style.cssText = [
+      "position:fixed",
+      "left:50%",
+      "bottom:48px",
+      "transform:translateX(-50%)",
+      "z-index:2147483647",
+      "padding:8px 16px",
+      "border-radius:10px",
+      "background:rgba(24,26,28,.94)",
+      "color:#e8eaed",
+      "border:1px solid rgba(255,255,255,.16)",
+      "font:13px/1.4 system-ui,sans-serif",
+      "pointer-events:none",
+      "max-width:70vw",
+    ].join(";");
+    (document.body || document.documentElement).append(pill);
+    setTimeout(function () {
+      if (pill.parentNode) pill.parentNode.removeChild(pill);
+    }, 3200);
+  };
+
   var saveVideo = function () {
     var video = current;
     if (!video) return;
     var src = video.currentSrc || video.src || "";
-    if (!src || src.indexOf("blob:") === 0 || src.indexOf("data:") === 0) {
-      // Nothing to fetch: the page assembled the media itself, and there is no address that
-      // answers with it.
-      say("video has no file address to save (blob or inline source)");
+    if (!src) {
+      notify("This video has no address to save.");
+      return;
+    }
+    // A page that assembles its own stream gives it a `blob:` address, and that address
+    // answers only inside the page. There is no file behind it to fetch, so the honest thing
+    // is to say that rather than start a download that would fail or save nonsense.
+    if (src.indexOf("blob:") === 0 || src.indexOf("data:") === 0) {
+      notify("This site streams the video: there is no file to save.");
+      say("save refused: blob or inline source");
       return;
     }
     var name = (src.split("/").pop() || "video").split("?")[0];
-    tauri
-      .invoke("video_download", { url: src, fileName: name })
-      .catch(function (error) {
-        say("save video failed: " + error);
-      });
+    notify("Saving " + name + "\u2026");
+    tauri.invoke("video_download", { url: src, fileName: name }).then(
+      function () {
+        notify("Saved to the downloads folder.");
+      },
+      function (error) {
+        var detail = (error && (error.message || error.code)) || String(error);
+        notify("Could not save: " + detail);
+        say("save video failed: " + detail);
+      },
+    );
   };
 
   /// The video a reader would call "the video": visible, ready, and the biggest one.
