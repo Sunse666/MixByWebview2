@@ -794,24 +794,58 @@ fn split_name(name: &str) -> (String, String) {
     }
 }
 
+/// Makes a suggested name safe to put on disk.
+///
+/// The rule is the one Windows itself enforces, not "ascii only": the characters a file name
+/// may not contain are `< > : " / \ | ? *` and the control range, and everything else is
+/// allowed. Replacing every non-ascii character with a dash used to turn `中文标题.html` into
+/// `html` - the whole name gone, only the extension left - and `Rust 程序设计.pdf` into
+/// `Rust ----.pdf`, on a browser whose interface is half Chinese.
+///
+/// Length is counted in characters, not bytes: the 255-character limit is a character count,
+/// and cutting a name at 120 *bytes* split multi-byte characters and chopped CJK names to
+/// about 40 of them.
 fn sanitize(name: &str) -> String {
+    // Room for the " (12)" a collision adds and for the extension, inside the 255 Windows
+    // allows. Counted in characters, which is what that limit means.
+    const MAX_CHARS: usize = 120;
+
     let mut out = String::with_capacity(name.len());
     for ch in name.chars() {
-        if ch.is_ascii_alphanumeric() || matches!(ch, '.' | '-' | '_' | ' ') {
-            out.push(ch);
-        } else {
+        let illegal = matches!(
+            ch,
+            '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*' | '\0'
+        ) || (ch as u32) < 0x20;
+        if illegal {
             out.push('-');
+        } else {
+            out.push(ch);
         }
     }
-    if out.len() > 120 {
-        out.truncate(120);
-    }
+    // A name that is nothing but dots, dashes and spaces, or empty, still has to become
+    // something. A leading dash is also trimmed because a substituted separator can put one
+    // there (`../../etc/passwd` becomes `..-..-etc-passwd`), and a name starting with a dash
+    // is a command-line hazard if anything downstream passes it to a shell.
     let trimmed = out.trim_matches(['.', ' ', '-']);
     if trimmed.is_empty() {
-        "download".to_string()
-    } else {
-        trimmed.to_string()
+        return "download".to_string();
     }
+    // Truncate by characters, keeping the extension: a name cut mid-character is a name the
+    // filesystem refuses, and losing the extension loses the association with a program.
+    let (stem, extension) = split_name(trimmed);
+    if trimmed.chars().count() <= MAX_CHARS {
+        return trimmed.to_string();
+    }
+    // `split_name` keeps the dot with the extension, so this is the whole budget.
+    let keep = MAX_CHARS.saturating_sub(extension.chars().count());
+    let stem: String = stem.chars().take(keep.max(1)).collect();
+    let trimmed_stem = stem.trim_end_matches(['.', ' ']);
+    let trimmed_stem = if trimmed_stem.is_empty() {
+        "download"
+    } else {
+        trimmed_stem
+    };
+    format!("{trimmed_stem}{extension}")
 }
 
 #[cfg(test)]
@@ -837,6 +871,44 @@ mod tests {
         assert_eq!(sanitize("a/b\\c:d"), "a-b-c-d");
         assert_eq!(sanitize("..."), "download");
         assert_eq!(sanitize(""), "download");
+        // The set Windows actually forbids, and nothing beyond it.
+        assert_eq!(sanitize("a<b>c\"d|e?f*g"), "a-b-c-d-e-f-g");
+        // A tab or a newline in a suggested name is a control character, not a space.
+        assert_eq!(sanitize("a\tb\nc"), "a-b-c");
+    }
+
+    #[test]
+    fn keeps_names_that_are_not_ascii() {
+        // The regression: every non-ascii character became a dash, so a CJK title lost its
+        // whole name and kept only the extension - `中文标题.html` was saved as `html`.
+        assert_eq!(sanitize("中文标题.html"), "中文标题.html");
+        assert_eq!(sanitize("报告 final.pdf"), "报告 final.pdf");
+        assert_eq!(sanitize("Rust 程序设计.pdf"), "Rust 程序设计.pdf");
+        assert_eq!(sanitize("café résumé.txt"), "café résumé.txt");
+        assert_eq!(sanitize("Ελληνικά.md"), "Ελληνικά.md");
+
+        // The forbidden characters are still replaced inside a non-ascii name.
+        assert_eq!(sanitize("标题/第一章.pdf"), "标题-第一章.pdf");
+    }
+
+    #[test]
+    fn a_long_name_is_cut_by_characters_and_keeps_its_extension() {
+        // 200 CJK characters plus an extension: 200 characters, so it has to be cut, and
+        // the cut has to leave a whole number of characters behind or the filesystem
+        // rejects the result.
+        let stem = "标".repeat(200);
+        let name = sanitize(&format!("{stem}.pdf"));
+        assert!(name.ends_with(".pdf"), "extension survived: {name}");
+        assert_eq!(
+            name.chars().count(),
+            120,
+            "counted in characters, not bytes"
+        );
+        assert!(!name.contains('\u{FFFD}'), "no character was split");
+
+        // A name already inside the limit is untouched.
+        let short = sanitize(&format!("{}.pdf", "标".repeat(20)));
+        assert_eq!(short.chars().count(), 24);
     }
 
     #[test]
