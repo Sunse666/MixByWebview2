@@ -741,6 +741,41 @@ fn touch_mru(mru: &mut Vec<String>, id: &str) {
     mru.insert(0, id.to_string());
 }
 
+impl Core {
+    /// Records that the reader is now working in `id`.
+    ///
+    /// One entry point on purpose. This used to be two separate facts that drifted apart:
+    /// `mru` was updated when a tab was selected, while `last_active` was written once when
+    /// the tab was created and never again - so "suspend the least recently used" was in
+    /// practice "suspend the tab that was opened first". Anything that counts as using a tab
+    /// has to come through here, and `tick` is what makes the order meaningful.
+    pub fn touch(&mut self, id: &str) {
+        self.tick += 1;
+        touch_mru(&mut self.mru, id);
+        if let Some(tab) = self.tabs.iter_mut().find(|tab| tab.id == id) {
+            tab.last_active = self.tick;
+        }
+    }
+
+    /// The live background tab that has gone unused the longest.
+    ///
+    /// `keep` is the tab on screen, which is never a candidate; `allowed` says whether a
+    /// candidate may be dropped at all (the keep-alive hosts are not). Kept next to `touch`
+    /// because the two are one subject: this picks the tab the reader has left alone
+    /// longest, and it can only do that if `touch` is what says they used one.
+    pub fn stalest_background<'a>(
+        &'a self,
+        keep: Option<&str>,
+        allowed: impl Fn(&Tab) -> bool,
+    ) -> Option<&'a Tab> {
+        self.tabs
+            .iter()
+            .filter(|tab| tab.alive && Some(tab.id.as_str()) != keep)
+            .filter(|tab| allowed(tab))
+            .min_by_key(|tab| tab.last_active)
+    }
+}
+
 async fn cycle_tab(app: &AppHandle, window: &tauri::Window, delta: isize) {
     let next = {
         let state = app.state::<AppState>();
@@ -897,6 +932,24 @@ mod recency_tests {
         ids.iter().map(|id| id.to_string()).collect()
     }
 
+    /// A live tab with nothing but the fields the ordering looks at.
+    fn tab(id: &str) -> Tab {
+        Tab {
+            id: id.to_string(),
+            url: format!("https://{id}.test/"),
+            title: id.to_string(),
+            zoom: 1.0,
+            pinned: false,
+            incognito: false,
+            icon: None,
+            loading: false,
+            scroll: 0.0,
+            scroll_url: String::new(),
+            alive: true,
+            last_active: 0,
+        }
+    }
+
     #[test]
     fn recency_jumps_to_the_last_used_tab() {
         let mru = list(&["c", "a", "b"]);
@@ -916,5 +969,53 @@ mod recency_tests {
         assert_eq!(mru, list(&["c", "a", "b"]));
         touch_mru(&mut mru, "d");
         assert_eq!(mru, list(&["d", "c", "a", "b"]));
+    }
+
+    /// A window whose tabs are all live, built with `touch` in the order given.
+    fn core_with_use_order(order: &[&str]) -> Core {
+        let mut core = Core::default();
+        for id in order {
+            core.tabs.push(tab(id));
+        }
+        for id in order {
+            core.touch(id);
+        }
+        core
+    }
+
+    #[test]
+    fn using_a_tab_moves_it_out_of_the_suspension_queue() {
+        // The regression: `last_active` was stamped once when the tab was created, so the
+        // victim was the tab opened first rather than the one the reader had abandoned.
+        // a, b and c were opened in that order and the reader is now working in a, so b -
+        // not a and not c - is the one that has gone longest without being looked at.
+        let mut core = core_with_use_order(&["a", "b", "c"]);
+        core.touch("a");
+        core.selected = Some("a".to_string());
+        let victim = core.stalest_background(core.selected.as_deref(), |_| true);
+        assert_eq!(victim.map(|tab| tab.id.as_str()), Some("b"));
+
+        // Reading c as well makes it the freshest, and b is still the oldest.
+        core.touch("c");
+        let victim = core.stalest_background(core.selected.as_deref(), |_| true);
+        assert_eq!(victim.map(|tab| tab.id.as_str()), Some("b"));
+    }
+
+    #[test]
+    fn the_tab_on_screen_is_never_the_victim() {
+        let mut core = core_with_use_order(&["a", "b"]);
+        // a is the least recently used by construction, but it is on screen.
+        core.selected = Some("a".to_string());
+        let victim = core.stalest_background(Some("a"), |_| true);
+        assert_eq!(victim.map(|tab| tab.id.as_str()), Some("b"));
+    }
+
+    #[test]
+    fn a_tab_the_reader_asked_to_keep_is_not_a_candidate() {
+        let mut core = core_with_use_order(&["a", "b", "c"]);
+        core.selected = Some("c".to_string());
+        // b is next in line, but the caller says b is on the keep-alive list.
+        let victim = core.stalest_background(Some("c"), |tab| tab.id != "b");
+        assert_eq!(victim.map(|tab| tab.id.as_str()), Some("a"));
     }
 }

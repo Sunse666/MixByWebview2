@@ -114,7 +114,7 @@ pub async fn tab_select(
     {
         let mut core = state.write_core(window.label());
         core.selected = Some(id.clone());
-        touch_mru(&mut core.mru, &id);
+        core.touch(&id);
     }
 
     // A tab can have no webview: it was suspended to save memory, or this window has not
@@ -177,8 +177,6 @@ pub async fn tab_new(
                 }
             }
         };
-        core.tick += 1;
-        let tick = core.tick;
         let previous = core.selected.clone();
         let fresh = Tab {
             id: id.clone(),
@@ -194,7 +192,9 @@ pub async fn tab_new(
             scroll: 0.0,
             scroll_url: String::new(),
             alive: true,
-            last_active: tick,
+            // Stamped by `touch` below, so a new tab counts as the most recently used one
+            // through the same path every other use goes through.
+            last_active: 0,
         };
         // Where the new tab goes. A pinned tab always starts at the front, because the front
         // section is what "pinned" means; the setting only decides among the ordinary ones.
@@ -205,7 +205,7 @@ pub async fn tab_new(
             _ => core.tabs.push(fresh),
         }
         core.selected = Some(id.clone());
-        touch_mru(&mut core.mru, &id);
+        core.touch(&id);
         (id, target, previous)
     };
 
@@ -1324,11 +1324,11 @@ pub(crate) fn enforce_live_limit(app: &AppHandle, label: &str) {
                 None
             } else {
                 let selected = core.selected.clone();
+                // The tab `touch` has gone longest without being called on. Reading
+                // `last_active` alone was not enough: it was written once at creation, so
+                // this picked the oldest tab rather than the one the reader had abandoned.
                 let candidate = core
-                    .tabs
-                    .iter()
-                    .filter(|tab| tab.alive && Some(&tab.id) != selected.as_ref())
-                    .filter(|tab| {
+                    .stalest_background(selected.as_deref(), |tab| {
                         if keep_alive.is_empty() {
                             return true;
                         }
@@ -1346,7 +1346,6 @@ pub(crate) fn enforce_live_limit(app: &AppHandle, label: &str) {
                             .iter()
                             .any(|entry| host == *entry || host.ends_with(&format!(".{entry}")))
                     })
-                    .min_by_key(|tab| tab.last_active)
                     .map(|tab| tab.id.clone());
                 if let Some(id) = &candidate {
                     if let Some(tab) = core.tabs.iter_mut().find(|tab| &tab.id == id) {
