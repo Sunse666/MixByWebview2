@@ -20,6 +20,7 @@ fn armed() -> bool {
 pub fn install(app: &mut tauri::App) {
     ext_toggle(app.handle());
     gesture_test(app.handle());
+    bili_test(app.handle());
     if armed() {
         if let Ok(kind) = std::env::var("MIX_OPEN_ON_START") {
             let handle = app.handle().clone();
@@ -268,6 +269,62 @@ fn ext_toggle(app: &tauri::AppHandle) {
         if let Some(seen) = after.iter().find(|item| item.id == target.id) {
             crate::logging::info(&format!("ext toggle after: enabled={}", seen.enabled));
         }
+    });
+}
+
+/// Debug hook: opens a bilibili watch page and asks for its video.
+///
+/// `MIX_BILI=1` runs the two steps a reader would take: navigate the selected tab to
+/// `MIX_BILI_URL` (or a fixed video when that is unset), then call `bili_download` with no
+/// arguments - exactly the call the injected script makes. Passing no address is the point:
+/// what gets exercised is the derivation from the tab, not a url handed in from outside.
+///
+/// The settling delay is longer than the other hooks' because the playurl endpoint is a
+/// second round trip after the page's own first paint, and the tab's url has to be the watch
+/// page by then or the command has nothing to parse.
+fn bili_test(app: &tauri::AppHandle) {
+    if !armed() {
+        return;
+    }
+    if std::env::var("MIX_BILI").is_err() {
+        return;
+    }
+    let url = std::env::var("MIX_BILI_URL")
+        .unwrap_or_else(|_| "https://www.bilibili.com/video/BV1GJ411x7h7".to_string());
+    let handle = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(2500));
+        let target = handle.clone();
+        let nav = url.clone();
+        let _ = handle.run_on_main_thread(move || {
+            let Some(win) = target.get_window(PRIMARY) else {
+                return;
+            };
+            let state = target.state::<AppState>();
+            let call = crate::ipc::tab_navigate(target.clone(), win, state, nav);
+            match tauri::async_runtime::block_on(call) {
+                Ok(()) => crate::logging::info("debug bili: navigated"),
+                Err(err) => {
+                    crate::logging::warn(&format!("debug bili nav failed: {}", err.message))
+                }
+            }
+        });
+
+        std::thread::sleep(std::time::Duration::from_millis(6000));
+        let target = handle.clone();
+        let _ = handle.run_on_main_thread(move || {
+            let label = crate::ipc::tab_label(PRIMARY, 1);
+            let Some(webview) = target.get_webview(&label) else {
+                crate::logging::warn("debug bili: no tab to ask");
+                return;
+            };
+            let state = target.state::<AppState>();
+            let call = crate::ipc::bili_download(target.clone(), webview, state);
+            match tauri::async_runtime::block_on(call) {
+                Ok(path) => crate::logging::info(&format!("debug bili: {path}")),
+                Err(err) => crate::logging::warn(&format!("debug bili failed: {}", err.message)),
+            }
+        });
     });
 }
 

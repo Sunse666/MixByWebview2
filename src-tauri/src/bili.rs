@@ -82,14 +82,19 @@ fn query_value(tail: &str, name: &str) -> Option<String> {
 ///
 /// The title is the reader's own language, so this keeps it whole; `downloads::target_for`
 /// is what removes the characters a file name may not contain.
+///
+/// The part is appended only when it adds something. A single-part video usually names its
+/// one part after the video itself, and a video whose title already contains the part name
+/// would otherwise be saved as "X - X" - measured once on a music video whose title was
+/// "【官方 MV】Never Gonna..." and whose only part was "Never Gonna...", which produced a
+/// file name that said the same thing twice.
 pub fn file_name(title: &str, part: Option<&Part>, index: usize) -> String {
     let base = title.trim();
     let base = if base.is_empty() { "bilibili" } else { base };
-    match part {
-        Some(part) if !part.title.trim().is_empty() && part.title.trim() != base => {
-            let piece = part.title.trim();
-            format!("{base} - {piece}.mp4")
-        }
+    let piece = part.map(|part| part.title.trim()).unwrap_or_default();
+    let adds_something = !piece.is_empty() && piece != base && !base.contains(piece);
+    match () {
+        _ if adds_something => format!("{base} - {piece}.mp4"),
         // The part number keeps a multi-part video's files from overwriting each other when
         // the parts share a title, which they often do.
         _ if index > 0 => format!("{base} - P{}.mp4", index + 1),
@@ -313,5 +318,27 @@ mod tests {
         assert_eq!(file_name("某番", None, 0), "某番.mp4");
         // An empty title still produces a name.
         assert_eq!(file_name("   ", None, 0), "bilibili.mp4");
+
+        // The regression: a music video whose one part is named after the video itself had
+        // its title printed twice, "X - X.mp4", which is what the first version produced.
+        let echo = Part {
+            title: "【官方 MV】Never Gonna Give You Up".to_string(),
+        };
+        assert_eq!(
+            file_name(
+                "【官方 MV】Never Gonna Give You Up - Rick Astley",
+                Some(&echo),
+                0
+            ),
+            "【官方 MV】Never Gonna Give You Up - Rick Astley.mp4"
+        );
+        // A part name already inside the title is not appended again.
+        let inside = Part {
+            title: "第一话".to_string(),
+        };
+        assert_eq!(
+            file_name("某番 第一话 完整版", Some(&inside), 0),
+            "某番 第一话 完整版.mp4"
+        );
     }
 }
