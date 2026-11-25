@@ -445,7 +445,7 @@
     // answers only inside the page. There is no file behind it to fetch, so the honest thing
     // is to say that rather than start a download that would fail or save nonsense.
     if (src.indexOf("blob:") === 0 || src.indexOf("data:") === 0) {
-      notify("This site streams the video: there is no file to save.");
+      notify("This video is streamed in pieces, so there is no single file to save.");
       say("save refused: blob or inline source");
       return;
     }
