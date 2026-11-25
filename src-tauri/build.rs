@@ -6,10 +6,21 @@ fn main() {
     println!("cargo:rerun-if-changed=../src");
     println!("cargo:rerun-if-changed=src");
     println!("cargo:rerun-if-changed=build.rs");
-    // The commit is baked into the binary and printed in the log on startup; without
-    // this the reported hash is whatever it was when the script last ran, which makes the
-    // one line that says "this is the build you are running" untrustworthy.
+    // The commit is baked into the binary and printed in the log on startup; without this
+    // the reported hash is whatever it was when the script last ran, which makes the one
+    // line that says "this is the build you are running" untrustworthy.
+    //
+    // `.git/HEAD` alone is not enough, and this was wrong for a long time: `HEAD` holds
+    // `ref: refs/heads/main` rather than a hash, so a commit changes the ref file and
+    // leaves `HEAD` untouched. Cargo therefore never re-ran this script and the binary kept
+    // reporting the commit it was first built at - measured once, the log said `a157a6a`
+    // while the tree was at `ced2a7c`, with the new code correctly compiled in. Watching
+    // the resolved ref as well is what makes the line true again; a detached HEAD (a
+    // checkout of a tag, a bisect) has the hash in `HEAD` itself, which the first line
+    // already covers.
     println!("cargo:rerun-if-changed=../.git/HEAD");
+    println!("cargo:rerun-if-changed=../.git/refs/heads/main");
+    println!("cargo:rerun-if-changed=../.git/refs/tags");
 
     let git = std::process::Command::new("git")
         .args(["rev-parse", "--short", "HEAD"])
