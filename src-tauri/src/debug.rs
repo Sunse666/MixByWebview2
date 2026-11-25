@@ -21,6 +21,7 @@ pub fn install(app: &mut tauri::App) {
     ext_toggle(app.handle());
     gesture_test(app.handle());
     bili_test(app.handle());
+    download_states_test(app.handle());
     if armed() {
         if let Ok(kind) = std::env::var("MIX_OPEN_ON_START") {
             let handle = app.handle().clone();
@@ -268,6 +269,175 @@ fn ext_toggle(app: &tauri::AppHandle) {
         let after = crate::ext_live::list(&webview);
         if let Some(seen) = after.iter().find(|item| item.id == target.id) {
             crate::logging::info(&format!("ext toggle after: enabled={}", seen.enabled));
+        }
+    });
+}
+
+/// Debug hook: walks a download through the states the page's buttons put it in.
+///
+/// `MIX_DL_TEST=1` downloads a real file, pauses it, resumes it, pauses it again, cancels it,
+/// and finally downloads it to completion - printing what the task list says at each step.
+/// Exists because every one of those transitions had a fault that was invisible from a unit
+/// test: they are about a loop being aborted, a claim being held, a row being left behind.
+///
+/// A local http server is not needed: the file is fetched from the network the same way a
+/// click on a link would fetch it.
+fn download_states_test(app: &tauri::AppHandle) {
+    if !armed() {
+        return;
+    }
+    if std::env::var("MIX_DL_TEST").is_err() {
+        return;
+    }
+    let url = std::env::var("MIX_DL_TEST_URL").unwrap_or_else(|_| {
+        // Small enough to check quickly, large enough that a pause lands mid-transfer.
+        "https://speed.cloudflare.com/__down?bytes=8000000".to_string()
+    });
+    let handle = app.clone();
+    std::thread::spawn(move || {
+        let report = |stage: &str| {
+            let Some(state) = handle.try_state::<AppState>() else {
+                return;
+            };
+            let tasks = state.downloads.read();
+            for task in tasks.iter().rev().take(4) {
+                crate::logging::info(&format!(
+                    "dl test [{stage}] id={} state={} bytes={} total={:?} err={:?}",
+                    task.id, task.state, task.bytes, task.total, task.error
+                ));
+            }
+        };
+
+        std::thread::sleep(std::time::Duration::from_millis(2500));
+        // Waits for the state to exist; the transfer itself is started through it.
+        if handle.try_state::<AppState>().is_none() {
+            return;
+        }
+        let target = crate::paths::AppDirs::resolve()
+            .downloads
+            .join("mix-dl-test.bin");
+        let _ = std::fs::remove_file(&target);
+        let id = crate::downloads::start_with_engine(&handle, &url, &target);
+        crate::logging::info(&format!("dl test started id={id}"));
+        report("started");
+
+        // Wait until bytes are actually arriving before pausing. Pausing during the connect
+        // phase is a legitimate thing to do, but it exercises nothing: the file is still
+        // empty, so there is no progress to lose and no resume offset to get wrong.
+        for _ in 0..40 {
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            let arrived = std::fs::metadata(&target)
+                .map(|meta| meta.len() > 0)
+                .unwrap_or(false);
+            if arrived {
+                break;
+            }
+        }
+        crate::logging::info(&format!(
+            "dl test on disk before pause: {:?}",
+            std::fs::metadata(&target).map(|meta| meta.len()).ok()
+        ));
+
+        // Through the real command, not the engine underneath it: what the page calls is
+        // what has to work, and the faults this was written for - the row that offers
+        // "Resume" and the paused transfer that keeps its file claimed - live in the command
+        // and in the pause path, not in the transfer loop.
+        let state = handle.state::<AppState>();
+        let paused = tauri::async_runtime::block_on(crate::ipc::download_pause(
+            handle.clone(),
+            state,
+            id,
+            true,
+        ));
+        crate::logging::info(&format!("dl test pause command -> {paused:?}"));
+        std::thread::sleep(std::time::Duration::from_millis(400));
+        report("paused");
+
+        let state = handle.state::<AppState>();
+        let resumed = tauri::async_runtime::block_on(crate::ipc::download_pause(
+            handle.clone(),
+            state,
+            id,
+            false,
+        ));
+        crate::logging::info(&format!("dl test resume command -> {resumed:?}"));
+        std::thread::sleep(std::time::Duration::from_millis(1200));
+        report("resumed");
+
+        // Cancel: must drop the row and the partial file, and the file must be gone after.
+        let state = handle.state::<AppState>();
+        let cancelled =
+            tauri::async_runtime::block_on(crate::ipc::download_cancel(handle.clone(), state, id));
+        crate::logging::info(&format!(
+            "dl test cancel command -> {cancelled:?}; file still there: {}",
+            target.exists()
+        ));
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        report("cancelled");
+
+        // And a clean run to the end, so "finished" is exercised too.
+        let id = crate::downloads::start_with_engine(&handle, &url, &target);
+        crate::logging::info(&format!("dl test second start id={id}"));
+        for _ in 0..40 {
+            std::thread::sleep(std::time::Duration::from_millis(500));
+            let done = handle
+                .try_state::<AppState>()
+                .map(|state| {
+                    state
+                        .downloads
+                        .read()
+                        .iter()
+                        .any(|task| task.id == id && task.state != "started")
+                })
+                .unwrap_or(false);
+            if done {
+                break;
+            }
+        }
+        report("finished");
+        let final_state = handle.try_state::<AppState>().and_then(|state| {
+            state
+                .downloads
+                .read()
+                .iter()
+                .find(|task| task.id == id)
+                .map(|task| task.state.clone())
+        });
+        crate::logging::info(&format!(
+            "dl test result: state={final_state:?} bytes={:?}",
+            std::fs::metadata(&target).map(|meta| meta.len()).ok()
+        ));
+
+        // The 416 path: ask to resume a file that is already complete. The old engine read
+        // the server's refusal as a failure, so a finished download looked broken and could
+        // not be opened. It has to end up finished, not failed.
+        if matches!(final_state.as_deref(), Some("finished")) {
+            crate::downloads::set_state(&handle, id, "interrupted");
+            let resumed =
+                crate::fetch::resume(handle.clone(), id, Some((url.clone(), target.clone())));
+            crate::logging::info(&format!("dl test resume-of-complete -> {resumed}"));
+            // Wait for the transfer to settle on a terminal state. Polling for "not started"
+            // caught the `interrupted` this block had just set and reported the wrong answer.
+            for _ in 0..40 {
+                std::thread::sleep(std::time::Duration::from_millis(250));
+                let (state, error) = handle
+                    .try_state::<AppState>()
+                    .and_then(|state| {
+                        state
+                            .downloads
+                            .read()
+                            .iter()
+                            .find(|task| task.id == id)
+                            .map(|task| (task.state.clone(), task.error.clone()))
+                    })
+                    .unwrap_or_default();
+                if state == "finished" || state == "failed" {
+                    crate::logging::info(&format!(
+                        "dl test resume-of-complete ended state={state} err={error:?}"
+                    ));
+                    break;
+                }
+            }
         }
     });
 }

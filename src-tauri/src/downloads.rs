@@ -417,7 +417,49 @@ pub fn load_history(dirs: &crate::paths::AppDirs) -> Vec<DownloadTask> {
             task.speed = 0;
         }
     }
+    // The counter starts at 1 in a fresh process, so a list read back from disk shares its
+    // ids with the first download of this session. Every command that takes an id - pause,
+    // resume, cancel, open, retry - then acts on whichever row it finds first, which is often
+    // the historical one: pausing this session's transfer paused a file from last week.
+    // Measured once with eight rows on disk, all of them id 1.
+    let tasks = dedupe(tasks);
+    reserve_ids(tasks.iter().map(|task| task.id + 1).max().unwrap_or(1));
+    let mut tasks = tasks;
+    prune(&mut tasks);
     tasks
+}
+
+/// Makes every id in a restored list unique, and hands the highest back.
+///
+/// A list written by a build without this already contains duplicates, and they would
+/// survive every later save. The first row keeps its id so a reader's existing rows stay
+/// recognisable; the rest are given fresh ones past the highest seen.
+fn dedupe(tasks: Vec<DownloadTask>) -> Vec<DownloadTask> {
+    let highest = tasks.iter().map(|task| task.id).max().unwrap_or(0);
+    let mut next = highest + 1;
+    let mut seen = std::collections::HashSet::new();
+    tasks
+        .into_iter()
+        .map(|mut task| {
+            if !seen.insert(task.id) {
+                task.id = next;
+                next += 1;
+                seen.insert(task.id);
+            }
+            task
+        })
+        .collect()
+}
+
+/// Pushes the id counter past what a restored list already uses.
+fn reserve_ids(next: u64) {
+    let mut current = NEXT_ID.load(Ordering::Relaxed);
+    while current < next {
+        match NEXT_ID.compare_exchange(current, next, Ordering::Relaxed, Ordering::Relaxed) {
+            Ok(_) => return,
+            Err(actual) => current = actual,
+        }
+    }
 }
 
 /// Marks rows that claim to be running when nothing is.
@@ -526,6 +568,20 @@ pub fn set_state(app: &tauri::AppHandle, id: u64, next: &str) {
     crate::logging::info(&format!("download {id} -> {next}"));
     let _ = app.emit("download:changed", tasks);
     save_history(app);
+}
+
+/// The size the first attempt learned, for a resume to compare against.
+///
+/// Needed because a 416 does not always carry `Content-Range` - bilibili's CDN sends none -
+/// and without it "the file is already whole" cannot be told from "the file is a leftover of
+/// something else".
+pub fn recorded_total(app: &tauri::AppHandle, id: u64) -> Option<u64> {
+    app.try_state::<AppState>()?
+        .downloads
+        .read()
+        .iter()
+        .find(|task| task.id == id)
+        .and_then(|task| task.total)
 }
 
 /// Marks a task failed, with the reason kept for the page to show.
@@ -905,6 +961,50 @@ mod tests {
     fn keeps_plain_names() {
         assert_eq!(sanitize("report.pdf"), "report.pdf");
         assert_eq!(sanitize("my file 1.zip"), "my file 1.zip");
+    }
+
+    #[test]
+    fn ids_restored_from_disk_do_not_collide_with_this_session_s() {
+        // The counter starts at 1 in a fresh process, so a list read back from disk used to
+        // share its ids with the first download of the session: every command that takes an
+        // id then found the historical row first. Measured once with eight rows on disk, all
+        // of them id 1.
+        let restored = dedupe(vec![row(1), row(1), row(1), row(7)]);
+        let ids: Vec<u64> = restored.iter().map(|task| task.id).collect();
+        assert_eq!(ids.len(), 4);
+        let unique: std::collections::HashSet<u64> = ids.iter().copied().collect();
+        assert_eq!(unique.len(), 4, "got {ids:?}");
+
+        // And the one that was already 7 keeps it, so its row is still recognised.
+        assert!(ids.contains(&7));
+    }
+
+    #[test]
+    fn reserving_ids_never_moves_the_counter_backwards() {
+        // Two lists read in sequence must not hand the same id out twice.
+        reserve_ids(100);
+        assert!(NEXT_ID.load(Ordering::Relaxed) >= 100);
+        reserve_ids(3);
+        assert!(
+            NEXT_ID.load(Ordering::Relaxed) >= 100,
+            "a smaller list must not lower the counter"
+        );
+    }
+
+    fn row(id: u64) -> DownloadTask {
+        DownloadTask {
+            id,
+            url: format!("https://example.com/{id}"),
+            file_name: format!("{id}.bin"),
+            path: format!("/tmp/{id}.bin"),
+            state: "finished".to_string(),
+            bytes: 1,
+            speed: 0,
+            paused: false,
+            total: Some(1),
+            incognito: false,
+            error: String::new(),
+        }
     }
 
     #[test]

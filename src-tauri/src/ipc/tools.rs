@@ -691,7 +691,7 @@ pub async fn download_pause(
     paused: bool,
 ) -> Result<bool, AppError> {
     let ok = if paused {
-        crate::fetch::pause(id)
+        crate::fetch::pause(app.clone(), id)
     } else {
         // A task that outlived the process has no job; the list remembers what it was.
         let known = task_parts(&state, id).map(|(url, path)| (url, std::path::PathBuf::from(path)));

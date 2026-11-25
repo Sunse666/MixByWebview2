@@ -104,31 +104,34 @@ fn is_html(response: &reqwest::Response) -> bool {
 
 /// Whether a 416 means the file on disk is already the whole thing.
 ///
-/// The server says `Content-Range: bytes */<size>` when it refuses a range, which is the
-/// size of the resource. Comparing that against what is on disk is what tells "resumed a
-/// finished download" from "the partial file is not this file any more". A server that does
-/// not send the header gets the benefit of the doubt only when there is nothing left to
-/// fetch, which cannot be known - so it is treated as not complete, and the transfer starts
-/// over rather than claiming success on no evidence.
-fn already_complete(response: &reqwest::Response, on_disk: u64) -> bool {
-    range_says_complete(response.headers(), on_disk)
+/// Two sources of truth, and the second one matters: a well behaved server answers
+/// `Content-Range: bytes */<size>`, but plenty do not - bilibili's CDN sends a bare 416 with
+/// no such header, measured. When the header is missing, the size the task recorded from the
+/// first attempt is what decides. Without that fallback, resuming a bilibili download that
+/// had already finished would still have been called a failure.
+///
+/// `known` is that recorded size, absent when the first attempt never learned one.
+fn already_complete(
+    headers: &reqwest::header::HeaderMap,
+    on_disk: u64,
+    known: Option<u64>,
+) -> bool {
+    if let Some(size) = range_size(headers) {
+        return size == on_disk;
+    }
+    known.map(|size| size == on_disk).unwrap_or(false)
 }
 
-/// The header-reading half of [`already_complete`], split out so it can be tested.
-fn range_says_complete(headers: &reqwest::header::HeaderMap, on_disk: u64) -> bool {
-    let Some(range) = headers
+/// The resource size out of a `Content-Range: bytes */1234` refusal.
+fn range_size(headers: &reqwest::header::HeaderMap) -> Option<u64> {
+    let range = headers
         .get(reqwest::header::CONTENT_RANGE)
-        .and_then(|value| value.to_str().ok())
-    else {
-        return false;
-    };
+        .and_then(|value| value.to_str().ok())?;
     // The shape is `bytes */1234` for a refusal; the `*` is where the range would have been.
     range
         .rsplit('/')
         .next()
         .and_then(|size| size.trim().parse::<u64>().ok())
-        .map(|size| size == on_disk)
-        .unwrap_or(false)
 }
 
 /// A status code turned into something a reader can act on.
@@ -223,6 +226,7 @@ pub fn start_with(
     };
 
     let active_guard = active.clone();
+    let known_total = crate::downloads::recorded_total(&app, id);
     let handle = tauri::async_runtime::spawn(async move {
         let client = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(600))
@@ -267,7 +271,7 @@ pub fn start_with(
             // unopenable, so the size is compared instead: equal means it is already whole,
             // anything else means what is on disk is not the file and starts over.
             if response.status() == reqwest::StatusCode::RANGE_NOT_SATISFIABLE {
-                let complete = already_complete(&response, offset);
+                let complete = already_complete(response.headers(), offset, known_total);
                 if complete {
                     crate::logging::info(&format!(
                         "fetch {id}: already complete at {offset} bytes"
@@ -345,6 +349,10 @@ pub fn start_with(
                 if cancelled.load(Ordering::Relaxed) {
                     let _ = file.flush();
                     drop(file);
+                    // The bytes are reported before the file goes: a cancelled row is about
+                    // to be removed entirely, but the count is what the cancel handler uses
+                    // to decide whether there is anything worth deleting.
+                    crate::downloads::set_progress(&app, id, written, 0);
                     let _ = std::fs::remove_file(&path);
                     crate::downloads::set_failed(&app, id, "cancelled");
                     release(&path);
@@ -353,6 +361,12 @@ pub fn start_with(
                 if paused.load(Ordering::Relaxed) {
                     let _ = file.flush();
                     drop(file);
+                    // The bytes that did arrive are recorded before stopping. Every other
+                    // exit from this loop reports its progress; this one used to keep
+                    // whatever the last 250 ms sample said, so pausing a transfer that had
+                    // only just started left the row showing 0 B next to a file that was
+                    // already several megabytes.
+                    crate::downloads::set_progress(&app, id, written, 0);
                     // The user asked for this one, which reads differently from a
                     // connection that went away: the buttons offered are not the same.
                     crate::downloads::set_state(&app, id, "paused");
@@ -402,15 +416,35 @@ pub fn start_with(
 }
 
 /// Stops the loop but keeps the bytes, so it can be resumed.
-pub fn pause(id: u64) -> bool {
-    let mut map = jobs().lock();
-    match map.get_mut(&id) {
-        Some(job) => {
-            job.paused.store(true, Ordering::Relaxed);
-            if let Some(handle) = job.handle.take() {
-                handle.abort();
+///
+/// The bytes written so far are read off the file before the loop is stopped, because
+/// `abort` cancels it at its next await and the progress reporting inside it never runs:
+/// pausing a transfer that had been going for a second left the row showing the last 250 ms
+/// sample, which for a fresh transfer is 0 B next to a file of several megabytes.
+pub fn pause(app: tauri::AppHandle, id: u64) -> bool {
+    let stopped = {
+        let mut map = jobs().lock();
+        match map.get_mut(&id) {
+            Some(job) => {
+                job.paused.store(true, Ordering::Relaxed);
+                if let Some(handle) = job.handle.take() {
+                    handle.abort();
+                }
+                job.active.store(false, Ordering::Relaxed);
+                // From disk rather than a shared counter: whatever was flushed is on the
+                // file, and that is also what the resume will continue from.
+                let written = std::fs::metadata(&job.path)
+                    .map(|meta| meta.len())
+                    .unwrap_or(0);
+                Some((written, job.path.clone()))
             }
-            job.active.store(false, Ordering::Relaxed);
+            None => None,
+        }
+    };
+    match stopped {
+        Some((written, path)) => {
+            crate::downloads::set_progress(&app, id, written, 0);
+            release(&path);
             true
         }
         None => false,
@@ -562,18 +596,40 @@ mod tests {
 
         let mut whole = HeaderMap::new();
         whole.insert(CONTENT_RANGE, HeaderValue::from_static("bytes */1234"));
-        assert!(range_says_complete(&whole, 1234));
+        assert!(already_complete(&whole, 1234, None));
 
         // The file on disk is shorter than the resource: not complete, start over.
-        assert!(!range_says_complete(&whole, 1000));
+        assert!(!already_complete(&whole, 1000, None));
 
-        // Without the header there is no evidence, and claiming success on none is worse
-        // than fetching again.
-        assert!(!range_says_complete(&HeaderMap::new(), 1234));
+        // Without the header there is no evidence from the answer, and claiming success on
+        // none is worse than fetching again.
+        assert!(!already_complete(&HeaderMap::new(), 1234, None));
 
         // A malformed one is treated the same way as a missing one.
         let mut bad = HeaderMap::new();
         bad.insert(CONTENT_RANGE, HeaderValue::from_static("bytes */abc"));
-        assert!(!range_says_complete(&bad, 1234));
+        assert!(!already_complete(&bad, 1234, None));
+    }
+
+    #[test]
+    fn the_size_the_first_attempt_learned_stands_in_for_a_missing_header() {
+        // bilibili's CDN answers a bare 416 with no Content-Range - measured - so the header
+        // alone would call a finished download broken and offer to fetch it again.
+        use reqwest::header::HeaderMap;
+
+        // No header, but the task recorded 1234 during its first attempt and 1234 arrived.
+        assert!(already_complete(&HeaderMap::new(), 1234, Some(1234)));
+        // Same header, but only part of the file is there: start over.
+        assert!(!already_complete(&HeaderMap::new(), 900, Some(1234)));
+        // Nothing known at all is not evidence either way.
+        assert!(!already_complete(&HeaderMap::new(), 1234, None));
+
+        // The header wins when it is there, because it describes this response rather than
+        // a number remembered from an earlier one.
+        use reqwest::header::{HeaderValue, CONTENT_RANGE};
+        let mut said = HeaderMap::new();
+        said.insert(CONTENT_RANGE, HeaderValue::from_static("bytes */500"));
+        assert!(!already_complete(&said, 1234, Some(1234)));
+        assert!(already_complete(&said, 500, Some(1234)));
     }
 }
