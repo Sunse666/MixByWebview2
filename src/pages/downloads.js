@@ -1,7 +1,21 @@
 import { setLanguage, t } from "../i18n.js";
-import { withFeedback, setFeedbackText } from "./feedback.js";
+import { toast, withFeedback, setFeedbackText } from "./feedback.js";
 
 const invoke = withFeedback(window.__TAURI__.core.invoke);
+
+/**
+ * Runs a command that acts on a file, and says why when it cannot.
+ *
+ * These used to end in `.catch(() => {})`, so a file the reader had moved or deleted gave a
+ * silent nothing on "Open" and looked like a dead button. The reason the backend returns is
+ * the useful part.
+ */
+function acts(command, args) {
+  invoke(command, args).catch((error) => {
+    const detail = (error && (error.message || error.code)) || String(error);
+    toast(String(detail), true);
+  });
+}
 
 const nav = document.getElementById("nav");
 const main = document.getElementById("main");
@@ -109,7 +123,9 @@ async function boot() {
         pause.className = "button";
         pause.textContent = t(stopped ? "Resume" : "Pause");
         pause.addEventListener("click", async () => {
-          await invoke("download_pause", { id: task.id, paused: !stopped }).catch(() => {});
+          await invoke("download_pause", { id: task.id, paused: !stopped }).catch((error) => {
+            toast(String((error && (error.message || error.code)) || error), true);
+          });
         });
         const cancel = document.createElement("button");
         cancel.className = "button";
@@ -125,20 +141,22 @@ async function boot() {
 
       if (task.state === "failed") {
         // Nothing to open: the file is partial at best. Offer the download again instead.
+        //
+        // Through `download_retry`, which continues the row that is already there. This used
+        // to call `download_url`, and that made a second row for the same file, lost the
+        // bytes the first attempt had written, and left the failed row beside its replacement.
         const retry = document.createElement("button");
         retry.className = "button";
         retry.textContent = t("Try again");
         retry.addEventListener("click", async () => {
-          await invoke("download_url", { url: task.url, fileName: task.file_name }).catch(
-            () => {},
-          );
+          await invoke("download_retry", { id: task.id }).catch((error) => {
+            toast(String((error && (error.message || error.code)) || error), true);
+          });
         });
         const reveal = document.createElement("button");
         reveal.className = "button";
         reveal.textContent = t("Show in folder");
-        reveal.addEventListener("click", () =>
-          invoke("download_reveal", { id: task.id }).catch(() => {}),
-        );
+        reveal.addEventListener("click", () => acts("download_reveal", { id: task.id }));
         row.append(name, state, retry, reveal);
         list.append(row);
         continue;
@@ -147,12 +165,12 @@ async function boot() {
       const open = document.createElement("button");
       open.className = "button";
       open.textContent = t("Open");
-      open.addEventListener("click", () => invoke("download_open", { id: task.id }).catch(() => {}));
+      open.addEventListener("click", () => acts("download_open", { id: task.id }));
 
       const reveal = document.createElement("button");
       reveal.className = "button";
       reveal.textContent = t("Show in folder");
-      reveal.addEventListener("click", () => invoke("download_reveal", { id: task.id }).catch(() => {}));
+      reveal.addEventListener("click", () => acts("download_reveal", { id: task.id }));
 
       row.append(name, state, open, reveal);
       list.append(row);

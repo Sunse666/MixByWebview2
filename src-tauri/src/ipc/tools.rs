@@ -14,11 +14,21 @@ pub async fn download_list(
 #[tauri::command]
 pub async fn download_clear(
     webview: tauri::Webview,
+    app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
     require_trusted(&webview)?;
-    let mut tasks = state.downloads.write();
-    tasks.retain(|task| task.state == "started");
+    {
+        let mut tasks = state.downloads.write();
+        tasks.retain(|task| task.state == "started");
+    }
+    // "Clear list" is about the list, not the files: a finished download keeps its file, and
+    // so does a failed one the reader might still want to look at. What it must not do is
+    // leave the list on disk still holding the rows that were just cleared, which is what
+    // made them come back on the next start.
+    crate::downloads::save_history(&app);
+    let tasks = state.downloads.read().clone();
+    let _ = app.emit("download:changed", tasks);
     Ok(())
 }
 
@@ -39,10 +49,23 @@ pub async fn download_open(
     let Some(path) = path else {
         return Err(AppError::new("bad_download", "unknown download"));
     };
+    // A file the reader deleted from Explorer leaves a row that still offers "Open". The
+    // shell would spawn, find nothing, and report success, so the button looked broken.
+    if !std::path::Path::new(&path).exists() {
+        crate::logging::warn(&format!("download {id}: file is gone ({path})"));
+        return Err(AppError::new(
+            "missing",
+            "the file is no longer there - it may have been moved or deleted",
+        ));
+    }
     shell_open(std::path::Path::new(&path))
 }
 
 /// Shows a finished download in Explorer.
+///
+/// Revealing a file that is gone still works and is still useful: Explorer opens on the
+/// folder it was in, which is where the reader would look for it. Only the folder having
+/// gone too is worth an error.
 #[tauri::command]
 pub async fn download_reveal(
     _window: tauri::Window,
@@ -59,7 +82,18 @@ pub async fn download_reveal(
     let Some(path) = path else {
         return Err(AppError::new("bad_download", "unknown download"));
     };
-    reveal_path(std::path::Path::new(&path))
+    let file = std::path::Path::new(&path);
+    let folder = file
+        .parent()
+        .map(std::path::Path::to_path_buf)
+        .unwrap_or_else(|| file.to_path_buf());
+    if !folder.exists() {
+        return Err(AppError::new(
+            "missing",
+            "the folder this was saved to is no longer there",
+        ));
+    }
+    reveal_path(file)
 }
 
 /// Hands a file to the shell so it opens in its associated program.
@@ -685,10 +719,39 @@ pub async fn download_pause(
     Ok(true)
 }
 
-/// Cancels a download, whichever engine owns it.
+/// Cancels a download: stops whatever is running, removes the partial file, drops the row.
+///
+/// All three, because the reader who presses Cancel is saying they do not want this file.
+/// What used to happen was one of the three depending on the state: a running transfer was
+/// stopped but its row stayed and said "failed", so the page offered "Try again" for
+/// something that had just been thrown away; a paused or leftover task was not stopped at
+/// all, and neither the file nor the row ever went.
 #[tauri::command]
-pub async fn download_cancel(_app: AppHandle, id: u64) -> Result<bool, AppError> {
-    Ok(crate::fetch::cancel(id))
+pub async fn download_cancel(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: u64,
+) -> Result<bool, AppError> {
+    let stopped = crate::fetch::cancel(id);
+    let path = {
+        let mut tasks = state.downloads.write();
+        tasks
+            .iter()
+            .position(|task| task.id == id)
+            .map(|index| tasks.remove(index).path)
+    };
+    let Some(path) = path else {
+        return Err(AppError::new("bad_download", "unknown download"));
+    };
+    // The partial file goes with the row: a cancel that left "report.pdf" half written in
+    // the downloads folder would be a cancel the reader has to finish by hand.
+    let _ = std::fs::remove_file(&path);
+    crate::fetch::forget(id);
+    let tasks = state.downloads.read().clone();
+    let _ = app.emit("download:changed", tasks);
+    crate::downloads::save_history(&app);
+    crate::logging::info(&format!("download {id} cancelled (stopped={stopped})"));
+    Ok(true)
 }
 
 /// Fetches this download again with the internal engine.

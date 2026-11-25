@@ -406,14 +406,35 @@ pub fn cookies_for(_webview: &tauri::Webview) -> Option<String> {
 }
 
 /// Drops the transfer and the partial file with it.
+///
+/// The flag alone was not enough. It is only read inside the chunk loop, so a task that was
+/// paused - or one left over from a previous process, which has no loop at all - never saw
+/// it: the row stayed, the file stayed, and Cancel looked like a dead button. An abort covers
+/// the paused case, and the caller removes what is on disk for the rest.
 pub fn cancel(id: u64) -> bool {
-    let map = jobs().lock();
-    match map.get(&id) {
+    let mut map = jobs().lock();
+    match map.get_mut(&id) {
         Some(job) => {
             job.cancelled.store(true, Ordering::Relaxed);
+            if let Some(handle) = job.handle.take() {
+                handle.abort();
+            }
+            job.active.store(false, Ordering::Relaxed);
             true
         }
+        // No loop: nothing to stop, but there may still be bytes on disk, which is the
+        // caller's business to remove.
         None => false,
+    }
+}
+
+/// Forgets a job entirely, so the id can be started fresh later.
+pub fn forget(id: u64) {
+    if let Some(mut job) = jobs().lock().remove(&id) {
+        if let Some(handle) = job.handle.take() {
+            handle.abort();
+        }
+        release(&job.path);
     }
 }
 
