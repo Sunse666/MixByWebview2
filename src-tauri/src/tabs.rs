@@ -414,9 +414,37 @@ pub struct Tab {
     pub loading: bool,
     /// Last scroll offset, restored when the tab becomes visible again.
     pub scroll: f64,
+    /// The document that offset belongs to.
+    ///
+    /// A bare offset cannot say which page it came from, and restoring it blindly put every
+    /// new page at the depth the previous one was read to: following a link from a long
+    /// article landed halfway down the next one. The offset is only put back onto the
+    /// document it was measured on - a reload, or the tab coming back from suspension.
+    pub scroll_url: String,
     /// False when the webview was dropped to save memory.
     pub alive: bool,
     pub last_active: u64,
+}
+
+impl Tab {
+    /// The offset to put back for a document that is loading at `url`.
+    ///
+    /// Zero unless the offset was measured on this same address. Two different pages that
+    /// happen to share a url - a reload, or the tab coming back after being suspended - are
+    /// exactly the cases where the reader expects to be where they left off.
+    pub fn scroll_for(&self, url: &str) -> f64 {
+        if self.scroll > 0.0 && self.scroll_url == url {
+            self.scroll
+        } else {
+            0.0
+        }
+    }
+
+    /// Records where the reader is, against the document it was read on.
+    pub fn remember_scroll(&mut self, url: &str, y: f64) {
+        self.scroll = y.max(0.0);
+        self.scroll_url = url.to_string();
+    }
 }
 
 #[derive(Clone, Serialize)]
@@ -539,13 +567,16 @@ pub fn create(
 
             if !loading {
                 if let Some(state) = app.try_state::<crate::ipc::AppState>() {
+                    // Only an offset measured on this address may be put back. A link
+                    // followed from a long page loads a different document, whose own top
+                    // is what the reader asked for.
                     let scroll = state
                         .try_read_core(crate::ipc::window_of_tab(&id))
                         .and_then(|core| {
                             core.tabs
                                 .iter()
                                 .find(|tab| tab.id == id)
-                                .map(|tab| tab.scroll)
+                                .map(|tab| tab.scroll_for(payload.url().as_str()))
                         })
                         .unwrap_or(0.0);
                     if scroll > 0.0 {
@@ -720,6 +751,7 @@ mod tests {
             icon: None,
             loading: false,
             scroll: 0.0,
+            scroll_url: String::new(),
             alive: true,
             last_active: 0,
         }
@@ -773,6 +805,37 @@ mod tests {
             insertion_point(&tabs, &groups, &Some("a".to_string()), "after_group"),
             Some(1)
         );
+    }
+
+    #[test]
+    fn an_offset_is_only_put_back_on_the_page_it_was_measured_on() {
+        // The regression: following a link out of a long article carried its depth over to
+        // the page the link opened, because the offset had no idea which document it
+        // belonged to. A tab that left the page must come back to the top of the new one.
+        let mut only = tab("a");
+        only.url = "https://example.com/long".into();
+        only.remember_scroll("https://example.com/long", 800.0);
+        assert_eq!(only.scroll_for("https://example.com/long"), 800.0);
+        assert_eq!(
+            only.scroll_for("https://example.com/next"),
+            0.0,
+            "a different document starts at its own top"
+        );
+
+        // Following a link moves the tab's url, which is the whole mechanism: the offset
+        // stays behind with the page it belongs to and the new document gets a top.
+        only.url = "https://example.com/next".into();
+        assert_eq!(only.scroll_for(&only.url), 0.0);
+
+        // A reload is the same document, so the reader stays where they were. This is the
+        // case the feature exists for, and it is why the comparison is against the address
+        // rather than a "the page changed" flag.
+        only.remember_scroll("https://example.com/next", 240.0);
+        assert_eq!(only.scroll_for("https://example.com/next"), 240.0);
+
+        // Reading back to the top overwrites the measurement rather than accumulating.
+        only.remember_scroll("https://example.com/next", 0.0);
+        assert_eq!(only.scroll_for("https://example.com/next"), 0.0);
     }
 
     #[test]

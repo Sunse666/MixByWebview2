@@ -124,13 +124,15 @@ pub async fn tab_select(
     sync_visibility(&app, window.label());
     if let Some(webview) = app.get_webview(&id) {
         let _ = webview.set_focus();
+        // The offset only belongs to the document it was measured on; a tab revived from
+        // suspension is that document again, a tab that has navigated since is not.
         let scroll = state
             .try_read_core(window.label())
             .and_then(|core| {
                 core.tabs
                     .iter()
                     .find(|tab| tab.id == id)
-                    .map(|tab| tab.scroll)
+                    .map(|tab| tab.scroll_for(&tab.url))
             })
             .unwrap_or(0.0);
         if scroll > 0.0 {
@@ -190,6 +192,7 @@ pub async fn tab_new(
             icon: None,
             loading: false,
             scroll: 0.0,
+            scroll_url: String::new(),
             alive: true,
             last_active: tick,
         };
@@ -763,6 +766,10 @@ pub(crate) fn move_tab(tabs: &mut Vec<Tab>, id: &str, to: usize) -> bool {
 }
 
 /// Pages report their scroll offset here so it survives a tab switch.
+///
+/// The report carries the address the offset was measured on, which is what makes it safe
+/// to put back later: an offset that belonged to a page the tab has since left is discarded
+/// rather than applied to whatever loaded next.
 #[tauri::command]
 pub async fn tab_scroll(
     _app: AppHandle,
@@ -775,7 +782,10 @@ pub async fn tab_scroll(
     let owner = window_of_tab(&id).to_string();
     if let Some(mut core) = state.try_write_core(&owner) {
         if let Some(tab) = core.tabs.iter_mut().find(|tab| tab.id == id) {
-            tab.scroll = y.max(0.0);
+            // The tab's own url, not one the page names: a page could otherwise claim an
+            // offset belongs to somebody else's document.
+            let url = tab.url.clone();
+            tab.remember_scroll(&url, y);
         }
     }
     Ok(())

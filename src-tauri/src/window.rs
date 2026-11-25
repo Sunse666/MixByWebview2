@@ -381,6 +381,10 @@ pub fn open_window(
                 icon: None,
                 loading: false,
                 scroll: *scroll,
+                // The saved offset was measured on this address, which is what a restored
+                // session is: the reader left the page at that depth, and the same address
+                // loading again is the same document.
+                scroll_url: url.clone(),
                 alive: true,
                 last_active: index as u64,
             })

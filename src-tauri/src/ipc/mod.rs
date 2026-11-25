@@ -826,6 +826,7 @@ mod tab_order_tests {
             icon: None,
             loading: false,
             scroll: 0.0,
+            scroll_url: String::new(),
             alive: true,
             last_active: 0,
         }
