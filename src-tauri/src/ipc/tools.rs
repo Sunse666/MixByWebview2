@@ -962,6 +962,29 @@ pub async fn drag_action(
     Ok(())
 }
 
+/// Saves the file a video is playing from, at the address it is playing from.
+///
+/// This is the only honest way to download a video: the browser is not what serves it. A
+/// player streams its media through requests the page makes - often in ranges, often through
+/// a blob the page assembled - so what `save_url` fetches is whatever that address answers.
+/// For a segmented stream that is one segment, not the video, which is why the row in the
+/// page says what it does instead of promising a file that will not play.
+///
+/// Refused for pages that are not the app's own, like every other privileged command.
+#[tauri::command]
+pub async fn video_download(
+    app: AppHandle,
+    webview: tauri::Webview,
+    state: State<'_, AppState>,
+    url: String,
+    file_name: Option<String>,
+) -> Result<String, AppError> {
+    if !url.starts_with("http://") && !url.starts_with("https://") {
+        return Err(AppError::new("bad_url", "only http(s) media can be saved"));
+    }
+    let label = webview.label().to_string();
+    save_url(app, &state, url, file_name, Some(label)).await
+}
 #[tauri::command]
 pub async fn download_url(
     app: AppHandle,

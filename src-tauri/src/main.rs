@@ -279,6 +279,7 @@ fn main() {
             ipc::context_menu,
             ipc::bar_reveal,
             ipc::video_pip,
+            ipc::video_download,
             ipc::snap,
             ipc::settings_get,
             ipc::font_list,

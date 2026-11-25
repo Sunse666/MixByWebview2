@@ -207,104 +207,35 @@
   }
 })();
 
-// A button over a playing video, because the browser cannot start picture-in-picture itself.
+// A small player bar over the video the pointer is on.
 //
-// The rule is the engine's, not this browser's: `requestPictureInPicture` throws
-// `NotAllowedError ... Must be handling a user gesture` unless it is called from inside a
-// trusted click. A button on the strip is in a different webview, so its click is not the
-// page's gesture; a button appended here is. This is the only shape the feature can take.
+// Everything here exists because a browser is not a player. Picture-in-picture may only be
+// started from a trusted click, and a click on the strip belongs to another webview - so the
+// control has to live in the page. Once it does, the rest of what a player offers can live
+// beside it, because these are all things the page's own <video> already knows how to do.
 (function () {
   var cfg = window.__mixBrowsing || {};
   if (!cfg.pipButton) return;
   var tauri = window.__TAURI_INTERNALS__;
   if (!tauri || !tauri.invoke) return;
-  if (typeof HTMLVideoElement.prototype.requestPictureInPicture !== "function") return;
 
-  var BUTTON_ID = "__mix-pip";
   var LABEL = cfg.pipLabel || "Picture-in-picture";
-  var button = null;
+  var BAR_ID = "__mix-player";
+  var RATES = [0.5, 0.75, 1, 1.25, 1.5, 2];
+
+  var bar = null;
+  var rateButton = null;
   var current = null;
   var placeTimer = null;
   var hideTimer = null;
   var shown = false;
   var hovering = false;
 
-  /// Reports a refusal once, rather than leaving a button that appears to do nothing.
-  var complain = function (error) {
-    tauri
-      .invoke("ui_log", {
-        message:
-          "pip refused: " +
-          ((error && error.name) || "") +
-          " " +
-          ((error && error.message) || ""),
-      })
-      .catch(function () {});
+  var say = function (message) {
+    tauri.invoke("ui_log", { message: message }).catch(function () {});
   };
 
-  var ensureButton = function () {
-    if (button && button.isConnected) return button;
-    button = document.createElement("button");
-    button.id = BUTTON_ID;
-    button.type = "button";
-    button.title = LABEL;
-    button.setAttribute("aria-label", LABEL);
-    // A small square glyph drawn with a border rather than a font character: a unicode half
-    // block renders at a different weight in every family a reader may have chosen.
-    button.innerHTML =
-      '<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">' +
-      '<rect x="1" y="1" width="12" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="1.4"/>' +
-      '<rect x="7" y="7" width="5" height="4" rx="1" fill="currentColor"/>' +
-      "</svg>";
-    button.style.cssText = [
-      "position:fixed",
-      "z-index:2147483647",
-      "width:26px",
-      "height:26px",
-      "padding:0",
-      "border:0",
-      "border-radius:6px",
-      "background:rgba(16,18,20,.66)",
-      "color:#fff",
-      "cursor:pointer",
-      "display:grid",
-      "place-items:center",
-      "opacity:0",
-      "transition:opacity .12s linear",
-      "box-shadow:0 1px 4px rgba(0,0,0,.45)",
-      "font:inherit",
-      "appearance:none",
-      "-webkit-appearance:none",
-    ].join(";");
-
-    // Every one of these is the page's event, and the page is what decides where a click on a
-    // video goes. Stopping them keeps a site's own play/pause overlay from reacting to a
-    // press that was aimed at this button.
-    ["pointerdown", "mousedown", "mouseup", "dblclick"].forEach(function (name) {
-      button.addEventListener(
-        name,
-        function (event) {
-          event.stopPropagation();
-        },
-        true,
-      );
-    });
-    button.addEventListener(
-      "click",
-      function (event) {
-        event.stopPropagation();
-        event.preventDefault();
-        toggle();
-      },
-      true,
-    );
-
-    // Not `documentElement`: an initialization script runs before the parser has made one, so
-    // the first placement would throw on a null parent. The body exists by the time anything
-    // is playing.
-    (document.body || document.documentElement || document).append(button);
-    return button;
-  };
+  var canPip = typeof HTMLVideoElement.prototype.requestPictureInPicture === "function";
 
   /// The site's own icon, as a url the media session will accept.
   ///
@@ -323,11 +254,9 @@
 
   /// Gives the media session the site's icon, unless the page has already filled it in.
   ///
-  /// The picture-in-picture window draws whatever artwork the platform is given, and only the
-  /// page can give it. A page that set its own artwork knows best - a video site puts a cover
-  /// there - so this only fills the empty case, where what the window shows would otherwise be
-  /// nothing at all. Called just before the window opens, which is the moment the platform
-  /// takes its copy.
+  /// The window draws whatever artwork the platform is handed, and only the page can hand it
+  /// over. A page that set its own artwork knows best - a video site puts a cover there - so
+  /// this only fills the empty case, where the window would otherwise show nothing at all.
   var dressMetadata = function () {
     if (!("mediaSession" in navigator) || typeof MediaMetadata !== "function") return;
     try {
@@ -347,47 +276,171 @@
     }
   };
 
-  var toggle = function () {
-    var video = current;
-    if (!video) return;
+  // --- the bar ------------------------------------------------------------
+
+  var label = function (text, title) {
+    var node = document.createElement("button");
+    node.type = "button";
+    node.textContent = text;
+    if (title) node.title = title;
+    node.setAttribute("aria-label", title || text);
+    return node;
+  };
+
+  var ensureBar = function () {
+    if (bar && bar.isConnected) return bar;
+    bar = document.createElement("div");
+    bar.id = BAR_ID;
+    bar.style.cssText = [
+      "position:fixed",
+      "z-index:2147483647",
+      "display:flex",
+      "align-items:center",
+      "gap:2px",
+      "padding:3px",
+      "border-radius:8px",
+      "background:rgba(16,18,20,.72)",
+      "box-shadow:0 2px 8px rgba(0,0,0,.45)",
+      "opacity:0",
+      "transition:opacity .12s linear",
+      "pointer-events:auto",
+    ].join(";");
+
+    var pip = label("\u25f1", LABEL);
+    pip.addEventListener(
+      "click",
+      function (event) {
+        event.stopPropagation();
+        event.preventDefault();
+        togglePip();
+      },
+      true,
+    );
+    if (!canPip) pip.style.display = "none";
+
+    rateButton = label("1x", "Speed");
+    rateButton.style.minWidth = "34px";
+    rateButton.addEventListener(
+      "click",
+      function (event) {
+        event.stopPropagation();
+        event.preventDefault();
+        cycleRate();
+      },
+      true,
+    );
+
+    var quiet = label("\u266a", "Mute");
+    quiet.addEventListener(
+      "click",
+      function (event) {
+        event.stopPropagation();
+        event.preventDefault();
+        if (!current) return;
+        current.muted = !current.muted;
+        quiet.textContent = current.muted ? "\u2715" : "\u266a";
+      },
+      true,
+    );
+
+    // Only offered for a plain file. A segmented stream answers one segment, which is not the
+    // video, and a row that produced a file that will not play would be worse than no row.
+    var save = label("\u2b07", "Save the video file");
+    save.addEventListener(
+      "click",
+      function (event) {
+        event.stopPropagation();
+        event.preventDefault();
+        saveVideo();
+      },
+      true,
+    );
+
+    [pip, rateButton, quiet, save].forEach(function (node) {
+      node.style.cssText =
+        "width:26px;height:26px;padding:0;border:0;border-radius:6px;background:transparent;" +
+        "color:#fff;cursor:pointer;font:13px/1 system-ui,sans-serif;display:grid;place-items:center";
+      bar.append(node);
+    });
+
+    // The page decides what a press on top of its video means; none of it belongs here.
+    ["pointerdown", "mousedown", "mouseup", "dblclick"].forEach(function (name) {
+      bar.addEventListener(
+        name,
+        function (event) {
+          event.stopPropagation();
+        },
+        true,
+      );
+    });
+
+    // Not `documentElement`: an initialization script runs before the parser has made one, so
+    // the first placement would throw on a null parent.
+    (document.body || document.documentElement || document).append(bar);
+    return bar;
+  };
+
+  var togglePip = function () {
+    if (!current) return;
     if (document.pictureInPictureElement) {
       document.exitPictureInPicture().catch(function () {});
       return;
     }
     dressMetadata();
     // Called from inside the click, which is what the engine requires.
-    var started = video.requestPictureInPicture();
-    if (started && started.catch) started.catch(complain);
+    var started = current.requestPictureInPicture();
+    if (started && started.catch) {
+      started.catch(function (error) {
+        say("pip refused: " + ((error && error.name) || "") + " " + ((error && error.message) || ""));
+      });
+    }
+  };
+
+  var cycleRate = function () {
+    if (!current) return;
+    var at = RATES.indexOf(current.playbackRate);
+    var next = RATES[(at + 1) % RATES.length];
+    current.playbackRate = next;
+    if (rateButton) rateButton.textContent = next === 1 ? "1x" : next + "x";
+  };
+
+  var saveVideo = function () {
+    var video = current;
+    if (!video) return;
+    var src = video.currentSrc || video.src || "";
+    if (!src || src.indexOf("blob:") === 0 || src.indexOf("data:") === 0) {
+      // Nothing to fetch: the page assembled the media itself, and there is no address that
+      // answers with it.
+      say("video has no file address to save (blob or inline source)");
+      return;
+    }
+    var name = (src.split("/").pop() || "video").split("?")[0];
+    tauri
+      .invoke("video_download", { url: src, fileName: name })
+      .catch(function (error) {
+        say("save video failed: " + error);
+      });
   };
 
   /// The video a reader would call "the video": visible, ready, and the biggest one.
   ///
-  /// Not "the one that is playing". A reader who paused the video and then wants it out of the
-  /// way is asking for exactly this, and refusing because `paused` is true answered a question
-  /// nobody asked. What is excluded instead is a video that has never loaded anything: a page
-  /// leaves those in the document as placeholders, and they are the ones that would make the
-  /// button point at nothing.
-  ///
-  /// A video with `disablePictureInPicture` is skipped rather than shown-and-refused: it has
-  /// said it does not want this, and a button guaranteed to fail is worse than no button.
+  /// Not "the one that is playing". A reader who paused and then wants it out of the way is
+  /// asking for exactly this. What is excluded is a video that has never loaded anything: a
+  /// page leaves those in the document as placeholders, and they are the ones that would make
+  /// the bar point at nothing.
   var pick = function () {
     var best = null;
     var bestArea = 0;
     var videos = document.querySelectorAll("video");
     for (var i = 0; i < videos.length; i += 1) {
       var video = videos[i];
-      // `readyState` is the one test that tells a real player from an unused placeholder, and
-      // it has to be 1 rather than 2: a paused video drops back to HAVE_METADATA, so a
-      // threshold of 2 excluded exactly the case this is for. A placeholder that never loaded
-      // anything sits at 0 and has no dimensions worth a corner anyway.
+      // `readyState` has to be 1 rather than 2: a paused video drops back to HAVE_METADATA,
+      // so a threshold of 2 excluded exactly the case this is for.
       if (video.readyState < 1) continue;
       if (video.ended) continue;
-      if (video.disablePictureInPicture) continue;
       if (video === document.pictureInPictureElement) continue;
       var box = video.getBoundingClientRect();
       if (box.width < 160 || box.height < 90) continue;
-      // A hidden or off-screen player is common - a preloading clip, a background video - and
-      // a button pinned to one would float over unrelated content.
       if (box.right < 0 || box.bottom < 0) continue;
       if (box.left > window.innerWidth || box.top > window.innerHeight) continue;
       var area = box.width * box.height;
@@ -400,20 +453,20 @@
   };
 
   var show = function () {
-    if (!button) return;
+    if (!bar) return;
     clearTimeout(hideTimer);
     hideTimer = null;
     shown = true;
-    button.style.opacity = "1";
+    bar.style.opacity = "1";
   };
 
   var fade = function () {
     clearTimeout(hideTimer);
     hideTimer = setTimeout(function () {
       hideTimer = null;
-      if (button && !hovering) {
+      if (bar && !hovering) {
         shown = false;
-        button.style.opacity = "0";
+        bar.style.opacity = "0";
       }
     }, 900);
   };
@@ -424,32 +477,41 @@
     if (!video) {
       current = null;
       hovering = false;
-      if (button) button.style.opacity = "0";
+      if (bar) bar.style.opacity = "0";
       return;
     }
     var changed = video !== current;
     current = video;
-    ensureButton();
+    ensureBar();
+    if (rateButton) {
+      rateButton.textContent = video.playbackRate === 1 ? "1x" : video.playbackRate + "x";
+    }
     var box = video.getBoundingClientRect();
-    // Inside the video's corner, not outside it: a page that clips its own overflow would cut
-    // a button hanging off the edge, and a video that fills the window has no outside.
+    var width = bar.offsetWidth || 128;
+    // Inside the video's top-right corner: a page that clips its own overflow would cut a bar
+    // hanging off the edge, and a video that fills the window has no outside.
     var inset = 10;
-    var left = Math.min(Math.max(box.left + box.width - 26 - inset, 4), window.innerWidth - 30);
-    var top = Math.min(Math.max(box.top + inset, 4), window.innerHeight - 30);
-    button.style.left = Math.round(left) + "px";
-    button.style.top = Math.round(top) + "px";
+    var left = Math.min(Math.max(box.left + box.width - width - inset, 4), window.innerWidth - width - 4);
+    var top = Math.min(Math.max(box.top + inset, 4), window.innerHeight - 34);
+    bar.style.left = Math.round(left) + "px";
+    bar.style.top = Math.round(top) + "px";
 
-    // Drawn once when a video starts, and after that only while the pointer is near it: a
-    // permanent badge over every video is the kind of chrome this browser avoids adding.
+    // Drawn once when a video starts, and after that only while the pointer is near it.
     if (changed) show();
     else if (hovering) show();
   };
 
-  /// Whether the pointer is in the corner region the button occupies.
+  /// Whether the pointer is in the region the bar occupies.
   var near = function (x, y) {
     if (!current) return false;
     var box = current.getBoundingClientRect();
-    return x >= box.right - 90 && x <= box.right + 10 && y >= box.top - 10 && y <= box.top + 90;
+    var width = (bar && bar.offsetWidth) || 128;
+    return (
+      x >= box.right - width - 40 &&
+      x <= box.right + 10 &&
+      y >= box.top - 10 &&
+      y <= box.top + 60
+    );
   };
 
   var soon = function () {
@@ -457,7 +519,6 @@
     placeTimer = requestAnimationFrame(place);
   };
 
-  // Movement and resizing of the video itself: a player can move without the window moving.
   window.addEventListener("resize", soon, { passive: true });
   document.addEventListener("scroll", soon, { passive: true, capture: true });
   document.addEventListener(
@@ -471,44 +532,33 @@
     },
     { passive: true, capture: true },
   );
-  // A pointer that leaves the page stops hovering without a final pointermove.
   document.addEventListener("mouseleave", function () {
     hovering = false;
     if (shown) fade();
   });
-  ["play", "pause", "ended", "loadedmetadata", "emptied"].forEach(function (name) {
+  ["play", "pause", "ended", "loadedmetadata", "emptied", "ratechange"].forEach(function (name) {
     document.addEventListener(
       name,
       function (event) {
         if (!event.target || event.target.tagName !== "VIDEO") return;
-        // A new video is a new corner, so it is worth showing once more. `pause` counts as
-        // one of those moments now that a paused video is a candidate: a reader who pauses
-        // and then looks for the control should find it, and the pointer may well be nowhere
-        // near the corner when they do.
         if (name !== "ended" && name !== "emptied") current = null;
-        // And once a video has something to show, the icon is filled in before the reader can
-        // reach for either this button or the page's own: the platform takes its copy of the
-        // artwork when the window opens, and by then it has to be there.
         if (name === "play" || name === "pause" || name === "loadedmetadata") dressMetadata();
         soon();
       },
       true,
     );
   });
-  // A page can add its player long after this runs, and can swap it while the document stays
-  // the same - which is what every single-page video site does.
   if (window.MutationObserver) {
     new MutationObserver(soon).observe(document.documentElement || document, {
       childList: true,
       subtree: true,
     });
   }
-  // Cheap fallback for a player that moves without any of the above.
   setInterval(soon, 250);
   document.addEventListener("enterpictureinpicture", function () {
     hovering = false;
     shown = false;
-    if (button) button.style.opacity = "0";
+    if (bar) bar.style.opacity = "0";
   });
   soon();
 })();
