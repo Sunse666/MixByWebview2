@@ -113,6 +113,9 @@ async function boot() {
       if (task.total && task.state !== "finished") {
         parts.push(Math.min(100, Math.round((task.bytes / task.total) * 100)) + "%");
       }
+      // Why it failed, in the words the backend chose: "this server needs you to sign in
+      // first" is the difference between a retry worth making and one that is not.
+      if (task.state === "failed" && task.error) parts.push(t(task.error) || task.error);
       state.textContent = parts.join(" · ");
 
       if (task.state === "started" || task.state === "interrupted" || task.state === "paused") {

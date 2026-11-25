@@ -96,6 +96,13 @@ pub struct DownloadTask {
     pub paused: bool,
     /// Size the server announced, when it did.
     pub total: Option<u64>,
+    /// Why the last attempt failed, in words a reader can act on.
+    ///
+    /// Only meaningful while `state` is `failed`. A row that says "failed" and nothing else
+    /// leaves the reader guessing whether to wait, sign in, or give up; this is what the
+    /// downloads page shows under the name.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub error: String,
 }
 
 static NEXT_ID: AtomicU64 = AtomicU64::new(1);
@@ -292,6 +299,17 @@ pub mod ops {
 }
 
 const KEEP: usize = 50;
+
+/// Drops the oldest rows once the list is longer than it is allowed to be.
+///
+/// One rule rather than the same `drain` written at each place a task is added. The rows it
+/// drops are only forgotten, never deleted: the files they describe are the reader's.
+fn prune(tasks: &mut Vec<DownloadTask>) {
+    if tasks.len() > KEEP {
+        let drop_count = tasks.len() - KEEP;
+        tasks.drain(0..drop_count);
+    }
+}
 
 /// Chooses where a download lands, and lets it run.
 ///
@@ -491,14 +509,42 @@ pub fn set_state(app: &tauri::AppHandle, id: u64, next: &str) {
                     .map(|meta| meta.len())
                     .unwrap_or(task.bytes);
                 task.total = Some(task.bytes);
+                // A file that arrived is not a file that failed.
+                task.error.clear();
             }
             if next != "started" {
                 task.speed = 0;
+            }
+            if next == "started" {
+                // Asking again clears the reason the last attempt gave: it is about to be
+                // either fixed or replaced.
+                task.error.clear();
             }
         }
         tasks.clone()
     };
     crate::logging::info(&format!("download {id} -> {next}"));
+    let _ = app.emit("download:changed", tasks);
+    save_history(app);
+}
+
+/// Marks a task failed, with the reason kept for the page to show.
+pub fn set_failed(app: &tauri::AppHandle, id: u64, reason: &str) {
+    set_state(app, id, "failed");
+    let Some(index) = task_index(app, id) else {
+        return;
+    };
+    let Some(state) = app.try_state::<AppState>() else {
+        return;
+    };
+    let tasks = {
+        let mut tasks = state.downloads.write();
+        if let Some(task) = tasks.get_mut(index) {
+            task.error = reason.to_string();
+        }
+        tasks.clone()
+    };
+    crate::logging::warn(&format!("download {id} failed: {reason}"));
     let _ = app.emit("download:changed", tasks);
     save_history(app);
 }
@@ -621,11 +667,9 @@ fn record_into(app: &tauri::AppHandle, id: u64, url: &str, path: &Path, incognit
             paused: false,
             total: None,
             incognito,
+            error: String::new(),
         });
-        if tasks.len() > KEEP {
-            let drop_count = tasks.len() - KEEP;
-            tasks.drain(0..drop_count);
-        }
+        prune(&mut tasks);
         tasks.clone()
     };
     let _ = app.emit("download:changed", tasks);
@@ -673,11 +717,9 @@ fn record_from(
                     paused: false,
                     total: None,
                     incognito,
+                    error: String::new(),
                 });
-                if tasks.len() > KEEP {
-                    let drop_count = tasks.len() - KEEP;
-                    tasks.drain(0..drop_count);
-                }
+                prune(&mut tasks);
             }
             _ => {
                 let target = tasks
@@ -863,6 +905,33 @@ mod tests {
     fn keeps_plain_names() {
         assert_eq!(sanitize("report.pdf"), "report.pdf");
         assert_eq!(sanitize("my file 1.zip"), "my file 1.zip");
+    }
+
+    #[test]
+    fn the_list_is_capped_at_the_newest_rows() {
+        // The cap used to be spelled out at each place a task was added, and `load_history`
+        // had none at all: a list on disk written by an older build could come back longer
+        // than the cap and stay that way. One rule, applied on the way in.
+        let mut tasks: Vec<DownloadTask> = (0..KEEP + 12)
+            .map(|index| DownloadTask {
+                id: index as u64,
+                url: format!("https://example.com/{index}"),
+                file_name: format!("{index}.bin"),
+                path: format!("/tmp/{index}.bin"),
+                state: "finished".to_string(),
+                bytes: 1,
+                speed: 0,
+                paused: false,
+                total: Some(1),
+                incognito: false,
+                error: String::new(),
+            })
+            .collect();
+        prune(&mut tasks);
+        assert_eq!(tasks.len(), KEEP);
+        // The oldest go first, so what survives is the newest.
+        assert_eq!(tasks.first().map(|task| task.id), Some(12));
+        assert_eq!(tasks.last().map(|task| task.id), Some(KEEP as u64 + 11));
     }
 
     #[test]

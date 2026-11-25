@@ -102,6 +102,65 @@ fn is_html(response: &reqwest::Response) -> bool {
         .unwrap_or(false)
 }
 
+/// Whether a 416 means the file on disk is already the whole thing.
+///
+/// The server says `Content-Range: bytes */<size>` when it refuses a range, which is the
+/// size of the resource. Comparing that against what is on disk is what tells "resumed a
+/// finished download" from "the partial file is not this file any more". A server that does
+/// not send the header gets the benefit of the doubt only when there is nothing left to
+/// fetch, which cannot be known - so it is treated as not complete, and the transfer starts
+/// over rather than claiming success on no evidence.
+fn already_complete(response: &reqwest::Response, on_disk: u64) -> bool {
+    range_says_complete(response.headers(), on_disk)
+}
+
+/// The header-reading half of [`already_complete`], split out so it can be tested.
+fn range_says_complete(headers: &reqwest::header::HeaderMap, on_disk: u64) -> bool {
+    let Some(range) = headers
+        .get(reqwest::header::CONTENT_RANGE)
+        .and_then(|value| value.to_str().ok())
+    else {
+        return false;
+    };
+    // The shape is `bytes */1234` for a refusal; the `*` is where the range would have been.
+    range
+        .rsplit('/')
+        .next()
+        .and_then(|size| size.trim().parse::<u64>().ok())
+        .map(|size| size == on_disk)
+        .unwrap_or(false)
+}
+
+/// A status code turned into something a reader can act on.
+///
+/// "http 404" in a log line is fine for a developer and useless in a toast. The statuses
+/// here are the ones a download actually meets.
+fn http_reason(status: reqwest::StatusCode) -> String {
+    match status.as_u16() {
+        401 | 403 => "this server needs you to sign in first".to_string(),
+        404 | 410 => "the file is no longer at that address".to_string(),
+        429 => "the server is asking us to slow down; try again in a minute".to_string(),
+        code if (500..600).contains(&code) => {
+            "the server is having trouble; try again later".to_string()
+        }
+        code => format!("the server answered {code}"),
+    }
+}
+
+/// The same for a transport error.
+fn describe(err: &reqwest::Error) -> String {
+    if err.is_timeout() {
+        return "it took too long; try again".to_string();
+    }
+    if err.is_connect() {
+        return "cannot reach that server".to_string();
+    }
+    if err.is_decode() {
+        return "the answer could not be read".to_string();
+    }
+    "the connection failed".to_string()
+}
+
 /// Starts (or restarts) a transfer, continuing from whatever is on disk.
 ///
 /// `request` carries what the page would have sent; an empty one is a plain fetch.
@@ -170,7 +229,7 @@ pub fn start_with(
             .user_agent(USER_AGENT)
             .build();
         let Ok(client) = client else {
-            crate::downloads::set_state(&app, id, "failed");
+            crate::downloads::set_failed(&app, id, "the download engine could not start");
             release(&path);
             return;
         };
@@ -196,14 +255,38 @@ pub fn start_with(
                 Ok(response) => response,
                 Err(err) => {
                     crate::logging::warn(&format!("fetch {id} failed: {err}"));
-                    crate::downloads::set_state(&app, id, "failed");
+                    crate::downloads::set_failed(&app, id, &describe(&err));
                     release(&path);
                     return;
                 }
             };
+            // 416 is what a server answers when the range starts at or past the end of the
+            // file, and the commonest way to ask for one is to resume a file that is already
+            // complete - a task marked interrupted whose bytes all arrived before the process
+            // ended. Treating it as a failure made a finished download look broken and
+            // unopenable, so the size is compared instead: equal means it is already whole,
+            // anything else means what is on disk is not the file and starts over.
+            if response.status() == reqwest::StatusCode::RANGE_NOT_SATISFIABLE {
+                let complete = already_complete(&response, offset);
+                if complete {
+                    crate::logging::info(&format!(
+                        "fetch {id}: already complete at {offset} bytes"
+                    ));
+                    crate::downloads::set_state(&app, id, "finished");
+                } else {
+                    crate::logging::warn(&format!(
+                        "fetch {id}: range refused at {offset}; starting over"
+                    ));
+                    let _ = std::fs::remove_file(&path);
+                    crate::downloads::set_failed(&app, id, "the server refused to resume it");
+                }
+                release(&path);
+                return;
+            }
             if !response.status().is_success() {
-                crate::logging::warn(&format!("fetch {id}: http {}", response.status()));
-                crate::downloads::set_state(&app, id, "failed");
+                let status = response.status();
+                crate::logging::warn(&format!("fetch {id}: http {status}"));
+                crate::downloads::set_failed(&app, id, &http_reason(status));
                 release(&path);
                 return;
             }
@@ -223,7 +306,11 @@ pub fn start_with(
                 crate::logging::warn(&format!(
                     "fetch {id}: server answered with a web page, not the file"
                 ));
-                crate::downloads::set_state(&app, id, "failed");
+                crate::downloads::set_failed(
+                    &app,
+                    id,
+                    "the server sent a web page instead of the file",
+                );
                 release(&path);
                 return;
             }
@@ -244,7 +331,7 @@ pub fn start_with(
                         "fetch {id}: cannot write {}: {err}",
                         path.display()
                     ));
-                    crate::downloads::set_state(&app, id, "failed");
+                    crate::downloads::set_failed(&app, id, "the file could not be created on disk");
                     release(&path);
                     return;
                 }
@@ -259,7 +346,7 @@ pub fn start_with(
                     let _ = file.flush();
                     drop(file);
                     let _ = std::fs::remove_file(&path);
-                    crate::downloads::set_state(&app, id, "failed");
+                    crate::downloads::set_failed(&app, id, "cancelled");
                     release(&path);
                     return;
                 }
@@ -278,7 +365,7 @@ pub fn start_with(
                 }
                 if let Err(err) = file.write_all(&chunk) {
                     crate::logging::warn(&format!("fetch {id}: write failed: {err}"));
-                    crate::downloads::set_state(&app, id, "failed");
+                    crate::downloads::set_failed(&app, id, "the file could not be written to disk");
                     release(&path);
                     return;
                 }
@@ -445,4 +532,48 @@ pub fn busy(id: u64) -> bool {
         .get(&id)
         .map(|job| job.active.load(Ordering::Relaxed))
         .unwrap_or(false)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_status_a_reader_can_act_on() {
+        // The row used to say "failed" and nothing else, which leaves the reader guessing
+        // whether to sign in, wait, or give up.
+        assert!(http_reason(reqwest::StatusCode::FORBIDDEN).contains("sign in"));
+        assert!(http_reason(reqwest::StatusCode::UNAUTHORIZED).contains("sign in"));
+        assert!(http_reason(reqwest::StatusCode::NOT_FOUND).contains("no longer at that address"));
+        assert!(http_reason(reqwest::StatusCode::GONE).contains("no longer"));
+        assert!(http_reason(reqwest::StatusCode::TOO_MANY_REQUESTS).contains("slow down"));
+        assert!(http_reason(reqwest::StatusCode::INTERNAL_SERVER_ERROR).contains("try again"));
+        assert!(http_reason(reqwest::StatusCode::BAD_GATEWAY).contains("try again"));
+        // Anything else still names the number, which is better than silence.
+        assert!(http_reason(reqwest::StatusCode::IM_A_TEAPOT).contains("418"));
+    }
+
+    #[test]
+    fn a_refusal_beyond_the_end_of_the_file_is_not_a_failure_when_the_file_is_whole() {
+        // 416 is what a server says when the range starts at or past the end, and resuming a
+        // download whose bytes all arrived before the process ended asks for exactly that.
+        // Calling it a failure made a finished file look broken and unopenable.
+        use reqwest::header::{HeaderMap, HeaderValue, CONTENT_RANGE};
+
+        let mut whole = HeaderMap::new();
+        whole.insert(CONTENT_RANGE, HeaderValue::from_static("bytes */1234"));
+        assert!(range_says_complete(&whole, 1234));
+
+        // The file on disk is shorter than the resource: not complete, start over.
+        assert!(!range_says_complete(&whole, 1000));
+
+        // Without the header there is no evidence, and claiming success on none is worse
+        // than fetching again.
+        assert!(!range_says_complete(&HeaderMap::new(), 1234));
+
+        // A malformed one is treated the same way as a missing one.
+        let mut bad = HeaderMap::new();
+        bad.insert(CONTENT_RANGE, HeaderValue::from_static("bytes */abc"));
+        assert!(!range_says_complete(&bad, 1234));
+    }
 }
