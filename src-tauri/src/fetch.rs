@@ -112,7 +112,6 @@ pub fn start_with(
     path: std::path::PathBuf,
     request: Request,
 ) {
-    let running = Arc::new(AtomicBool::new(true));
     let paused = Arc::new(AtomicBool::new(false));
     let cancelled = Arc::new(AtomicBool::new(false));
 
@@ -264,12 +263,17 @@ pub fn start_with(
                     release(&path);
                     return;
                 }
-                if paused.load(Ordering::Relaxed) || !running.load(Ordering::Relaxed) {
+                if paused.load(Ordering::Relaxed) {
                     let _ = file.flush();
                     drop(file);
                     // The user asked for this one, which reads differently from a
                     // connection that went away: the buttons offered are not the same.
                     crate::downloads::set_state(&app, id, "paused");
+                    // The claim has to go back: `pause` aborts the loop, so the release at
+                    // the end of it never runs. Leaving the file claimed made every later
+                    // attempt to fetch it a silent no-op - the download appeared to start
+                    // and then simply never moved, and starting it again did nothing at all.
+                    release(&path);
                     return;
                 }
                 if let Err(err) = file.write_all(&chunk) {
@@ -330,12 +334,27 @@ pub fn pause(id: u64) -> bool {
 ///
 /// The request context is carried over rather than rebuilt: `pause` aborts the loop, so
 /// by the time this runs there may be no webview left to read the cookies back from.
-pub fn resume(app: tauri::AppHandle, id: u64) -> bool {
-    let (url, path, request) = {
+///
+/// A task that outlived the process has no job at all - `jobs()` is empty after a restart -
+/// and this used to answer `false` for it. The row still said "Resume", the page swallowed
+/// the false as if it were success, and pressing it did nothing whatsoever. Resuming is
+/// therefore allowed to adopt a task it has never seen: the list on disk knows the url and
+/// the path, which is everything a transfer needs.
+pub fn resume(app: tauri::AppHandle, id: u64, known: Option<(String, std::path::PathBuf)>) -> bool {
+    let from_job = {
         let map = jobs().lock();
-        match map.get(&id) {
-            Some(job) => (job.url.clone(), job.path.clone(), job.request.clone()),
-            None => return false,
+        map.get(&id)
+            .map(|job| (job.url.clone(), job.path.clone(), job.request.clone()))
+    };
+    let (url, path, request) = match from_job {
+        Some((url, path, request)) => (url, path, request),
+        None => {
+            // Nothing this session started: take the url and path the task list remembers.
+            let Some((url, path)) = known else {
+                crate::logging::warn(&format!("download {id}: nothing known to resume"));
+                return false;
+            };
+            (url, path, Request::default())
         }
     };
     unclaim(&path);

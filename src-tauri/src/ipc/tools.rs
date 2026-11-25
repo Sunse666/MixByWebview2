@@ -645,6 +645,10 @@ fn on_main<T: Send + 'static>(
 }
 
 /// Pauses or resumes a download, whichever engine owns it.
+///
+/// `ok` is reported to the page rather than swallowed: a resume that cannot happen - the
+/// row outlived the process and its file is gone, say - has to say so, because the button
+/// looked like it worked and nothing moved.
 #[tauri::command]
 pub async fn download_pause(
     app: AppHandle,
@@ -652,17 +656,15 @@ pub async fn download_pause(
     id: u64,
     paused: bool,
 ) -> Result<bool, AppError> {
-    let _ = &state;
     let ok = if paused {
         crate::fetch::pause(id)
     } else {
-        crate::fetch::resume(app.clone(), id)
+        // A task that outlived the process has no job; the list remembers what it was.
+        let known = task_parts(&state, id).map(|(url, path)| (url, std::path::PathBuf::from(path)));
+        crate::fetch::resume(app.clone(), id, known)
     };
     if ok {
-        let state = app.try_state::<AppState>();
-        if let Some(state) = state.as_ref() {
-            mark_paused(&app, state, id, paused);
-        }
+        mark_paused(&app, &state, id, paused);
     }
     crate::logging::info(&format!(
         "download {id} {}{}{}",
@@ -670,7 +672,17 @@ pub async fn download_pause(
         ": ",
         ok
     ));
-    Ok(ok)
+    if !ok {
+        return Err(AppError::new(
+            "bad_download",
+            if paused {
+                "this download is not running"
+            } else {
+                "this download cannot be resumed"
+            },
+        ));
+    }
+    Ok(true)
 }
 
 /// Cancels a download, whichever engine owns it.
