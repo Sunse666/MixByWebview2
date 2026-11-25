@@ -444,7 +444,16 @@
     // A page that assembles its own stream gives it a `blob:` address, and that address
     // answers only inside the page. There is no file behind it to fetch, so the honest thing
     // is to say that rather than start a download that would fail or save nonsense.
+    //
+    // One site is the exception, because it is the one this was reported for: a bilibili
+    // watch page always answers a blob and always has a real file behind it, reachable
+    // through the site's own playurl endpoint. The backend derives the address from the tab,
+    // so nothing about the video is taken from here.
     if (src.indexOf("blob:") === 0 || src.indexOf("data:") === 0) {
+      if (isBiliPage()) {
+        saveBili();
+        return;
+      }
       notify("This video is streamed in pieces, so there is no single file to save.");
       say("save refused: blob or inline source");
       return;
@@ -459,6 +468,32 @@
         var detail = (error && (error.message || error.code)) || String(error);
         notify("Could not save: " + detail);
         say("save video failed: " + detail);
+      },
+    );
+  };
+
+  /// Whether this page is a bilibili video, where a blob address does have a file behind it.
+  var isBiliPage = function () {
+    return /(^|\.)bilibili\.com$/i.test(location.hostname) &&
+      location.pathname.indexOf("/video/") === 0;
+  };
+
+  /// Asks the backend for the file behind a bilibili watch page.
+  ///
+  /// The address is derived there, not here: the playurl endpoint has to be asked with the
+  /// reader's own cookies to get the quality they are entitled to, and a page cannot read
+  /// those. Nothing is passed but "the tab I am", so a page cannot ask for a video it is not
+  /// showing.
+  var saveBili = function () {
+    notify("Working out the address\u2026");
+    tauri.invoke("bili_download", {}).then(
+      function (target) {
+        notify("Downloading to " + (target || "the downloads folder") + "\u2026");
+      },
+      function (error) {
+        var detail = (error && (error.message || error.code)) || String(error);
+        notify("Could not save: " + detail);
+        say("bili save failed: " + detail);
       },
     );
   };

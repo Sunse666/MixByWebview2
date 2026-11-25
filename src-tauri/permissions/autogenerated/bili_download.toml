@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-bili-download"
+description = "Enables the bili_download command without any pre-configured scope."
+commands.allow = ["bili_download"]
+
+[[permission]]
+identifier = "deny-bili-download"
+description = "Denies the bili_download command without any pre-configured scope."
+commands.deny = ["bili_download"]

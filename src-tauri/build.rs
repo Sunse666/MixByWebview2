@@ -149,6 +149,7 @@ fn main() {
         "bar_reveal",
         "video_pip",
         "video_download",
+        "bili_download",
         "snap",
         "settings_get",
         "font_list",

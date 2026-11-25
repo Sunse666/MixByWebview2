@@ -962,6 +962,163 @@ pub async fn drag_action(
     Ok(())
 }
 
+/// Saves the video the tab is showing, for a site whose player never exposes a file.
+///
+/// The video bar's own save button fetches `video.currentSrc`, which is right for a page
+/// playing a plain mp4 and useless on a site that streams through MSE: the address there is
+/// a `blob:` that answers only inside the page. Bilibili is that case, so the address is
+/// derived from the watch page through the site's own playurl endpoint instead -
+/// `crate::bili` holds the reasoning and the parsing.
+///
+/// The transfer goes through the download engine rather than `save_url`, so it appears in
+/// the downloads list with progress and can be paused: a 50 MB video that blocks until it
+/// finishes, with no sign of life, is the behaviour this replaces.
+#[tauri::command]
+pub async fn bili_download(
+    app: AppHandle,
+    webview: tauri::Webview,
+    state: State<'_, AppState>,
+) -> Result<String, AppError> {
+    let label = webview.label().to_string();
+    // The page's own address, not one the caller names: a page must not be able to ask for
+    // a download from a video it is not the one showing.
+    let page_url = state
+        .try_read_core(window_of_tab(&label))
+        .and_then(|core| {
+            core.tabs
+                .iter()
+                .find(|tab| tab.id == label)
+                .map(|tab| tab.url.clone())
+        })
+        .unwrap_or_default();
+    let (bvid, aid, wanted_part) = crate::bili::parse(&page_url)
+        .ok_or_else(|| AppError::new("bad_url", "this page is not a bilibili video"))?;
+
+    // The cookies and referer the tab already has: what the endpoint is willing to hand out
+    // depends on who is asking, so the answer carries the reader's own entitlements.
+    let session = crate::downloads::request_for(&app, &label);
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(60))
+        .user_agent(crate::fetch::USER_AGENT)
+        .build()
+        .map_err(|err| AppError::new("net", err.to_string()))?;
+
+    let ask = |url: String| {
+        let client = client.clone();
+        let session = session.clone();
+        async move {
+            let mut builder = client.get(&url);
+            builder = builder.header(reqwest::header::REFERER, "https://www.bilibili.com");
+            if let Some(cookie) = session.cookie.as_deref() {
+                builder = builder.header(reqwest::header::COOKIE, cookie);
+            }
+            let response = builder
+                .send()
+                .await
+                .map_err(|err| AppError::new("net", err.to_string()))?;
+            if !response.status().is_success() {
+                return Err(AppError::new(
+                    "net",
+                    format!("the site answered {}", response.status()),
+                ));
+            }
+            response
+                .json::<serde_json::Value>()
+                .await
+                .map_err(|err| AppError::new("net", err.to_string()))
+        }
+    };
+
+    // The part list, so a multi-part video saves the part on screen and names the file after
+    // it rather than after the whole video.
+    let mut view = if bvid.is_empty() {
+        format!(
+            "https://api.bilibili.com/x/web-interface/view?aid={}",
+            aid.unwrap_or(0)
+        )
+    } else {
+        format!("https://api.bilibili.com/x/web-interface/view?bvid={bvid}")
+    };
+    view.push_str("&jsonp=jsonp");
+    let info = ask(view).await?;
+    let data = info
+        .get("data")
+        .ok_or_else(|| AppError::new("bili", "the site sent no information about this video"))?;
+    let title = data
+        .get("title")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or_default()
+        .to_string();
+
+    let parts: Vec<(u64, String)> = data
+        .get("pages")
+        .and_then(serde_json::Value::as_array)
+        .map(|pages| {
+            pages
+                .iter()
+                .map(|page| {
+                    (
+                        page.get("cid")
+                            .and_then(serde_json::Value::as_u64)
+                            .unwrap_or(0),
+                        page.get("part")
+                            .and_then(serde_json::Value::as_str)
+                            .unwrap_or_default()
+                            .to_string(),
+                    )
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
+    if parts.is_empty() || parts[0].0 == 0 {
+        return Err(AppError::new("bili", "this video has no playable part"));
+    }
+    // Part 1 for a page with no `p`, and the page's own part otherwise, clamped: a hand
+    // written `p=99` is a typo, not a request to fail.
+    let index = wanted_part
+        .map(|value| (value as usize).saturating_sub(1))
+        .unwrap_or(0)
+        .min(parts.len() - 1);
+    let cid = parts[index].0;
+
+    // `platform=html5` is what makes the answer a single mp4 with both tracks. The default
+    // platform answers a DASH pair, which cannot be joined here - see `crate::bili::pick`.
+    //
+    // `qn=112` is "the best this account may have", not "1080P": the endpoint downgrades to
+    // what the session is entitled to and reports what it granted in `quality`. Without it
+    // the answer is 360P even for an account that could have 1080P, which is the difference
+    // between 10 MB and 50 MB for the same video.
+    let play = format!(
+        "https://api.bilibili.com/x/player/playurl?bvid={bvid}&cid={cid}\
+         &fnval=1&fnver=0&fourk=1&platform=html5&high_quality=1&qn=112"
+    );
+    let answer = ask(play).await?;
+    let picked = crate::bili::pick(&answer).map_err(|err| AppError::new("bili", err))?;
+
+    // Built before the call so it can be borrowed: `file_name` takes a reference because it
+    // only reads the title.
+    let part = parts.get(index).map(|(_cid, part)| crate::bili::Part {
+        title: part.clone(),
+    });
+    let name = crate::bili::file_name(&title, part.as_ref(), index);
+    let target = crate::bili::destination(&state.dirs.downloads, &name);
+    let id = crate::downloads::start_with_engine_from(
+        &app,
+        &picked.url,
+        &target,
+        // The tab supplies referer and cookies again, for the CDN this time.
+        &label,
+    );
+    crate::logging::info(&format!(
+        "bili {bvid} part {cid}: {} ({}) -> {} [download {id}]",
+        picked.quality,
+        picked.size,
+        target.display()
+    ));
+    Ok(target.display().to_string())
+}
+
 /// Saves the file a video is playing from, at the address it is playing from.
 ///
 /// This is the only honest way to download a video: the browser is not what serves it. A

@@ -132,6 +132,7 @@
     "allow-bar-reveal",
     "allow-video-pip",
     "allow-video-download",
+    "allow-bili-download",
     "allow-snap",
     "allow-settings-get",
     "allow-font-list",

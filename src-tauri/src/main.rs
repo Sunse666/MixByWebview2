@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod audio;
+mod bili;
 mod browser_reg;
 mod com;
 #[cfg(debug_assertions)]
@@ -280,6 +281,7 @@ fn main() {
             ipc::bar_reveal,
             ipc::video_pip,
             ipc::video_download,
+            ipc::bili_download,
             ipc::snap,
             ipc::settings_get,
             ipc::font_list,
