@@ -1041,17 +1041,79 @@ pub(crate) async fn save_url(
         ));
     }
 
-    let bytes = response
-        .bytes()
-        .await
-        .map_err(|err| AppError::new("net", err.to_string()))?;
-    if bytes.len() > 128 * 1024 * 1024 {
-        return Err(AppError::new("too_big", "file is larger than 128 MB"));
+    // The size limit is enforced while the body arrives, not after it is all in memory.
+    // Reading it first and checking afterwards meant the limit stopped nothing: a 4 GB url
+    // was 4 GB of ram before the answer was "too big". The declared length is checked first
+    // because that is free, and the running total catches a response that did not declare
+    // one or lied about it.
+    const LIMIT: u64 = 128 * 1024 * 1024;
+    // Saved before the body is consumed: after that the response has no length to report.
+    let declared = response.content_length();
+    if let Some(declared) = declared {
+        if declared > LIMIT {
+            return Err(AppError::new(
+                "too_big",
+                format!("file is larger than {} MB", LIMIT / (1024 * 1024)),
+            ));
+        }
     }
 
     let suggested = file_name.unwrap_or_default();
     let target = crate::downloads::target_for(&state.dirs.downloads, &url, &suggested);
-    crate::paths::write_atomic(&target, &bytes)?;
+
+    // Streamed to the temporary file `write_atomic` would have used, for the same reason it
+    // uses one: a transfer that fails or runs past the limit must not leave a truncated file
+    // under the real name.
+    {
+        use std::io::Write;
+        let dir = target.parent().unwrap_or_else(|| std::path::Path::new("."));
+        std::fs::create_dir_all(dir)?;
+        let tmp = crate::paths::atomic_tmp(&target);
+        let mut file = std::fs::File::create(&tmp)?;
+        let mut response = response;
+        let mut written: u64 = 0;
+        loop {
+            match response.chunk().await {
+                Ok(Some(chunk)) => {
+                    written += chunk.len() as u64;
+                    if written > LIMIT {
+                        drop(file);
+                        let _ = std::fs::remove_file(&tmp);
+                        return Err(AppError::new(
+                            "too_big",
+                            format!("file is larger than {} MB", LIMIT / (1024 * 1024)),
+                        ));
+                    }
+                    if let Err(err) = file.write_all(&chunk) {
+                        drop(file);
+                        let _ = std::fs::remove_file(&tmp);
+                        return Err(AppError::new("io", err.to_string()));
+                    }
+                }
+                // A transfer that stops early is not a saved file: the loop ends the same
+                // way whether the body finished or the connection went away, so the length
+                // it promised is what decides.
+                Ok(None) => break,
+                Err(err) => {
+                    drop(file);
+                    let _ = std::fs::remove_file(&tmp);
+                    return Err(AppError::new("net", err.to_string()));
+                }
+            }
+        }
+        let _ = file.sync_all();
+        drop(file);
+        if let Some(declared) = declared {
+            if written != declared {
+                let _ = std::fs::remove_file(&tmp);
+                return Err(AppError::new(
+                    "net",
+                    format!("the server sent {written} bytes of {declared}"),
+                ));
+            }
+        }
+        std::fs::rename(&tmp, &target)?;
+    }
     crate::downloads::record_done(&app, &url, &target);
     crate::logging::info(&format!("saved {}", target.display()));
     Ok(target.display().to_string())

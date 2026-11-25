@@ -174,15 +174,24 @@ fn fallback_data_dir() -> PathBuf {
     }
     std::env::temp_dir().join("mix")
 }
-/// Writes through a sibling temporary file and renames it into place.
-pub fn write_atomic(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
-    let dir = path.parent().unwrap_or_else(|| Path::new("."));
-    std::fs::create_dir_all(dir)?;
+/// The sibling file a write goes through before it is renamed into place.
+///
+/// Shared by the buffered and the streaming write so a half-written file always has the same
+/// name: if one of them left a differently named partial behind, `write_atomic` would happily
+/// rename the other one's leftovers over a good file.
+pub fn atomic_tmp(path: &Path) -> PathBuf {
     let suffix = path
         .extension()
         .and_then(|ext| ext.to_str())
         .unwrap_or("dat");
-    let tmp = path.with_extension(format!("{suffix}.tmp"));
+    path.with_extension(format!("{suffix}.tmp"))
+}
+
+/// Writes through a sibling temporary file and renames it into place.
+pub fn write_atomic(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    let dir = path.parent().unwrap_or_else(|| Path::new("."));
+    std::fs::create_dir_all(dir)?;
+    let tmp = atomic_tmp(path);
     {
         let mut file = std::fs::File::create(&tmp)?;
         std::io::Write::write_all(&mut file, bytes)?;
@@ -204,5 +213,27 @@ mod tests {
         write_atomic(&path, b"second").unwrap();
         assert_eq!(std::fs::read_to_string(&path).unwrap(), "second");
         assert!(!path.with_extension("json.tmp").exists());
+    }
+
+    #[test]
+    fn the_streaming_write_and_the_buffered_one_agree_on_the_temporary_name() {
+        // They have to agree: a download streams into this file and then renames it, and if
+        // the buffered write used a different name in the same folder, one of them would
+        // rename the other's half-written file over a good one.
+        let path = std::path::Path::new("pictures.zip");
+        assert_eq!(atomic_tmp(path), std::path::Path::new("pictures.zip.tmp"));
+
+        // A name with no extension still gets one, so two writers cannot collide on the
+        // bare name itself.
+        assert_eq!(
+            atomic_tmp(std::path::Path::new("notes")),
+            std::path::Path::new("notes.dat.tmp")
+        );
+
+        // Only the last extension is the suffix; the rest of the name is kept.
+        assert_eq!(
+            atomic_tmp(std::path::Path::new("a.tar.gz")),
+            std::path::Path::new("a.tar.gz.tmp")
+        );
     }
 }
