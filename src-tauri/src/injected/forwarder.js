@@ -360,7 +360,13 @@
     if (started && started.catch) started.catch(complain);
   };
 
-  /// The video a reader would call "the video": playing, visible, and the biggest one.
+  /// The video a reader would call "the video": visible, ready, and the biggest one.
+  ///
+  /// Not "the one that is playing". A reader who paused the video and then wants it out of the
+  /// way is asking for exactly this, and refusing because `paused` is true answered a question
+  /// nobody asked. What is excluded instead is a video that has never loaded anything: a page
+  /// leaves those in the document as placeholders, and they are the ones that would make the
+  /// button point at nothing.
   ///
   /// A video with `disablePictureInPicture` is skipped rather than shown-and-refused: it has
   /// said it does not want this, and a button guaranteed to fail is worse than no button.
@@ -370,8 +376,12 @@
     var videos = document.querySelectorAll("video");
     for (var i = 0; i < videos.length; i += 1) {
       var video = videos[i];
-      if (video.paused || video.ended) continue;
-      if (video.readyState < 2) continue;
+      // `readyState` is the one test that tells a real player from an unused placeholder, and
+      // it has to be 1 rather than 2: a paused video drops back to HAVE_METADATA, so a
+      // threshold of 2 excluded exactly the case this is for. A placeholder that never loaded
+      // anything sits at 0 and has no dimensions worth a corner anyway.
+      if (video.readyState < 1) continue;
+      if (video.ended) continue;
       if (video.disablePictureInPicture) continue;
       if (video === document.pictureInPictureElement) continue;
       var box = video.getBoundingClientRect();
@@ -471,12 +481,15 @@
       name,
       function (event) {
         if (!event.target || event.target.tagName !== "VIDEO") return;
-        // A new video is a new corner, so it is worth showing once more.
-        if (name === "play" || name === "loadedmetadata") current = null;
-        // And once a video starts, the icon is filled in before the reader can reach for
-        // either this button or the page's own: the platform takes its copy of the artwork
-        // when the window opens, and by then it has to be there.
-        if (name === "play") dressMetadata();
+        // A new video is a new corner, so it is worth showing once more. `pause` counts as
+        // one of those moments now that a paused video is a candidate: a reader who pauses
+        // and then looks for the control should find it, and the pointer may well be nowhere
+        // near the corner when they do.
+        if (name !== "ended" && name !== "emptied") current = null;
+        // And once a video has something to show, the icon is filled in before the reader can
+        // reach for either this button or the page's own: the platform takes its copy of the
+        // artwork when the window opens, and by then it has to be there.
+        if (name === "play" || name === "pause" || name === "loadedmetadata") dressMetadata();
         soon();
       },
       true,
