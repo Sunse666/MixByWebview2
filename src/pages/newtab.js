@@ -1,5 +1,6 @@
-import { setLanguage, t } from "../i18n.js";
+﻿import { setLanguage, t } from "../i18n.js";
 import { withFeedback, setFeedbackText } from "./feedback.js";
+import { addressFor } from "../address.js";
 
 const invoke = withFeedback(window.__TAURI__.core.invoke);
 
@@ -15,10 +16,18 @@ function hostOf(url) {
   }
 }
 
-function open(target) {
+/**
+ * Sends the reader where the box asked to go.
+ *
+ * Through `addressFor`, the same decision the chrome strip's address bar makes: a typed
+ * address navigates, anything else is a search. Handing the raw text to `tab_navigate` is
+ * what used to happen, and it rejected `rust async` as "not a web address" - replacing the
+ * new tab page with the error page for a perfectly ordinary thing to type.
+ */
+function open(target, settings) {
   const value = target.trim();
   if (!value) return;
-  invoke("tab_navigate", { url: value }).catch(() => {});
+  invoke("tab_navigate", { url: addressFor(value, settings) }).catch(() => {});
 }
 
 async function boot() {
@@ -37,9 +46,9 @@ async function boot() {
   document.getElementById("go").textContent = t("Go");
 
   input.addEventListener("keydown", (event) => {
-    if (event.key === "Enter") open(input.value);
+    if (event.key === "Enter") open(input.value, settings);
   });
-  document.getElementById("go").addEventListener("click", () => open(input.value));
+  document.getElementById("go").addEventListener("click", () => open(input.value, settings));
   input.focus();
 
   const visits = (await invoke("history_list", { limit: 400 }).catch(() => [])) || [];

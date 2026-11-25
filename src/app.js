@@ -2,6 +2,10 @@
 const { invoke } = window.__TAURI__.core;
 const PAGE = Math.random().toString(36).slice(2, 6);
 import { applyStatic, setLanguage, t } from "./i18n.js";
+// What the address bar does with what was typed into it lives in `address.js`: the new tab
+// page asks the same question, and answering it differently is what made a search typed
+// there replace the tab with the "not a web address" page.
+import { addressFor, looksLikeAddress } from "./address.js";
 const { listen } = window.__TAURI__.event;
 
 const root = document.documentElement;
@@ -1100,37 +1104,6 @@ async function toggleTranslate() {
   renderToolbar(currentExtensions);
 }
 
-const SEARCH_ENGINES = {
-  baidu: "https://www.baidu.com/s?wd=",
-  bing: "https://www.bing.com/search?q=",
-  google: "https://www.google.com/search?q=",
-  ddg: "https://duckduckgo.com/?q=",
-};
-
-function looksLikeAddress(text) {
-  const value = (text || "").trim();
-  if (!value) return null;
-  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(value)) return value;
-  if (value.startsWith("mix://")) {
-    const page = value.slice(6).split("/")[0];
-    return "http://tauri.localhost/pages/" + page + ".html";
-  }
-  if (value.includes(" ") || !value.includes(".")) return null;
-  return "https://" + value;
-}
-
-function addressFor(text) {
-  const direct = looksLikeAddress(text);
-  if (direct) return direct;
-  const query = (text || "").trim();
-  const template = (settings.custom_search || "").trim();
-  if (template.includes("%s")) {
-    return template.replace("%s", encodeURIComponent(query));
-  }
-  const base = SEARCH_ENGINES[settings.search_engine] || SEARCH_ENGINES.baidu;
-  return base + encodeURIComponent(query);
-}
-
 function openSearchPanel(kind) {
   const width = 560;
   const x = Math.max(8, Math.round((window.innerWidth - width) / 2));
@@ -1805,7 +1778,7 @@ async function boot() {
     // known, a search asks a question.
     const asAddress = looksLikeAddress(text);
     const kind = asAddress ? "open_address" : "open_search";
-    const url = addressFor(text);
+    const url = addressFor(text, settings);
     const where = settings[kind] || (asAddress ? "current" : "foreground");
     if (where === "background") {
       invoke("tab_new", { url, background: true }).catch(flagBadUrl);
@@ -2094,7 +2067,7 @@ async function boot() {
 
   urlInput.addEventListener("keydown", (event) => {
     if (event.key === "Enter") {
-      invoke("tab_navigate", { url: addressFor(urlInput.value) }).catch(flagBadUrl);
+      invoke("tab_navigate", { url: addressFor(urlInput.value, settings) }).catch(flagBadUrl);
       closeSuggest();
       urlInput.blur();
     }
