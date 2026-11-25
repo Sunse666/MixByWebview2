@@ -306,6 +306,47 @@
     return button;
   };
 
+  /// The site's own icon, as a url the media session will accept.
+  ///
+  /// The same lookup the tab strip uses: the declared icon when there is one, and
+  /// `/favicon.ico` otherwise. Nothing is filtered by type: whether the platform can draw a
+  /// given source is its decision, and skipping a site's icon because this code guessed wrong
+  /// about the format would leave the window with nothing at all.
+  var siteIcon = function () {
+    var link = document.querySelector('link[rel~="icon"]');
+    var href = link && link.href ? link.href : "";
+    if (!href && location.protocol.indexOf("http") === 0) {
+      href = location.origin + "/favicon.ico";
+    }
+    return href || "";
+  };
+
+  /// Gives the media session the site's icon, unless the page has already filled it in.
+  ///
+  /// The picture-in-picture window draws whatever artwork the platform is given, and only the
+  /// page can give it. A page that set its own artwork knows best - a video site puts a cover
+  /// there - so this only fills the empty case, where what the window shows would otherwise be
+  /// nothing at all. Called just before the window opens, which is the moment the platform
+  /// takes its copy.
+  var dressMetadata = function () {
+    if (!("mediaSession" in navigator) || typeof MediaMetadata !== "function") return;
+    try {
+      var held = navigator.mediaSession.metadata;
+      var artwork = (held && held.artwork) || [];
+      if (artwork.length) return;
+      var icon = siteIcon();
+      if (!icon) return;
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: (held && held.title) || document.title || "",
+        artist: (held && held.artist) || location.hostname,
+        album: (held && held.album) || "",
+        artwork: [{ src: icon, sizes: "96x96" }],
+      });
+    } catch (error) {
+      // A page can freeze its own media session; nothing here is worth failing over.
+    }
+  };
+
   var toggle = function () {
     var video = current;
     if (!video) return;
@@ -313,6 +354,7 @@
       document.exitPictureInPicture().catch(function () {});
       return;
     }
+    dressMetadata();
     // Called from inside the click, which is what the engine requires.
     var started = video.requestPictureInPicture();
     if (started && started.catch) started.catch(complain);
@@ -431,6 +473,10 @@
         if (!event.target || event.target.tagName !== "VIDEO") return;
         // A new video is a new corner, so it is worth showing once more.
         if (name === "play" || name === "loadedmetadata") current = null;
+        // And once a video starts, the icon is filled in before the reader can reach for
+        // either this button or the page's own: the platform takes its copy of the artwork
+        // when the window opens, and by then it has to be there.
+        if (name === "play") dressMetadata();
         soon();
       },
       true,
