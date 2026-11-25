@@ -170,25 +170,77 @@ pub fn hide_pip_from_taskbar() {
     });
 }
 
-/// Marks every picture-in-picture window of this process. Returns how many were found.
+/// The picture-in-picture window, if it exists right now, marked as a tool window.
+///
+/// The small window is real: a top-level `Chrome_WidgetWin_1` with no `WS_EX_TOOLWINDOW`, and
+/// the absence of that one bit is the whole reason it gets a taskbar button. Measured on the
+/// running window: `0x200108`, which is `NOREDIRECTIONBITMAP | WINDOWEDGE | TOPMOST` and
+/// nothing else; setting the bit on the live window removed the button and left the drawing
+/// untouched.
+///
+/// It belongs to the WebView2 process, not to `mix.exe` - the engine runs the page in a child
+/// of its own, and an owner test against `std::process::id()` found nothing at all. The check
+/// is descent along the parent chain instead, which is what separates our player from a
+/// browser running beside us.
 fn mark_pip_windows() -> usize {
-    use windows::Win32::Foundation::{HWND, LPARAM};
+    use windows::Win32::Foundation::{CloseHandle, HWND, LPARAM};
+    use windows::Win32::System::Diagnostics::ToolHelp::{
+        CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W,
+        TH32CS_SNAPPROCESS,
+    };
     use windows::Win32::UI::WindowsAndMessaging::{
-        EnumWindows, GetClassNameW, GetWindowLongW, GetWindowThreadProcessId, SetWindowLongW,
-        SetWindowPos, GWL_EXSTYLE, HWND_TOP, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE,
-        SWP_NOSIZE, SWP_NOZORDER, WS_EX_TOOLWINDOW,
+        EnumWindows, GetClassNameW, GetWindowLongW, GetWindowTextW, GetWindowThreadProcessId,
+        SetWindowLongW, SetWindowPos, GWL_EXSTYLE, GWL_STYLE, HWND_TOP, SWP_FRAMECHANGED,
+        SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, WS_CHILD, WS_EX_TOOLWINDOW,
+    };
+
+    // pid -> parent pid, for the whole machine. Taken now rather than at startup: the engine
+    // spawns its helpers while a page loads, so a list from boot would not contain the one
+    // that ends up owning the player window.
+    let mut parents: Vec<(u32, u32)> = Vec::new();
+    unsafe {
+        if let Ok(snap) = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) {
+            let mut entry = PROCESSENTRY32W {
+                dwSize: std::mem::size_of::<PROCESSENTRY32W>() as u32,
+                ..Default::default()
+            };
+            if Process32FirstW(snap, &mut entry).is_ok() {
+                loop {
+                    parents.push((entry.th32ProcessID, entry.th32ParentProcessID));
+                    if Process32NextW(snap, &mut entry).is_err() {
+                        break;
+                    }
+                }
+            }
+            let _ = CloseHandle(snap);
+        }
+    }
+
+    let mine = std::process::id();
+    let is_ours = |pid: u32| -> bool {
+        // Eight links is deeper than WebView2 nests and cheap to bound, which keeps a
+        // malformed parent chain from looping.
+        let mut at = pid;
+        for _ in 0..8 {
+            if at == mine {
+                return true;
+            }
+            match parents.iter().find(|(child, _)| *child == at) {
+                Some((_, parent)) if *parent != 0 && *parent != at => at = *parent,
+                _ => return false,
+            }
+        }
+        false
     };
 
     struct Found(usize);
     let mut found = Found(0);
 
     unsafe extern "system" fn visit(hwnd: HWND, data: LPARAM) -> windows::core::BOOL {
-        use windows::Win32::UI::WindowsAndMessaging::{GetWindowTextW, GWL_STYLE, WS_CHILD};
-
         let found = unsafe { &mut *(data.0 as *mut Found) };
         let mut pid = 0u32;
         unsafe { GetWindowThreadProcessId(hwnd, Some(&mut pid)) };
-        if pid != std::process::id() {
+        if !OURS.with(|list| list.borrow().contains(&pid)) {
             return true.into();
         }
         // A child window never gets a taskbar button of its own.
@@ -202,9 +254,6 @@ fn mark_pip_windows() -> usize {
         if class != "Chrome_WidgetWin_1" {
             return true.into();
         }
-        // The engine's own window for the player, identified by its title. A top-level
-        // Chrome_WidgetWin_1 in this process that is not the pip one belongs to a tab webview
-        // and is a child; one that is a child was already skipped above.
         let mut title = [0u16; 128];
         let text_len = unsafe { GetWindowTextW(hwnd, &mut title) };
         let text = String::from_utf16_lossy(&title[..text_len.max(0) as usize]);
@@ -234,18 +283,22 @@ fn mark_pip_windows() -> usize {
         true.into()
     }
 
+    let list: Vec<u32> = parents
+        .iter()
+        .map(|(child, _)| *child)
+        .filter(|pid| is_ours(*pid))
+        .collect();
+    OURS.with(|slot| *slot.borrow_mut() = list);
     unsafe {
         let _ = EnumWindows(Some(visit), LPARAM(&mut found as *mut Found as isize));
     }
     found.0
 }
 
-/// Whether a window title is the picture-in-picture one.
-///
-/// Matched loosely on the words the engine uses, because the title is localised: the Chinese
-/// build says 画中画, the English one "Picture-in-Picture", and a future one may say something
-/// else again. The window is already known to be a top-level `Chrome_WidgetWin_1` in this
-/// process, so the bar for a match does not have to be high.
+thread_local! {
+    /// The pids belonging to this program, for the duration of one search.
+    static OURS: std::cell::RefCell<Vec<u32>> = const { std::cell::RefCell::new(Vec::new()) };
+}
 fn looks_like_pip(title: &str) -> bool {
     let lower = title.to_lowercase();
     lower.contains("picture") || lower.contains("pip") || title.contains("画中画")
