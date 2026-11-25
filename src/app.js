@@ -492,6 +492,44 @@ function onDragMove(event) {
   under.classList.add("drop-target");
 }
 
+/**
+ * The slot in the strip that a pointer position asks for, as an index in the list as it
+ * stands.
+ *
+ * One rule for every drop: a tab's left half means "before this one", its right half means
+ * "after it". This used to be two rules - the gap between tabs was measured against each
+ * pill's midpoint, while a drop onto a tab used that tab's own index outright - so the same
+ * gesture landed one slot apart depending on whether the pointer was over a tab or between
+ * two of them.
+ *
+ * The answer is an index in the *current* list. `move_tab` takes the dragged tab out
+ * first, so a slot to its right has shifted one to the left by then; that correction is
+ * `slotAfterRemoving`, which every caller applies.
+ */
+function slotUnder(clientX) {
+  for (const pill of tabStrip.querySelectorAll(".tab[data-tab]")) {
+    const box = pill.getBoundingClientRect();
+    if (clientX < box.left + box.width / 2) {
+      const index = tabs.findIndex((tab) => tab.id === pill.dataset.tab);
+      if (index >= 0) return index;
+      break;
+    }
+  }
+  return tabs.length;
+}
+
+/**
+ * The same slot, expressed for a list the dragged tab has already left.
+ *
+ * The backend removes the dragged tab and then inserts, so every slot after it is one
+ * lower by then. Without this a drag to the right landed a position too far - which is
+ * exactly the off-by-one the gap path had already been fixed for, while the drop-on-a-tab
+ * path had not.
+ */
+function slotAfterRemoving(slot, from) {
+  return slot > from ? slot - 1 : slot;
+}
+
 function onDragEnd(event) {
   const held = press;
   press = null;
@@ -520,20 +558,9 @@ function onDragEnd(event) {
       );
       return;
     }
-    let to = tabs.length;
-    for (const pill of tabStrip.querySelectorAll(".tab[data-tab]")) {
-      const box = pill.getBoundingClientRect();
-      if (event.clientX < box.left + box.width / 2) {
-        const index = tabs.findIndex((tab) => tab.id === pill.dataset.tab);
-        if (index >= 0) to = index;
-        break;
-      }
-    }
+    const slot = slotUnder(event.clientX);
     const current = tabs.findIndex((tab) => tab.id === held.id);
-    // The slot found above is an index in the list as it stands. The backend takes out the
-    // dragged tab first, so a slot after it has moved one to the left by then - without
-    // this, dragging to the right landed a position too far.
-    if (to > current) to -= 1;
+    const to = slotAfterRemoving(slot, current);
     if (to !== current) invoke("tab_move", { id: held.id, to }).catch(() => {});
     return;
   }
@@ -543,11 +570,20 @@ function onDragEnd(event) {
   }
   const target = under.dataset.tab;
   if (!target || target === held.id) return;
-  const to = tabs.findIndex((item) => item.id === target);
+  // The same slot rule as a drop between tabs: over the left half of the target means
+  // "before it", over the right half means "after it". Only the intent differs; the index
+  // arithmetic is shared, which is what keeps the two paths from drifting apart again.
+  const over = under.getBoundingClientRect();
+  const before = event.clientX < over.left + over.width / 2;
+  const targetAt = tabs.findIndex((item) => item.id === target);
+  if (targetAt < 0) return;
+  const current = tabs.findIndex((tab) => tab.id === held.id);
+  const slot = before ? targetAt : targetAt + 1;
+  const to = slotAfterRemoving(slot, current);
   invoke("ui_log", {
     message: `tab drag: ${held.id} -> ${target} at ${to}`,
   }).catch(() => {});
-  if (to >= 0) {
+  if (to !== current) {
     invoke("tab_move", { id: held.id, to }).catch((error) =>
       invoke("ui_log", { message: "tab drag failed: " + error }).catch(() => {}),
     );
