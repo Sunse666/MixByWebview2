@@ -295,6 +295,9 @@ pub async fn video_pip(
     webview: tauri::Webview,
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
+    // The taskbar button goes regardless of the hint: a reader who turned the toast off did
+    // not ask for a permanent entry in the taskbar instead.
+    crate::platform::hide_pip_from_taskbar();
     if !state.settings.read().video_popup_hint {
         return Ok(());
     }
