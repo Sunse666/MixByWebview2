@@ -36,8 +36,52 @@ export function looksLikeAddress(text) {
   // are the one case that has to be translated into the app's own origin.
   if (value.startsWith("mix://")) return internalPage(value.slice(6).split("/")[0]);
   if (/^[a-z][a-z0-9+.-]*:\/\//i.test(value)) return value;
-  if (value.includes(" ") || !value.includes(".")) return null;
+  if (value.includes(" ")) return null;
+
+  // Local and intranet addresses before the dotted-name rule, which would otherwise claim
+  // an IPv4 literal and force https on it. Everything here is http: these are machines the
+  // reader runs, and a dev server has no certificate.
+  const local = looksLikeLocalAddress(value);
+  if (local) return local;
+
+  if (!value.includes(".")) return null;
   return "https://" + value;
+}
+
+/**
+ * A host (and optional port) that no public web site would use, as an http url.
+ *
+ * The cases this exists for are all local or intranet: `localhost`, an IPv4 literal, or a
+ * bare name with a port on it. Each of them was previously sent to the search engine, so
+ * typing an address the reader runs themselves opened a results page instead.
+ *
+ * Only the authority is judged - the path, query and fragment are put back unchanged, so
+ * `localhost:3000/api?x=1` keeps its way of addressing the request.
+ */
+function looksLikeLocalAddress(value) {
+  const cut = value.search(/[/?#]/);
+  const authority = cut < 0 ? value : value.slice(0, cut);
+  const rest = cut < 0 ? "" : value.slice(cut);
+  if (!authority) return null;
+
+  // An IPv4 literal, with or without a port. Checked first because it contains dots and
+  // would otherwise be taken for a hostname and forced onto https.
+  const ipv4 = /^(\d{1,3}(?:\.\d{1,3}){3})(?::(\d{1,5}))?$/.exec(authority);
+  if (ipv4 && portOk(ipv4[2])) return "http://" + authority + rest;
+  if (authority === "localhost") return "http://localhost" + rest;
+  // host:port, where the host is a single label, a dotted name or a bracketed IPv6 literal.
+  // The port is what makes a bare word unambiguous: `intranet` on its own is a search,
+  // `intranet:8080` is an address.
+  const ported = /^([a-z0-9][a-z0-9.-]*|\[[0-9a-f:]+\]):(\d{1,5})$/i.exec(authority);
+  if (ported && portOk(ported[2])) return "http://" + authority + rest;
+  return null;
+}
+
+/** A port the networking layer would accept, so a typo is a search and not a bad url. */
+function portOk(text) {
+  if (text === undefined) return true;
+  const port = Number(text);
+  return port > 0 && port <= 65535;
 }
 
 /**
