@@ -757,22 +757,29 @@ impl Core {
         }
     }
 
-    /// The live background tab that has gone unused the longest.
+    /// The live background tabs that may be dropped, the one used longest ago first.
     ///
     /// `keep` is the tab on screen, which is never a candidate; `allowed` says whether a
-    /// candidate may be dropped at all (the keep-alive hosts are not). Kept next to `touch`
-    /// because the two are one subject: this picks the tab the reader has left alone
-    /// longest, and it can only do that if `touch` is what says they used one.
-    pub fn stalest_background<'a>(
+    /// candidate may be dropped at all (the keep-alive hosts are not). The whole order is
+    /// returned rather than just the first, because the caller still has to ask each one
+    /// whether it is playing audio before it can take it - and the answer to that is a COM
+    /// call, which cannot be made from inside this borrow.
+    ///
+    /// Kept next to `touch` because the two are one subject: this lists the tabs the reader
+    /// has left alone longest, and it can only do that if `touch` is what says they used one.
+    pub fn suspension_candidates<'a>(
         &'a self,
         keep: Option<&str>,
         allowed: impl Fn(&Tab) -> bool,
-    ) -> Option<&'a Tab> {
-        self.tabs
+    ) -> Vec<&'a Tab> {
+        let mut ordered: Vec<&Tab> = self
+            .tabs
             .iter()
             .filter(|tab| tab.alive && Some(tab.id.as_str()) != keep)
             .filter(|tab| allowed(tab))
-            .min_by_key(|tab| tab.last_active)
+            .collect();
+        ordered.sort_by_key(|tab| tab.last_active);
+        ordered
     }
 }
 
@@ -992,13 +999,21 @@ mod recency_tests {
         let mut core = core_with_use_order(&["a", "b", "c"]);
         core.touch("a");
         core.selected = Some("a".to_string());
-        let victim = core.stalest_background(core.selected.as_deref(), |_| true);
-        assert_eq!(victim.map(|tab| tab.id.as_str()), Some("b"));
+        let order: Vec<&str> = core
+            .suspension_candidates(core.selected.as_deref(), |_| true)
+            .iter()
+            .map(|tab| tab.id.as_str())
+            .collect();
+        assert_eq!(order, vec!["b", "c"]);
 
         // Reading c as well makes it the freshest, and b is still the oldest.
         core.touch("c");
-        let victim = core.stalest_background(core.selected.as_deref(), |_| true);
-        assert_eq!(victim.map(|tab| tab.id.as_str()), Some("b"));
+        let order: Vec<&str> = core
+            .suspension_candidates(core.selected.as_deref(), |_| true)
+            .iter()
+            .map(|tab| tab.id.as_str())
+            .collect();
+        assert_eq!(order, vec!["b", "c"]);
     }
 
     #[test]
@@ -1006,8 +1021,12 @@ mod recency_tests {
         let mut core = core_with_use_order(&["a", "b"]);
         // a is the least recently used by construction, but it is on screen.
         core.selected = Some("a".to_string());
-        let victim = core.stalest_background(Some("a"), |_| true);
-        assert_eq!(victim.map(|tab| tab.id.as_str()), Some("b"));
+        let order: Vec<&str> = core
+            .suspension_candidates(Some("a"), |_| true)
+            .iter()
+            .map(|tab| tab.id.as_str())
+            .collect();
+        assert_eq!(order, vec!["b"]);
     }
 
     #[test]
@@ -1015,7 +1034,25 @@ mod recency_tests {
         let mut core = core_with_use_order(&["a", "b", "c"]);
         core.selected = Some("c".to_string());
         // b is next in line, but the caller says b is on the keep-alive list.
-        let victim = core.stalest_background(Some("c"), |tab| tab.id != "b");
-        assert_eq!(victim.map(|tab| tab.id.as_str()), Some("a"));
+        let order: Vec<&str> = core
+            .suspension_candidates(Some("c"), |tab| tab.id != "b")
+            .iter()
+            .map(|tab| tab.id.as_str())
+            .collect();
+        assert_eq!(order, vec!["a"]);
+    }
+
+    #[test]
+    fn a_suspended_tab_is_not_a_candidate_again() {
+        // Otherwise the loop would pick the same tab forever: it is already not alive.
+        let mut core = core_with_use_order(&["a", "b"]);
+        core.tabs[0].alive = false;
+        core.selected = Some("b".to_string());
+        let order: Vec<&str> = core
+            .suspension_candidates(Some("b"), |_| true)
+            .iter()
+            .map(|tab| tab.id.as_str())
+            .collect();
+        assert!(order.is_empty());
     }
 }

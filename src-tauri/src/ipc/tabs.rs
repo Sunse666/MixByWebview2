@@ -1292,6 +1292,12 @@ pub(crate) fn sync_visibility(app: &AppHandle, label: &str) {
 }
 
 /// Drop the least recently used background tab once too many are alive.
+///
+/// A tab that is playing is not a candidate. Freezing has always checked that - a reader
+/// listening to music in the background did not ask for it to stop - and suspending is the
+/// same decision with a heavier hammer, so it needs the same test. The check costs a COM
+/// round trip, so it runs outside the state lock: the candidate list is taken first, the
+/// audio of each candidate in turn, and only the id that survives is written back.
 pub(crate) fn enforce_live_limit(app: &AppHandle, label: &str) {
     if !app
         .try_state::<AppState>()
@@ -1315,49 +1321,58 @@ pub(crate) fn enforce_live_limit(app: &AppHandle, label: &str) {
         .unwrap_or_default();
 
     loop {
-        let victim = {
+        // Ordered candidates, oldest use first, and a count to know when to stop. Read under
+        // the lock and taken out of it: asking a webview for its audio state while holding
+        // the write lock would put a COM call between every other caller and the tab list.
+        let candidates: Vec<String> = {
             let state = app.state::<AppState>();
-            let mut core = state.write_core(label);
+            let core = state.read_core(label);
             let alive = core.tabs.iter().filter(|tab| tab.alive).count();
             let limit = state.settings.read().max_live_tabs.max(1);
             if alive <= limit {
-                None
-            } else {
-                let selected = core.selected.clone();
-                // The tab `touch` has gone longest without being called on. Reading
-                // `last_active` alone was not enough: it was written once at creation, so
-                // this picked the oldest tab rather than the one the reader had abandoned.
-                let candidate = core
-                    .stalest_background(selected.as_deref(), |tab| {
-                        if keep_alive.is_empty() {
-                            return true;
-                        }
-                        let host = tab
-                            .url
-                            .split("://")
-                            .nth(1)
-                            .unwrap_or("")
-                            .split(['/', '?', '#'])
-                            .next()
-                            .unwrap_or("")
-                            .trim_start_matches("www.")
-                            .to_ascii_lowercase();
-                        !keep_alive
-                            .iter()
-                            .any(|entry| host == *entry || host.ends_with(&format!(".{entry}")))
-                    })
-                    .map(|tab| tab.id.clone());
-                if let Some(id) = &candidate {
-                    if let Some(tab) = core.tabs.iter_mut().find(|tab| &tab.id == id) {
-                        tab.alive = false;
-                    }
-                }
-                candidate
+                return;
             }
+            core.suspension_candidates(core.selected.as_deref(), |tab| {
+                if keep_alive.is_empty() {
+                    return true;
+                }
+                let host = tab
+                    .url
+                    .split("://")
+                    .nth(1)
+                    .unwrap_or("")
+                    .split(['/', '?', '#'])
+                    .next()
+                    .unwrap_or("")
+                    .trim_start_matches("www.")
+                    .to_ascii_lowercase();
+                !keep_alive
+                    .iter()
+                    .any(|entry| host == *entry || host.ends_with(&format!(".{entry}")))
+            })
+            .into_iter()
+            .map(|tab| tab.id.clone())
+            .collect()
         };
+
+        // The first candidate that is not playing. A tab with no answer at all - a webview
+        // that is gone, or a platform with no audio API - counts as silent, which is what
+        // every suspension did before this check existed.
+        let victim = candidates.into_iter().find(|id| {
+            app.get_webview(id)
+                .and_then(|webview| crate::audio::state(&webview))
+                .map(|audio| !audio.playing)
+                .unwrap_or(true)
+        });
 
         match victim {
             Some(id) => {
+                let state = app.state::<AppState>();
+                if let Some(mut core) = state.try_write_core(label) {
+                    if let Some(tab) = core.tabs.iter_mut().find(|tab| tab.id == id) {
+                        tab.alive = false;
+                    }
+                }
                 if let Some(webview) = app.get_webview(&id) {
                     let _ = webview.close();
                 }
