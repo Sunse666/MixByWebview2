@@ -377,6 +377,13 @@ pub struct Settings {
     /// into the page is clicked inside the page.
     #[serde(default = "default_true")]
     pub video_pip_button: bool,
+    /// Let the video under the pointer answer space, the arrows, m and f.
+    ///
+    /// Scoped to the video under the pointer rather than the page, because every one of those
+    /// keys belongs to the page everywhere else: a search box, a scroll, a site's own
+    /// shortcut. A video a reader is pointing at is the one they mean.
+    #[serde(default = "default_true")]
+    pub video_keys: bool,
     /// Put a video's popup window back where it was moved to.
     #[serde(default)]
     pub remember_popup_position: bool,
@@ -524,6 +531,7 @@ impl Default for Settings {
             fullscreen_hint: true,
             video_popup_hint: true,
             video_pip_button: true,
+            video_keys: true,
             remember_popup_position: false,
             ignore_system_dpi: false,
             eye_comfort: false,

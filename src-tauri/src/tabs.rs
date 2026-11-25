@@ -126,6 +126,7 @@ pub fn apply_settings(dirs: &AppDirs, settings: &crate::state::Settings) {
         "revealEdge": settings.bookmark_reveal_edge,
         "revealDelay": settings.bookmark_reveal_delay,
         "pipButton": settings.video_pip_button,
+        "videoKeys": settings.video_keys,
         // The page draws the button, so the words in its tooltip come from here: the injected
         // script cannot reach `i18n.js`, and a button labelled in English on a Chinese
         // interface is the kind of detail that reads as unfinished.

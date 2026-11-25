@@ -514,6 +514,148 @@
 })();
 
 
+// Keyboard control for the video the pointer is on.
+//
+// The browser has no player of its own, so a video only answers the keys a site chose to
+// implement - and on most sites that is nothing beyond the space bar. These are the keys a
+// desktop player has always had.
+//
+// Scoped to the video under the pointer, or the one holding the keyboard focus. A page has
+// its own use for every one of these keys - a search box, a scroll, a site's own shortcut -
+// and answering them everywhere would be taking the page's keyboard away. A reader with the
+// pointer resting on a playing video is asking for that video.
+//
+// Every handled key is stopped in the capture phase, so a site's own handler never sees a
+// press that was answered here: space plays and pauses in this browser, and a page that also
+// listens for space would otherwise toggle it a second time and undo it.
+(function () {
+  var cfg = window.__mixBrowsing || {};
+  if (!cfg.videoKeys) return;
+
+  var STEP = 10;
+  var VOLUME_STEP = 0.1;
+  var pointer = { x: -1, y: -1 };
+
+  document.addEventListener(
+    "pointermove",
+    function (event) {
+      pointer.x = event.clientX;
+      pointer.y = event.clientY;
+    },
+    { passive: true, capture: true },
+  );
+  document.addEventListener(
+    "mouseleave",
+    function () {
+      pointer.x = -1;
+      pointer.y = -1;
+    },
+    { passive: true, capture: true },
+  );
+
+  var inside = function (video) {
+    if (!video) return false;
+    var box = video.getBoundingClientRect();
+    if (box.width < 2 || box.height < 2) return false;
+    return (
+      pointer.x >= box.left &&
+      pointer.x <= box.right &&
+      pointer.y >= box.top &&
+      pointer.y <= box.bottom
+    );
+  };
+
+  /// The video these keys belong to: the one under the pointer, else the focused one.
+  var target = function () {
+    var focused = document.activeElement;
+    if (focused && focused.tagName === "VIDEO") return focused;
+    var best = null;
+    var bestArea = 0;
+    var videos = document.querySelectorAll("video");
+    for (var i = 0; i < videos.length; i += 1) {
+      var video = videos[i];
+      if (video.disablePictureInPicture && video.readyState === 0) continue;
+      if (!inside(video)) continue;
+      var box = video.getBoundingClientRect();
+      var area = box.width * box.height;
+      if (area > bestArea) {
+        bestArea = area;
+        best = video;
+      }
+    }
+    return best;
+  };
+
+  /// Whether the press belongs to something else: a field, a modifier, or a key repeat.
+  var belongsElsewhere = function (event) {
+    if (event.ctrlKey || event.metaKey || event.altKey) return true;
+    // A held key would run the step dozens of times a second, which is not a step.
+    if (event.repeat) return true;
+    var node = event.target;
+    if (!node || !node.tagName) return false;
+    var tag = node.tagName;
+    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
+    if (node.isContentEditable) return true;
+    return false;
+  };
+
+  var seek = function (video, delta) {
+    if (!isFinite(video.duration)) return;
+    var wanted = video.currentTime + delta;
+    video.currentTime = Math.min(Math.max(wanted, 0), Math.max(video.duration - 0.1, 0));
+  };
+
+  var volume = function (video, delta) {
+    video.muted = false;
+    video.volume = Math.min(Math.max(video.volume + delta, 0), 1);
+  };
+
+  document.addEventListener(
+    "keydown",
+    function (event) {
+      if (belongsElsewhere(event)) return;
+      var video = target();
+      if (!video) return;
+
+      var handled = true;
+      switch (event.key) {
+        case " ":
+        case "Spacebar":
+          if (video.paused) video.play().catch(function () {});
+          else video.pause();
+          break;
+        case "ArrowLeft":
+          seek(video, -STEP);
+          break;
+        case "ArrowRight":
+          seek(video, STEP);
+          break;
+        case "ArrowUp":
+          volume(video, VOLUME_STEP);
+          break;
+        case "ArrowDown":
+          volume(video, -VOLUME_STEP);
+          break;
+        case "m":
+        case "M":
+          video.muted = !video.muted;
+          break;
+        case "f":
+        case "F":
+          if (document.fullscreenElement) document.exitFullscreen().catch(function () {});
+          else if (video.requestFullscreen) video.requestFullscreen().catch(function () {});
+          break;
+        default:
+          handled = false;
+      }
+      if (!handled) return;
+      event.preventDefault();
+      event.stopPropagation();
+    },
+    true,
+  );
+})();
+
 // WebView2's own error page.
 (function () {
   var check = function () {

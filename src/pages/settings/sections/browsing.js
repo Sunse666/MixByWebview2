@@ -86,6 +86,10 @@ export function buildBrowsing({ settings, invoke }) {
     // belongs to a different webview - the engine refuses it. A button injected into the page
     // is clicked inside the page, so the engine allows it.
     switchRow("A button on a playing video opens picture-in-picture", "video_pip_button"),
+    // Space, the arrows, m and f: the keys a desktop player has always had, and the ones a
+    // browser does not add. Only while the pointer is on a video or it holds the keyboard -
+    // every one of those keys belongs to the page everywhere else.
+    switchRow("Space pauses, the arrows seek and m mutes", "video_keys"),
     switchRow("Say so when a video goes into picture-in-picture", "video_popup_hint"),
     // Not offered, and not because of a missing call: the small window is drawn by the
     // platform, outside every window this process owns, so its position cannot be read or set.

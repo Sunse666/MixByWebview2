@@ -94,6 +94,16 @@ for (const file of files) {
     literals.add(unescape(raw.slice(1, -1)));
   }
 
+  // `switchRow("A label", "setting")` hands its label to `t()` as a variable, inside a helper
+  // this scan does not follow. The label is a screen string all the same, and several went
+  // out untranslated because nothing here was looking at that argument.
+  const switchRow = /\bswitchRow\(\s*"((?:[^"\\]|\\.)*)"|\bswitchRow\(\s*'((?:[^'\\]|\\.)*)'/g;
+  while ((match = switchRow.exec(text))) {
+    const key = unescape(match[1] !== undefined ? match[1] : match[2]);
+    if (!key) continue;
+    if (!calls.has(key)) calls.set(key, new Set());
+    calls.get(key).add(path.relative(root, file));
+  }
   // Markup names its static text in an attribute (see applyStatic in i18n.js) instead of
   // calling t(), so a name without an entry is the same silent gap as a missing t() call.
   if (file.endsWith(".html")) {
