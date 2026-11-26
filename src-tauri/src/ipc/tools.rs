@@ -7,7 +7,13 @@ pub async fn download_list(
     _window: tauri::Window,
     state: State<'_, AppState>,
 ) -> Result<Vec<crate::downloads::DownloadTask>, AppError> {
-    Ok(state.downloads.read().clone())
+    // Filled in here rather than stored: whether a task is waiting is a fact about the
+    // engine right now, not something the list should carry across a restart.
+    let mut tasks = state.downloads.read().clone();
+    for task in tasks.iter_mut() {
+        task.queued = crate::fetch::is_queued(task.id);
+    }
+    Ok(tasks)
 }
 
 /// Drops finished entries from the list; files on disk stay.
@@ -739,7 +745,10 @@ pub async fn download_cancel(
     state: State<'_, AppState>,
     id: u64,
 ) -> Result<bool, AppError> {
-    let stopped = crate::fetch::cancel(id);
+    // A queued transfer has no loop to stop, so it has to be taken out of the queue or it
+    // would start later, after the reader had already thrown it away.
+    let was_queued = crate::fetch::forget_pending(id);
+    let stopped = crate::fetch::cancel(id) || was_queued;
     let path = {
         let mut tasks = state.downloads.write();
         tasks

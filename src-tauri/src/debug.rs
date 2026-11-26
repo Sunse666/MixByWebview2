@@ -22,6 +22,7 @@ pub fn install(app: &mut tauri::App) {
     gesture_test(app.handle());
     bili_test(app.handle());
     download_states_test(app.handle());
+    queue_test(app.handle());
     retry_credentials_test(app.handle());
     if armed() {
         if let Ok(kind) = std::env::var("MIX_OPEN_ON_START") {
@@ -271,6 +272,93 @@ fn ext_toggle(app: &tauri::AppHandle) {
         if let Some(seen) = after.iter().find(|item| item.id == target.id) {
             crate::logging::info(&format!("ext toggle after: enabled={}", seen.enabled));
         }
+    });
+}
+
+/// Debug hook: starts more downloads than there are slots, and reports who runs.
+///
+/// `MIX_QUEUE_TEST=1` starts `MIX_QUEUE_COUNT` (default 6) transfers at once against
+/// `MIX_DL_TEST_URL`. With `MAX_ACTIVE` at four, the extra ones have to wait rather than open
+/// their own connections - and each queued row has to say so instead of showing 0 B as if it
+/// were stalled.
+fn queue_test(app: &tauri::AppHandle) {
+    if !armed() {
+        return;
+    }
+    if std::env::var("MIX_QUEUE_TEST").is_err() {
+        return;
+    }
+    let count: usize = std::env::var("MIX_QUEUE_COUNT")
+        .ok()
+        .and_then(|value| value.parse().ok())
+        .unwrap_or(6);
+    let url = std::env::var("MIX_DL_TEST_URL")
+        .unwrap_or_else(|_| "https://speed.cloudflare.com/__down?bytes=4000000".to_string());
+    let handle = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(2500));
+        if handle.try_state::<AppState>().is_none() {
+            return;
+        }
+        let dir = crate::paths::AppDirs::resolve().downloads;
+        let mut ids = Vec::new();
+        for index in 0..count {
+            let path = dir.join(format!("mix-queue-{index}.bin"));
+            let _ = std::fs::remove_file(&path);
+            ids.push(crate::downloads::start_with_engine(&handle, &url, &path));
+        }
+        crate::logging::info(&format!("queue test started {count}: {ids:?}"));
+
+        // Right after starting, more are queued than running; that is the point.
+        std::thread::sleep(std::time::Duration::from_millis(600));
+        let (running, queued) = handle
+            .try_state::<AppState>()
+            .map(|state| {
+                let tasks = state.downloads.read();
+                let queued = tasks.iter().filter(|task| crate::fetch::is_queued(task.id)).count();
+                let running = tasks
+                    .iter()
+                    .filter(|task| task.state == "started" && !crate::fetch::is_queued(task.id))
+                    .count();
+                (running, queued)
+            })
+            .unwrap_or((0, 0));
+        crate::logging::info(&format!(
+            "queue test after start: running={running} queued={queued}"
+        ));
+
+        // And they drain: waiting for every one to leave `started` proves the queue moves
+        // rather than simply holding the extras forever.
+        for _ in 0..120 {
+            std::thread::sleep(std::time::Duration::from_millis(500));
+            let left = handle
+                .try_state::<AppState>()
+                .map(|state| {
+                    state
+                        .downloads
+                        .read()
+                        .iter()
+                        .filter(|task| ids.contains(&task.id) && task.state == "started")
+                        .count()
+                })
+                .unwrap_or(0);
+            if left == 0 {
+                break;
+            }
+        }
+        let summary: Vec<String> = handle
+            .try_state::<AppState>()
+            .map(|state| {
+                state
+                    .downloads
+                    .read()
+                    .iter()
+                    .filter(|task| ids.contains(&task.id))
+                    .map(|task| format!("{}:{}:{}B", task.id, task.state, task.bytes))
+                    .collect()
+            })
+            .unwrap_or_default();
+        crate::logging::info(&format!("queue test final: {}", summary.join(" ")));
     });
 }
 

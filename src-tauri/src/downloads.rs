@@ -113,6 +113,13 @@ pub struct DownloadTask {
     /// is both smaller and safe to keep on disk.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub source: String,
+    /// True while the transfer is waiting for a free slot.
+    ///
+    /// A queued download has moved no bytes, which from the page is indistinguishable from
+    /// one that is running slowly. Saying so is the difference between "wait" and "something
+    /// is wrong".
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub queued: bool,
 }
 
 static NEXT_ID: AtomicU64 = AtomicU64::new(1);
@@ -779,6 +786,7 @@ fn record_into(
             incognito,
             error: String::new(),
             source: source.to_string(),
+            queued: false,
         });
         prune(&mut tasks);
         tasks.clone()
@@ -833,6 +841,7 @@ fn record_from(
                     // started (the non-Windows branch of `handle`), and it has no webview
                     // label to attribute it to.
                     source: String::new(),
+                    queued: false,
                 });
                 prune(&mut tasks);
             }
@@ -1064,6 +1073,7 @@ mod tests {
             incognito: false,
             error: String::new(),
             source: String::new(),
+            queued: false,
         }
     }
 
@@ -1086,6 +1096,7 @@ mod tests {
                 incognito: false,
                 error: String::new(),
                 source: String::new(),
+                queued: false,
             })
             .collect();
         prune(&mut tasks);

@@ -49,6 +49,40 @@ fn claimed() -> &'static Mutex<std::collections::HashSet<String>> {
     CLAIMED.get_or_init(|| Mutex::new(std::collections::HashSet::new()))
 }
 
+/// How many transfers may run at once.
+///
+/// Without a limit, opening twenty links at once opened twenty connections: on a slow link
+/// every one of them crawls, and a site that rate-limits answers several with 429 - which
+/// looks like the browser being broken rather than the queue being empty. Four is what a
+/// browser typically uses per host, and the queue drains fast enough that the fourth is
+/// rarely noticed. Waiting transfers sit in `pending` rather than here, so a queued task
+/// still shows as started and says so.
+const MAX_ACTIVE: usize = 4;
+
+/// Transfers that are waiting for a slot, oldest first.
+fn pending() -> &'static Mutex<std::collections::VecDeque<Pending>> {
+    static PENDING: OnceLock<Mutex<std::collections::VecDeque<Pending>>> = OnceLock::new();
+    PENDING.get_or_init(|| Mutex::new(std::collections::VecDeque::new()))
+}
+
+/// A transfer waiting for a slot.
+pub struct Pending {
+    app: tauri::AppHandle,
+    id: u64,
+    url: String,
+    path: std::path::PathBuf,
+    request: Request,
+}
+
+/// How many loops are alive right now.
+fn running_count() -> usize {
+    jobs()
+        .lock()
+        .values()
+        .filter(|job| job.active.load(Ordering::Relaxed))
+        .count()
+}
+
 /// Takes ownership of a file for one transfer.
 pub fn claim(path: &std::path::Path) -> bool {
     let key = path.to_string_lossy().to_string();
@@ -189,6 +223,20 @@ pub fn start_with(
                 return;
             }
         }
+    }
+
+    // A slot has to be free. Waiting at the front of the queue is not failure: the task keeps
+    // its row and its "started" state, and `pump` starts it when a slot frees up.
+    if running_count() >= MAX_ACTIVE {
+        crate::logging::info(&format!("fetch {id}: queued, {MAX_ACTIVE} already running"));
+        pending().lock().push_back(Pending {
+            app,
+            id,
+            url,
+            path,
+            request,
+        });
+        return;
     }
 
     let active = Arc::new(AtomicBool::new(true));
@@ -411,11 +459,41 @@ pub fn start_with(
             }
             release(&path);
             active_guard.store(false, Ordering::Relaxed);
+            // A slot just freed: whatever was waiting at the front of the queue starts now.
+            // Without this a queued task would wait for the next download to finish, or for
+            // ever if nothing else was started.
+            pump();
         }
     });
     if let Some(job) = jobs().lock().get_mut(&id) {
         job.handle = Some(handle);
     }
+}
+
+/// Starts the next queued transfer, if a slot is free.
+fn pump() {
+    loop {
+        if running_count() >= MAX_ACTIVE {
+            return;
+        }
+        let Some(next) = pending().lock().pop_front() else {
+            return;
+        };
+        start_with(next.app, next.id, next.url, next.path, next.request);
+    }
+}
+
+/// Drops a queued transfer, so a cancel of something still waiting takes effect.
+pub fn forget_pending(id: u64) -> bool {
+    let mut queue = pending().lock();
+    let before = queue.len();
+    queue.retain(|item| item.id != id);
+    queue.len() != before
+}
+
+/// Whether this task is waiting for a slot rather than transferring.
+pub fn is_queued(id: u64) -> bool {
+    pending().lock().iter().any(|item| item.id == id)
 }
 
 /// Stops the loop but keeps the bytes, so it can be resumed.
@@ -425,6 +503,14 @@ pub fn start_with(
 /// pausing a transfer that had been going for a second left the row showing the last 250 ms
 /// sample, which for a fresh transfer is 0 B next to a file of several megabytes.
 pub fn pause(app: tauri::AppHandle, id: u64) -> bool {
+    // A transfer still waiting for a slot has no loop to abort and no bytes on disk. Taking
+    // it out of the queue is the whole of pausing it; without this the button reported an
+    // error for a download that had simply not started yet.
+    if forget_pending(id) {
+        crate::logging::info(&format!("fetch {id}: paused while queued"));
+        crate::downloads::set_progress(&app, id, 0, 0);
+        return true;
+    }
     let stopped = {
         let mut map = jobs().lock();
         match map.get_mut(&id) {
@@ -568,6 +654,12 @@ pub fn forget(id: u64) {
 
 /// True when a loop for this id is alive right now.
 pub fn busy(id: u64) -> bool {
+    // A queued transfer counts as live. It has no loop yet, so asking only the job map said
+    // "not running" and `reconcile` marked a waiting download as interrupted - the row would
+    // have gone to "Resume" while its slot was about to come up.
+    if pending().lock().iter().any(|item| item.id == id) {
+        return true;
+    }
     jobs()
         .lock()
         .get(&id)

@@ -107,7 +107,9 @@ async function boot() {
 
       const state = document.createElement("span");
       state.className = "host";
-      const parts = [t(task.state) || task.state];
+      // A queued download has moved no bytes, which from here looks exactly like one that is
+      // running slowly. Saying which it is turns "is it broken?" into "wait".
+      const parts = [t(task.queued ? "Waiting for a slot" : task.state) || task.state];
       if (task.bytes) parts.push(size(task.bytes));
       if (task.state === "started" && task.speed) parts.push(size(task.speed) + "/s");
       if (task.total && task.state !== "finished") {
