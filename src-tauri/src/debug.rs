@@ -315,7 +315,10 @@ fn queue_test(app: &tauri::AppHandle) {
             .try_state::<AppState>()
             .map(|state| {
                 let tasks = state.downloads.read();
-                let queued = tasks.iter().filter(|task| crate::fetch::is_queued(task.id)).count();
+                let queued = tasks
+                    .iter()
+                    .filter(|task| crate::fetch::is_queued(task.id))
+                    .count();
                 let running = tasks
                     .iter()
                     .filter(|task| task.state == "started" && !crate::fetch::is_queued(task.id))

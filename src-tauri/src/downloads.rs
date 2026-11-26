@@ -628,7 +628,12 @@ pub fn set_failed(app: &tauri::AppHandle, id: u64, reason: &str) {
     save_history(app);
 }
 
-/// Starts a transfer with the internal engine and records it as a task.
+/// Starts a transfer with no source page, for callers that have none.
+///
+/// Only the debug hooks use this now - every path a reader can reach passes the webview it
+/// came from, so a retry can find those cookies again. Kept because a probe that wants to
+/// measure "what happens without credentials" needs exactly this.
+#[cfg(debug_assertions)]
 pub fn start_with_engine(app: &tauri::AppHandle, url: &str, path: &Path) -> u64 {
     start_with_engine_from(app, url, path, "")
 }
