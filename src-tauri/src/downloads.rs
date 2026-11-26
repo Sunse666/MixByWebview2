@@ -595,8 +595,11 @@ pub fn recorded_total(app: &tauri::AppHandle, id: u64) -> Option<u64> {
 }
 
 /// Marks a task failed, with the reason kept for the page to show.
+///
+/// Written in one pass rather than `set_state` followed by a second update: that wrote the
+/// list to disk twice for one failure, and the first copy was the one without the reason, so
+/// a reader who opened the file saw `failed` and nothing else.
 pub fn set_failed(app: &tauri::AppHandle, id: u64, reason: &str) {
-    set_state(app, id, "failed");
     let Some(index) = task_index(app, id) else {
         return;
     };
@@ -606,6 +609,9 @@ pub fn set_failed(app: &tauri::AppHandle, id: u64, reason: &str) {
     let tasks = {
         let mut tasks = state.downloads.write();
         if let Some(task) = tasks.get_mut(index) {
+            task.state = Phase::Failed.as_str().to_string();
+            task.paused = false;
+            task.speed = 0;
             task.error = reason.to_string();
         }
         tasks.clone()
