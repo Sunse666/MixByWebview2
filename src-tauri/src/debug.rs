@@ -22,6 +22,7 @@ pub fn install(app: &mut tauri::App) {
     gesture_test(app.handle());
     bili_test(app.handle());
     download_states_test(app.handle());
+    retry_credentials_test(app.handle());
     if armed() {
         if let Ok(kind) = std::env::var("MIX_OPEN_ON_START") {
             let handle = app.handle().clone();
@@ -273,6 +274,151 @@ fn ext_toggle(app: &tauri::AppHandle) {
     });
 }
 
+/// Debug hook: checks that a retry carries the credentials the first attempt did.
+///
+/// `MIX_RETRY_TEST=1` navigates the first tab to a page that sets a cookie, downloads a file
+/// from the same origin behind a cookie check, fails it, then retries and reports what the
+/// server recorded. `MIX_RETRY_URL` points at a server that logs request headers; the one in
+/// `scripts/test-header-server.ps1` refuses the file without a cookie, so a retry that drops
+/// them fails the same way the first attempt did.
+///
+/// This cannot be a unit test: the whole question is whether a *different* code path - the
+/// retry command - rebuilds the request context, and that needs a real webview with real
+/// cookies in it.
+fn retry_credentials_test(app: &tauri::AppHandle) {
+    if !armed() {
+        return;
+    }
+    let Ok(base) = std::env::var("MIX_RETRY_URL") else {
+        return;
+    };
+    let handle = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(2500));
+        // A page on the same origin, so the cookie it sets belongs to the file's origin too.
+        // The tab has to *be* on that origin: `request_for_task` reads the referer and the
+        // cookie jar from the webview's current document, so a tab left on another site
+        // sends that site's credentials and this test measures nothing.
+        let target = handle.clone();
+        let page = format!("{base}/page");
+        // The label of the tab that was opened, carried back out so the download can be
+        // attributed to it. A hardcoded label would read whichever tab happened to be first.
+        let opened = std::sync::Arc::new(parking_lot::Mutex::new(String::new()));
+        let slot = opened.clone();
+        let _ = handle.run_on_main_thread(move || {
+            let Some(win) = target.get_window(PRIMARY) else {
+                return;
+            };
+            let state = target.state::<AppState>();
+            // `tab_new` rather than `tab_navigate`: the tab that is already open belongs to
+            // whatever the session restored, and navigating it away loses the reader's page.
+            let call = crate::ipc::tab_new(target.clone(), win, state, Some(page), None, None);
+            match tauri::async_runtime::block_on(call) {
+                Ok(id) => {
+                    crate::logging::info(&format!("retry test opened {id}"));
+                    *slot.lock() = id;
+                }
+                Err(err) => {
+                    crate::logging::warn(&format!("retry test nav failed: {}", err.message))
+                }
+            }
+        });
+
+        // Long enough for the page to load and the cookie to land in the jar.
+        std::thread::sleep(std::time::Duration::from_millis(4000));
+
+        let Some(state) = handle.try_state::<AppState>() else {
+            return;
+        };
+        let tab = opened.lock().clone();
+        if tab.is_empty() {
+            crate::logging::warn("retry test: no tab was opened");
+            return;
+        }
+        let dir = crate::paths::AppDirs::resolve().downloads;
+        let path = dir.join("mix-retry-test.bin");
+        let _ = std::fs::remove_file(&path);
+
+        // What the tab would send, which is what the first attempt uses.
+        let request = crate::downloads::request_for_task(&handle, &tab);
+        crate::logging::info(&format!(
+            "retry test first attempt: referer={:?} cookie={}",
+            request.referer,
+            request.cookie.as_deref().map(str::len).unwrap_or(0)
+        ));
+
+        let id =
+            crate::downloads::start_with_engine_from(&handle, &format!("{base}/file"), &path, &tab);
+        crate::logging::info(&format!("retry test download id={id}"));
+        std::thread::sleep(std::time::Duration::from_millis(2500));
+        let first = state
+            .downloads
+            .read()
+            .iter()
+            .find(|task| task.id == id)
+            .map(|task| (task.state.clone(), task.error.clone(), task.source.clone()));
+        crate::logging::info(&format!("retry test after first attempt: {first:?}"));
+
+        // Now the retry, through the command the page calls.
+        let state_ref = handle.state::<AppState>();
+        let retried = tauri::async_runtime::block_on(crate::ipc::download_retry(
+            handle.clone(),
+            state_ref,
+            id,
+        ));
+        crate::logging::info(&format!("retry test download_retry -> {retried:?}"));
+
+        for _ in 0..30 {
+            std::thread::sleep(std::time::Duration::from_millis(500));
+            let now = handle.try_state::<AppState>().and_then(|state| {
+                state
+                    .downloads
+                    .read()
+                    .iter()
+                    .find(|task| task.id == id)
+                    .map(|task| (task.state.clone(), task.error.clone()))
+            });
+            if let Some((state, error)) = now {
+                if state != "started" {
+                    crate::logging::info(&format!(
+                        "retry test ended state={state} err={error:?} size={:?}",
+                        std::fs::metadata(&path).map(|meta| meta.len()).ok()
+                    ));
+                    break;
+                }
+            }
+        }
+
+        // The contrast, so the fix has something to be measured against: the plain
+        // `start_with_engine` is what the retry used to call. It has no source, so it sends
+        // no cookie, and the same server refuses it. Without this line the test would only
+        // show that the new path works, not that the old one did not.
+        let plain_path = dir.join("mix-retry-plain.bin");
+        let _ = std::fs::remove_file(&plain_path);
+        let plain =
+            crate::downloads::start_with_engine(&handle, &format!("{base}/file"), &plain_path);
+        for _ in 0..20 {
+            std::thread::sleep(std::time::Duration::from_millis(400));
+            let now = handle.try_state::<AppState>().and_then(|state| {
+                state
+                    .downloads
+                    .read()
+                    .iter()
+                    .find(|task| task.id == plain)
+                    .map(|task| (task.state.clone(), task.error.clone()))
+            });
+            if let Some((state, error)) = now {
+                if state != "started" {
+                    crate::logging::info(&format!(
+                        "retry test without a source ended state={state} err={error:?}"
+                    ));
+                    break;
+                }
+            }
+        }
+    });
+}
+
 /// Debug hook: walks a download through the states the page's buttons put it in.
 ///
 /// `MIX_DL_TEST=1` downloads a real file, pauses it, resumes it, pauses it again, cancels it,
@@ -413,8 +559,11 @@ fn download_states_test(app: &tauri::AppHandle) {
         // not be opened. It has to end up finished, not failed.
         if matches!(final_state.as_deref(), Some("finished")) {
             crate::downloads::set_state(&handle, id, "interrupted");
-            let resumed =
-                crate::fetch::resume(handle.clone(), id, Some((url.clone(), target.clone())));
+            let resumed = crate::fetch::resume(
+                handle.clone(),
+                id,
+                Some((url.clone(), target.clone(), Default::default())),
+            );
             crate::logging::info(&format!("dl test resume-of-complete -> {resumed}"));
             // Wait for the transfer to settle on a terminal state. Polling for "not started"
             // caught the `interrupted` this block had just set and reported the wrong answer.

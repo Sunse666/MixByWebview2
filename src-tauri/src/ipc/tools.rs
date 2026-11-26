@@ -693,8 +693,15 @@ pub async fn download_pause(
     let ok = if paused {
         crate::fetch::pause(app.clone(), id)
     } else {
-        // A task that outlived the process has no job; the list remembers what it was.
-        let known = task_parts(&state, id).map(|(url, path)| (url, std::path::PathBuf::from(path)));
+        // A task that outlived the process has no job; the list remembers what it was, and
+        // the page it came from so the cookies can be read again.
+        let known = task_parts(&state, id).map(|(url, path)| {
+            (
+                url,
+                std::path::PathBuf::from(path),
+                crate::downloads::request_for_task(&app, &crate::downloads::task_source(&app, id)),
+            )
+        });
         crate::fetch::resume(app.clone(), id, known)
     };
     if ok {
@@ -762,6 +769,11 @@ pub async fn download_reconcile(app: AppHandle) -> Result<(), AppError> {
 }
 
 /// Fetches this download again with the engine, from whatever is on disk.
+///
+/// Through `start_with_engine_from` with the task's own recorded source, so the retry sends
+/// the cookies and referer the first attempt did. The plain `start_with_engine` was used
+/// here and dropped them, so a file behind a login answered with the login page on every
+/// retry - which looked like the retry doing nothing at all.
 #[tauri::command]
 pub async fn download_retry(
     app: AppHandle,
@@ -771,8 +783,16 @@ pub async fn download_retry(
     let Some((url, path)) = task_parts(&state, id) else {
         return Err(AppError::new("bad_download", "unknown download"));
     };
+    let source = crate::downloads::task_source(&app, id);
     let target = std::path::PathBuf::from(path);
-    Ok(crate::downloads::start_with_engine(&app, &url, &target))
+    let started = crate::downloads::start_with_engine_from(&app, &url, &target, &source);
+    if started == 0 {
+        return Err(AppError::new(
+            "bad_download",
+            "this download could not be started again",
+        ));
+    }
+    Ok(started)
 }
 
 fn task_parts(state: &AppState, id: u64) -> Option<(String, String)> {

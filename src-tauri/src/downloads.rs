@@ -103,6 +103,16 @@ pub struct DownloadTask {
     /// downloads page shows under the name.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub error: String,
+    /// The page whose cookies this download is entitled to.
+    ///
+    /// A retry has to send what the first attempt sent, or a file behind a login comes back
+    /// as the login page. The cookies themselves are deliberately not stored: this list is
+    /// written to `downloads.json`, which the backup export packages up, so persisting them
+    /// would put a working session into a zip the reader mails to their other machine. The
+    /// page is recorded instead, and the cookies are read from it again when needed - which
+    /// is both smaller and safe to keep on disk.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub source: String,
 }
 
 static NEXT_ID: AtomicU64 = AtomicU64::new(1);
@@ -637,7 +647,7 @@ pub fn start_with_engine_from(app: &tauri::AppHandle, url: &str, path: &Path, ta
         }
         _ => {
             let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
-            record_into(app, id, url, path, is_private(app, tab));
+            record_into(app, id, url, path, is_private(app, tab), tab);
             (id, path.to_path_buf())
         }
     };
@@ -647,6 +657,10 @@ pub fn start_with_engine_from(app: &tauri::AppHandle, url: &str, path: &Path, ta
             "download {id}: {} is already being written",
             path.display()
         ));
+        // The row is told, not just the log: this used to return the id as if the transfer
+        // had started, so the list showed a download that would never move and nothing said
+        // why. It happens when the same url is asked for twice at once.
+        set_failed(app, id, "this file is already being downloaded");
         return id;
     }
     crate::fetch::start_with(
@@ -657,6 +671,30 @@ pub fn start_with_engine_from(app: &tauri::AppHandle, url: &str, path: &Path, ta
         request,
     );
     id
+}
+
+/// What the tab with this label would send, found from a task's recorded source.
+///
+/// The label a download recorded may belong to a tab that has since been closed or
+/// navigated; a label that no longer resolves sends nothing, which is what every download
+/// did before this existed. A tab that is still open sends its current cookies, which is
+/// what the reader would expect from pressing retry in the same session.
+pub(crate) fn request_for_task(app: &tauri::AppHandle, source: &str) -> crate::fetch::Request {
+    request_for(app, source)
+}
+
+/// The tab label a task recorded as its origin, or empty.
+pub fn task_source(app: &tauri::AppHandle, id: u64) -> String {
+    app.try_state::<AppState>()
+        .and_then(|state| {
+            state
+                .downloads
+                .read()
+                .iter()
+                .find(|task| task.id == id)
+                .map(|task| task.source.clone())
+        })
+        .unwrap_or_default()
 }
 
 /// True when the tab behind a download was a private one.
@@ -706,7 +744,17 @@ pub(crate) fn request_for(app: &tauri::AppHandle, tab: &str) -> crate::fetch::Re
 }
 
 /// Adds a task with an id of the caller's choosing, so the engine and the task agree.
-fn record_into(app: &tauri::AppHandle, id: u64, url: &str, path: &Path, incognito: bool) {
+///
+/// `source` is the webview label the download came from. It is recorded so a retry - this
+/// session or a later one - can ask that page for its cookies again.
+fn record_into(
+    app: &tauri::AppHandle,
+    id: u64,
+    url: &str,
+    path: &Path,
+    incognito: bool,
+    source: &str,
+) {
     let Some(state) = app.try_state::<AppState>() else {
         return;
     };
@@ -724,6 +772,7 @@ fn record_into(app: &tauri::AppHandle, id: u64, url: &str, path: &Path, incognit
             total: None,
             incognito,
             error: String::new(),
+            source: source.to_string(),
         });
         prune(&mut tasks);
         tasks.clone()
@@ -774,6 +823,10 @@ fn record_from(
                     total: None,
                     incognito,
                     error: String::new(),
+                    // This path is the one that records a download the browser itself
+                    // started (the non-Windows branch of `handle`), and it has no webview
+                    // label to attribute it to.
+                    source: String::new(),
                 });
                 prune(&mut tasks);
             }
@@ -1004,6 +1057,7 @@ mod tests {
             total: Some(1),
             incognito: false,
             error: String::new(),
+            source: String::new(),
         }
     }
 
@@ -1025,6 +1079,7 @@ mod tests {
                 total: Some(1),
                 incognito: false,
                 error: String::new(),
+                source: String::new(),
             })
             .collect();
         prune(&mut tasks);

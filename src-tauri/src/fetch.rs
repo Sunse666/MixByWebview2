@@ -181,6 +181,9 @@ pub fn start_with(
         let map = jobs().lock();
         if let Some(job) = map.get(&id) {
             if job.active.load(Ordering::Relaxed) {
+                // Already running: this is a resume that arrived while the loop was still
+                // going, so all it has to do is clear the flags that would stop it. Not a
+                // second loop, which would write the same file twice.
                 job.paused.store(false, Ordering::Relaxed);
                 job.cancelled.store(false, Ordering::Relaxed);
                 return;
@@ -459,9 +462,13 @@ pub fn pause(app: tauri::AppHandle, id: u64) -> bool {
 /// A task that outlived the process has no job at all - `jobs()` is empty after a restart -
 /// and this used to answer `false` for it. The row still said "Resume", the page swallowed
 /// the false as if it were success, and pressing it did nothing whatsoever. Resuming is
-/// therefore allowed to adopt a task it has never seen: the list on disk knows the url and
-/// the path, which is everything a transfer needs.
-pub fn resume(app: tauri::AppHandle, id: u64, known: Option<(String, std::path::PathBuf)>) -> bool {
+/// therefore allowed to adopt a task it has never seen: the list on disk knows the url, the
+/// path, and the page the download came from - which is where its cookies are read from.
+pub fn resume(
+    app: tauri::AppHandle,
+    id: u64,
+    known: Option<(String, std::path::PathBuf, Request)>,
+) -> bool {
     let from_job = {
         let map = jobs().lock();
         map.get(&id)
@@ -470,12 +477,12 @@ pub fn resume(app: tauri::AppHandle, id: u64, known: Option<(String, std::path::
     let (url, path, request) = match from_job {
         Some((url, path, request)) => (url, path, request),
         None => {
-            // Nothing this session started: take the url and path the task list remembers.
-            let Some((url, path)) = known else {
+            // Nothing this session started: take what the task list remembers.
+            let Some((url, path, request)) = known else {
                 crate::logging::warn(&format!("download {id}: nothing known to resume"));
                 return false;
             };
-            (url, path, Request::default())
+            (url, path, request)
         }
     };
     unclaim(&path);
