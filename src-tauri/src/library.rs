@@ -70,7 +70,7 @@ pub fn worth_recording(url: &str) -> bool {
 }
 
 pub fn load_visits(path: &Path) -> Vec<Visit> {
-    let Ok(raw) = std::fs::read_to_string(path) else {
+    let Some(raw) = crate::paths::read_json(path) else {
         return Vec::new();
     };
     match serde_json::from_str::<VisitsFile>(&raw) {
@@ -127,7 +127,7 @@ pub fn push_visit(visits: &mut Vec<Visit>, url: &str, title: &str) {
 }
 
 pub fn load_bookmarks(path: &Path) -> Vec<Bookmark> {
-    let Ok(raw) = std::fs::read_to_string(path) else {
+    let Some(raw) = crate::paths::read_json(path) else {
         return Vec::new();
     };
     match serde_json::from_str::<BookmarksFile>(&raw) {

@@ -415,10 +415,10 @@ pub fn load_history(dirs: &crate::paths::AppDirs) -> Vec<DownloadTask> {
     // A profile written before the move keeps its list in the app root. It is read from
     // there once and then written to the new place, so the list is not lost on upgrade.
     let legacy = legacy_history_file(dirs);
-    let text = match std::fs::read_to_string(history_file(dirs)) {
-        Ok(text) => text,
-        Err(_) => {
-            let Ok(text) = std::fs::read_to_string(&legacy) else {
+    let text = match crate::paths::read_json(&history_file(dirs)) {
+        Some(text) => text,
+        None => {
+            let Some(text) = crate::paths::read_json(&legacy) else {
                 return Vec::new();
             };
             let _ = std::fs::remove_file(&legacy);
@@ -653,7 +653,15 @@ pub fn start_with_engine_from(app: &tauri::AppHandle, url: &str, path: &Path, ta
         tasks
             .iter()
             .rev()
-            .find(|task| task.url == url && Phase::parse(&task.state).is_retryable())
+            // The same url **and** the same destination. Matching on the url alone meant
+            // asking for the same file under a different name continued the older task and
+            // wrote to *its* path, so the name the reader chose was silently ignored -
+            // measured with two probes whose paths differed and whose url did not.
+            .find(|task| {
+                task.url == url
+                    && Path::new(&task.path) == path
+                    && Phase::parse(&task.state).is_retryable()
+            })
             .map(|task| (task.id, task.path.clone(), task.state.clone()))
     };
     let (id, path) = match existing {

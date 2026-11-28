@@ -95,7 +95,7 @@ fn parse_hex(value: &str) -> Option<(u8, u8, u8)> {
 
 impl Theme {
     pub fn load(path: &Path) -> Self {
-        let Ok(raw) = std::fs::read_to_string(path) else {
+        let Some(raw) = crate::paths::read_json(path) else {
             return Self::default().resolved();
         };
         match serde_json::from_str::<Theme>(&raw) {

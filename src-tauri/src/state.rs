@@ -783,7 +783,7 @@ impl Settings {
     }
 
     pub fn load(path: &Path) -> Self {
-        let Ok(raw) = std::fs::read_to_string(path) else {
+        let Some(raw) = crate::paths::read_json(path) else {
             return Self::default();
         };
         match serde_json::from_str::<Settings>(&raw) {

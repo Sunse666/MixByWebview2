@@ -22,7 +22,7 @@ pub struct ZoomStore {
 
 impl ZoomStore {
     pub fn load(path: &Path) -> Self {
-        let Ok(raw) = std::fs::read_to_string(path) else {
+        let Some(raw) = crate::paths::read_json(path) else {
             return Self::default();
         };
         let Ok(file) = serde_json::from_str::<File>(&raw) else {

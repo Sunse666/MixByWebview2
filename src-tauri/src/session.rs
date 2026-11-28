@@ -90,7 +90,7 @@ pub struct Session {
 
 impl Session {
     pub fn load(path: &Path) -> Option<Self> {
-        let raw = std::fs::read_to_string(path).ok()?;
+        let raw = crate::paths::read_json(path)?;
         let session: Session = serde_json::from_str(&raw).ok()?;
         if session.schema_version > SCHEMA {
             return None;
@@ -137,7 +137,7 @@ pub fn latest_closed(dir: &Path) -> Option<Session> {
             continue;
         }
         files.push(path.clone());
-        let Ok(text) = std::fs::read_to_string(&path) else {
+        let Some(text) = crate::paths::read_json(&path) else {
             continue;
         };
         let Ok(value) = serde_json::from_str::<serde_json::Value>(&text) else {

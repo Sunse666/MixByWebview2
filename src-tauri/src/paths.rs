@@ -174,6 +174,19 @@ fn fallback_data_dir() -> PathBuf {
     }
     std::env::temp_dir().join("mix")
 }
+/// Reads one of this app's own json files, tolerating a byte order mark.
+///
+/// A BOM is what PowerShell's `Set-Content` and a few editors put at the front of a utf-8
+/// file, and serde refuses the whole document over it: "expected value at line 1 column 1".
+/// The app then treated the file as unreadable and moved it aside, which looks to the reader
+/// like their history or settings vanished after they edited it by hand - and it has happened
+/// here more than once, on permissions and on custom.css, each time patched at that one call
+/// site. One helper, so the next file does not have to remember.
+pub fn read_json(path: &Path) -> Option<String> {
+    let raw = std::fs::read_to_string(path).ok()?;
+    Some(raw.trim_start_matches('\u{feff}').to_string())
+}
+
 /// The sibling file a write goes through before it is renamed into place.
 ///
 /// Shared by the buffered and the streaming write so a half-written file always has the same
@@ -203,6 +216,27 @@ pub fn write_atomic(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_byte_order_mark_does_not_make_a_file_unreadable() {
+        // PowerShell's Set-Content writes one, and serde refuses a whole document over it -
+        // which the app then treated as a corrupt file and moved aside.
+        let dir = std::env::temp_dir().join("mix-bom-read");
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("with-bom.json");
+        std::fs::write(&path, "\u{feff}{\"a\":1}").unwrap();
+
+        let text = read_json(&path).expect("readable");
+        assert!(!text.starts_with('\u{feff}'));
+        let value: serde_json::Value = serde_json::from_str(&text).expect("parses");
+        assert_eq!(value["a"], 1);
+
+        // A file without one is unchanged, and a missing one is None rather than empty.
+        let plain = dir.join("plain.json");
+        std::fs::write(&plain, "{\"a\":2}").unwrap();
+        assert_eq!(read_json(&plain).as_deref(), Some("{\"a\":2}"));
+        assert!(read_json(&dir.join("nope.json")).is_none());
+    }
 
     #[test]
     fn a_write_replaces_the_previous_file() {
