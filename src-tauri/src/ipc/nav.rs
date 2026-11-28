@@ -490,6 +490,10 @@ pub async fn view_source(
     let Some(webview) = app.get_webview(&id) else {
         return Err(AppError::new("no_tab", id));
     };
+    // Remembered until this tab answers, so a document from some other tab is not accepted
+    // in its place: `source_ready` is reachable from a page, and the source page renders
+    // what it is handed on the app's own origin.
+    state.ui.write().source_from = Some(id.clone());
     // The answer arrives through a command rather than as a return value, because eval
     // cannot give one back.
     let _ = webview.eval(
@@ -507,10 +511,25 @@ pub async fn view_source(
 pub async fn source_ready(
     app: AppHandle,
     window: tauri::Window,
+    webview: tauri::Webview,
     state: State<'_, AppState>,
     html: String,
 ) -> Result<(), AppError> {
-    state.ui.write().source = Some(html);
+    let caller = webview.label().to_string();
+    {
+        let mut ui = state.ui.write();
+        if ui.source_from.as_deref() != Some(caller.as_str()) {
+            crate::logging::warn(&format!(
+                "source from {caller} dropped: nothing asked it for one"
+            ));
+            return Err(AppError::new(
+                "untrusted",
+                "no page source was asked of this tab",
+            ));
+        }
+        ui.source_from = None;
+        ui.source = Some(html);
+    }
     let page = "http://tauri.localhost/pages/source.html".to_string();
     tab_new(app, window, state, Some(page), None, None).await?;
     Ok(())
@@ -533,6 +552,9 @@ pub async fn save_page(
     let Some(webview) = app.get_webview(&id) else {
         return Err(AppError::new("no_tab", id));
     };
+    // As in `view_source`: only the tab that was asked may answer, because `page_ready`
+    // writes a file and is reachable from a page.
+    state.ui.write().page_from = Some(id.clone());
     let _ = webview.eval(
         "window.__TAURI_INTERNALS__.invoke('page_ready', { html: document.documentElement.outerHTML })"
     );
@@ -548,9 +570,24 @@ pub async fn save_page(
 pub async fn page_ready(
     app: AppHandle,
     window: tauri::Window,
+    webview: tauri::Webview,
     state: State<'_, AppState>,
     html: String,
 ) -> Result<String, AppError> {
+    let caller = webview.label().to_string();
+    {
+        let mut ui = state.ui.write();
+        if ui.page_from.as_deref() != Some(caller.as_str()) {
+            crate::logging::warn(&format!(
+                "page html from {caller} dropped: nothing asked it for one"
+            ));
+            return Err(AppError::new(
+                "untrusted",
+                "no page was asked to be saved from this tab",
+            ));
+        }
+        ui.page_from = None;
+    }
     let id = selected_label(&state, &window);
     let title = state
         .read_core(window.label())
@@ -765,6 +802,8 @@ mod tests {
             source: None,
             article: None,
             article_from: Some("w1-tab-2".to_string()),
+            source_from: None,
+            page_from: None,
         };
         let article = || Article {
             title: "t".into(),

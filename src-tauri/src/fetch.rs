@@ -576,17 +576,25 @@ pub fn resume(
     true
 }
 
-/// The cookies this webview would send with its next request, joined for one header.
+/// The cookies this webview would send with a request to `target`, joined for one header.
 ///
-/// Read through the DevTools protocol because the webview offers no other way to ask,
-/// and nothing here second-guesses the expiry: what the browser is holding is what it
-/// would have sent, and filtering it again is how a download ends up unauthenticated.
+/// Read through the DevTools protocol because the webview offers no other way to ask, and
+/// nothing here second-guesses the expiry: what the browser is holding is what it would have
+/// sent, and filtering it again is how a download ends up unauthenticated.
+///
+/// `target` is not optional, and that is the whole point of the signature. `Network.getCookies`
+/// with no arguments answers with **every cookie in the browser** - measured: a request sent
+/// to a local test server arrived carrying bilibili's session, because a bilibili tab had set
+/// it. Handing that to a url a page supplied would let any site send the reader's credentials
+/// for every other site to a host of its choosing. The cdp call is scoped to the target's
+/// origin, so what comes back is only what that origin would have been given.
 #[cfg(windows)]
-pub fn cookies_for(webview: &tauri::Webview) -> Option<String> {
+pub fn cookies_for(webview: &tauri::Webview, target: &str) -> Option<String> {
+    let params = serde_json::json!({ "urls": [target] }).to_string();
     let json = crate::screenshot::call_timeout(
         webview,
         "Network.getCookies",
-        "{}",
+        &params,
         std::time::Duration::from_secs(2),
     )?;
     let value: serde_json::Value = serde_json::from_str(&json).ok()?;
@@ -615,7 +623,7 @@ pub fn cookies_for(webview: &tauri::Webview) -> Option<String> {
 }
 
 #[cfg(not(windows))]
-pub fn cookies_for(_webview: &tauri::Webview) -> Option<String> {
+pub fn cookies_for(_webview: &tauri::Webview, _target: &str) -> Option<String> {
     None
 }
 

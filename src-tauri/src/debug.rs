@@ -236,8 +236,19 @@ pub fn install(app: &mut tauri::App) {
                 let Some(win) = target.get_window(PRIMARY) else {
                     return;
                 };
+                // The chrome strip's own webview: the action is about the window, so it has to
+                // come from a caller that is allowed to ask for it.
+                let Some(chrome) = target.get_webview(&format!("{PRIMARY}-chrome")) else {
+                    return;
+                };
                 let state = target.state::<AppState>();
-                let call = crate::ipc::shortcut(target.clone(), win, state, "devtools".to_string());
+                let call = crate::ipc::shortcut(
+                    target.clone(),
+                    win,
+                    chrome,
+                    state,
+                    "devtools".to_string(),
+                );
                 let _ = tauri::async_runtime::block_on(call);
             });
         });
@@ -430,8 +441,8 @@ fn retry_credentials_test(app: &tauri::AppHandle) {
         let path = dir.join("mix-retry-test.bin");
         let _ = std::fs::remove_file(&path);
 
-        // What the tab would send, which is what the first attempt uses.
-        let request = crate::downloads::request_for_task(&handle, &tab);
+        // What the tab would send for that file, which is what the first attempt uses.
+        let request = crate::downloads::request_for_task(&handle, &tab, &format!("{base}/file"));
         crate::logging::info(&format!(
             "retry test first attempt: referer={:?} cookie={}",
             request.referer,

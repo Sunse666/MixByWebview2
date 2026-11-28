@@ -700,13 +700,15 @@ pub async fn download_pause(
         crate::fetch::pause(app.clone(), id)
     } else {
         // A task that outlived the process has no job; the list remembers what it was, and
-        // the page it came from so the cookies can be read again.
+        // the page it came from so the cookies can be read again - scoped to the file's own
+        // url, which is what `request_for_task` takes it for.
         let known = task_parts(&state, id).map(|(url, path)| {
-            (
-                url,
-                std::path::PathBuf::from(path),
-                crate::downloads::request_for_task(&app, &crate::downloads::task_source(&app, id)),
-            )
+            let request = crate::downloads::request_for_task(
+                &app,
+                &crate::downloads::task_source(&app, id),
+                &url,
+            );
+            (url, std::path::PathBuf::from(path), request)
         });
         crate::fetch::resume(app.clone(), id, known)
     };
@@ -1099,8 +1101,9 @@ pub async fn bili_download(
         .ok_or_else(|| AppError::new("bad_url", "this page is not a bilibili video"))?;
 
     // The cookies and referer the tab already has: what the endpoint is willing to hand out
-    // depends on who is asking, so the answer carries the reader's own entitlements.
-    let session = crate::downloads::request_for(&app, &label);
+    // depends on who is asking, so the answer carries the reader's own entitlements. Scoped
+    // to the watch page, which is what the bilibili api expects to be asked on behalf of.
+    let session = crate::downloads::request_for(&app, &label, &page_url);
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(60))
         .user_agent(crate::fetch::USER_AGENT)
@@ -1275,9 +1278,10 @@ pub(crate) async fn save_url(
         return Err(AppError::new("bad_url", "only http(s) files can be saved"));
     }
 
+    // Scoped to `url`: the cookies for the file being fetched, not the tab's whole jar.
     let request = tab
         .as_deref()
-        .map(|label| crate::downloads::request_for(&app, label))
+        .map(|label| crate::downloads::request_for(&app, label, &url))
         .unwrap_or_default();
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(600))

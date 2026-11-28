@@ -821,6 +821,15 @@ pub async fn tab_icon(
     if icon.is_empty() || !icon.starts_with("http") {
         return Ok(());
     }
+    // The fetch below is made by this process, which sits inside the reader's network. A page
+    // that names `http://192.168.1.1/` would have the browser probe the reader's own machines
+    // and report back - reachable or not, fast or slow - through the log and through whether
+    // an icon appears. Only a public address may be fetched, resolved and checked, because a
+    // public name can point at a private one.
+    if !crate::net::is_public_web(&icon) {
+        crate::logging::info(&format!("favicon refused for a non-public address: {icon}"));
+        return Ok(());
+    }
 
     let (page_url, incognito) = state
         .try_read_core(window_of_tab(&id))

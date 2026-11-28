@@ -124,6 +124,15 @@ pub struct Ui {
     /// means that command stays reachable from a site; what this bounds is *which* site: the
     /// one that was asked. Any other answer is dropped.
     pub article_from: Option<String>,
+    /// The tab `view_source` asked for its markup, and has not reported it yet.
+    ///
+    /// The same shape as `article_from` and for the same reason: `source_ready` is reachable
+    /// from a page, because the markup can only be read from inside the document. Without
+    /// this, any site could hand the app a document to show on its own origin - a page that
+    /// can run privileged commands. Only the tab that was asked may answer.
+    pub source_from: Option<String>,
+    /// The tab `save_page` asked for its markup, and has not reported it yet.
+    pub page_from: Option<String>,
 }
 
 /// One page's article, as the reader page receives it.
@@ -209,6 +218,8 @@ impl AppState {
                 source: None,
                 article: None,
                 article_from: None,
+                source_from: None,
+                page_from: None,
             }),
             nav: parking_lot::RwLock::new(Nav {
                 app_base: String::new(),

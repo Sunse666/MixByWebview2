@@ -644,7 +644,7 @@ pub fn start_with_engine(app: &tauri::AppHandle, url: &str, path: &Path) -> u64 
 /// cookies. Both are best effort - a tab that is already gone sends nothing, which is
 /// what every download did before.
 pub fn start_with_engine_from(app: &tauri::AppHandle, url: &str, path: &Path, tab: &str) -> u64 {
-    let request = request_for(app, tab);
+    let request = request_for(app, tab, url);
     let existing = {
         let Some(state) = app.try_state::<AppState>() else {
             return 0;
@@ -691,14 +691,18 @@ pub fn start_with_engine_from(app: &tauri::AppHandle, url: &str, path: &Path, ta
     id
 }
 
-/// What the tab with this label would send, found from a task's recorded source.
+/// What the tab with this label would send to `target`, found from a task's recorded source.
 ///
 /// The label a download recorded may belong to a tab that has since been closed or
 /// navigated; a label that no longer resolves sends nothing, which is what every download
-/// did before this existed. A tab that is still open sends its current cookies, which is
-/// what the reader would expect from pressing retry in the same session.
-pub(crate) fn request_for_task(app: &tauri::AppHandle, source: &str) -> crate::fetch::Request {
-    request_for(app, source)
+/// did before this existed. A tab that is still open sends the cookies `target`'s origin
+/// would be given, and no others.
+pub(crate) fn request_for_task(
+    app: &tauri::AppHandle,
+    source: &str,
+    target: &str,
+) -> crate::fetch::Request {
+    request_for(app, source, target)
 }
 
 /// The tab label a task recorded as its origin, or empty.
@@ -743,7 +747,11 @@ fn is_private(app: &tauri::AppHandle, tab: &str) -> bool {
 /// interface for them, and they stay inside the process. A tab that is gone, a
 /// background webview that refuses the call and a non-Windows build all produce an
 /// empty context: the download then works exactly as it did before.
-pub(crate) fn request_for(app: &tauri::AppHandle, tab: &str) -> crate::fetch::Request {
+pub(crate) fn request_for(
+    app: &tauri::AppHandle,
+    tab: &str,
+    target: &str,
+) -> crate::fetch::Request {
     if tab.is_empty() {
         return crate::fetch::Request::default();
     }
@@ -757,7 +765,9 @@ pub(crate) fn request_for(app: &tauri::AppHandle, tab: &str) -> crate::fetch::Re
         } else {
             None
         },
-        cookie: crate::fetch::cookies_for(&webview),
+        // Scoped to the file being fetched, not to the tab: a page can name any url, and the
+        // tab's own cookies for other sites are none of that url's business.
+        cookie: crate::fetch::cookies_for(&webview, target),
     }
 }
 

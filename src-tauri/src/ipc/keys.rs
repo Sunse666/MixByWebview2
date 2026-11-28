@@ -2,13 +2,74 @@
 
 use super::*;
 
+/// The actions a page may ask for by forwarding a key or a gesture.
+///
+/// `shortcut` has to be reachable from a remote page: the injected script is what turns a
+/// keystroke inside a page into one of these, because the chrome strip never sees those keys.
+/// That makes this command a surface any site can reach, and most of the actions below are
+/// about the browser window rather than about the page - a site could close the window,
+/// minimise it, open devtools, pin or duplicate tabs. Those are allowed only for callers that
+/// are the app's own pages.
+///
+/// What is left here is what a page plausibly produces: its own navigation and zoom, its own
+/// find and translate, opening a link in a new tab, dismissing an overlay.
+const FROM_A_PAGE: &[&str] = &[
+    "reload",
+    "stop",
+    "zoom_in",
+    "zoom_out",
+    "zoom_reset",
+    "find",
+    "translate",
+    "new_tab",
+    "close_tab",
+    "next_tab",
+    "prev_tab",
+    "duplicate_tab",
+    "copy_url",
+    "dismiss",
+    "close_overlay",
+    "tab_search",
+    "palette",
+    "bookmark",
+    // Taking the keyboard to the address bar is what Ctrl+L does, and a page forwarding that
+    // combination has to be able to reach it - the strip never sees a key pressed inside a
+    // page. It only moves focus, so it is not something a site can use to act on its own.
+    "focus_url",
+    "open_home",
+    "open_history",
+    "open_bookmarks",
+    "open_downloads",
+    "open_extensions",
+    "open_settings",
+    "downloads",
+];
+
+/// Whether an action may be run for a caller that is not one of the app's own pages.
+fn page_may(action: &str) -> bool {
+    FROM_A_PAGE.contains(&action)
+}
+
 #[tauri::command]
 pub async fn shortcut(
     app: AppHandle,
     window: tauri::Window,
+    webview: tauri::Webview,
     state: State<'_, AppState>,
     action: String,
 ) -> Result<(), AppError> {
+    // A page asks for the actions a page can produce; anything about the window itself has to
+    // come from the app's own pages, which is what the chrome strip is. The check is here
+    // rather than in the match so a new action defaults to "not for a page".
+    if !trusted(&webview) && !page_may(&action) {
+        crate::logging::warn(&format!(
+            "refused shortcut {action} for a page that may not ask for it"
+        ));
+        return Err(AppError::new(
+            "untrusted",
+            "this action is not available to a page",
+        ));
+    }
     // No log line here on purpose: every shortcut would write one, and the logger flushes
     // each line to disk, so this used to be a file write per keystroke. The actions that
     // are worth knowing about (a developer tools window, a failed navigation) log
@@ -240,4 +301,68 @@ pub async fn shortcut(
         other => return Err(AppError::new("bad_shortcut", other)),
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{page_may, FROM_A_PAGE};
+
+    #[test]
+    fn a_page_may_ask_for_the_things_a_page_produces() {
+        for action in [
+            "reload",
+            "zoom_in",
+            "zoom_out",
+            "find",
+            "new_tab",
+            "close_tab",
+            "bookmark",
+            "focus_url",
+        ] {
+            assert!(page_may(action), "should be allowed: {action}");
+        }
+    }
+
+    #[test]
+    fn a_page_may_not_act_on_the_window() {
+        // These are the ones that made this list necessary: a site could close the window,
+        // hide it, or open developer tools in the reader's face.
+        for action in [
+            "close_window",
+            "minimize",
+            "maximize",
+            "fullscreen",
+            "devtools",
+            "new_window",
+            "new_incognito",
+            "print",
+            "toggle_pin",
+            "group_tab",
+            "close_other_tabs",
+            "reopen_tab",
+            "open_settings",
+        ] {
+            // `open_settings` is a deliberate member of the list: it opens a page of the
+            // app's own, which is harmless to reach. The rest are not.
+            if action == "open_settings" {
+                continue;
+            }
+            assert!(!page_may(action), "should be refused: {action}");
+        }
+    }
+
+    #[test]
+    fn an_action_nobody_listed_is_refused() {
+        // The check is a whitelist, so a new action defaults to "not for a page". This is the
+        // property that keeps the next one somebody adds from being remote-reachable by
+        // accident.
+        assert!(!page_may("something_invented"));
+        assert!(!page_may(""));
+    }
+
+    #[test]
+    fn the_list_has_no_duplicates() {
+        let unique: std::collections::HashSet<&&str> = FROM_A_PAGE.iter().collect();
+        assert_eq!(unique.len(), FROM_A_PAGE.len());
+    }
 }
