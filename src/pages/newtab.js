@@ -1,4 +1,4 @@
-﻿import { setLanguage, t } from "../i18n.js";
+import { setLanguage, t } from "../i18n.js";
 import { withFeedback, setFeedbackText } from "./feedback.js";
 import { addressFor } from "../address.js";
 
@@ -57,7 +57,10 @@ async function boot() {
     const host = hostOf(visit.url);
     if (!host || host.startsWith("tauri.localhost")) continue;
     const entry = counts.get(host) || { host, url: visit.url, count: 0 };
-    entry.count += 1;
+    // The count the backend keeps, not one per row. A row is one url, so adding 1 per row
+    // ranked a site by how many of its pages had each been opened once - which is not how
+    // often it is used. Opening a page again does not add a row, it adds to this number.
+    entry.count += visit.visits || 1;
     counts.set(host, entry);
   }
 

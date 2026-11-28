@@ -213,9 +213,23 @@ async function boot() {
   search.setAttribute("list", "history-suggest");
 
   const list = document.createElement("div");
-  main.append(bar, sites, datalist, actions, list);
+  // "Load more" sits under the list and is only drawn while there is more to fetch: the file
+  // holds up to 5000 visits and this page reads them a page at a time, because drawing five
+  // thousand rows at once is what made the page slow to open in the first place.
+  const more = document.createElement("button");
+  more.className = "button";
+  more.textContent = t("Load more");
+  more.hidden = true;
+  main.append(bar, sites, datalist, actions, list, more);
 
   let siteFilter = "";
+  /// How many visits have been read from the backend so far.
+  let loaded = 0;
+  /// How many are recorded, as of the last time it was asked.
+  let total = 0;
+  const PAGE = 500;
+
+  const hasMore = () => loaded < total;
 
   const visible = () => {
     const needle = search.value.trim().toLowerCase();
@@ -229,7 +243,10 @@ async function boot() {
     for (const visit of visits) {
       const host = hostOf(visit.url);
       if (!host || host.startsWith("tauri.localhost")) continue;
-      counts.set(host, (counts.get(host) || 0) + 1);
+      // By how often the site is visited, not by how many of its pages were recorded: the
+      // number beside a chip is meant to say "you go here a lot", and a dozen one-off pages
+      // on a site is not the same thing as opening the same page a dozen times.
+      counts.set(host, (counts.get(host) || 0) + (visit.visits || 1));
     }
     const top = [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8);
 
@@ -281,6 +298,7 @@ async function boot() {
         : t("Delete selected");
 
     const rows = visible();
+    more.hidden = !hasMore();
     if (!rows.length) {
       const empty = document.createElement("div");
       empty.className = "empty";
@@ -290,6 +308,22 @@ async function boot() {
     }
     list.append(groupRows(rows, paint));
   };
+
+  more.addEventListener("click", async () => {
+    more.disabled = true;
+    const next =
+      (await invoke("history_list", { limit: PAGE, offset: loaded }).catch(() => [])) || [];
+    const fresh = next.filter((visit) => !tombstones.has(keyOf(visit)));
+    visits = visits.concat(fresh);
+    loaded += next.length;
+    // A backend that answered with nothing is the authority on there being no more, even if
+    // the count said otherwise: a record can be removed between the two calls.
+    if (!next.length) total = loaded;
+    more.disabled = false;
+    paintSuggestions();
+    paintSites();
+    paint();
+  });
 
   list.addEventListener("click", async (event) => {
     const button = event.target.closest("[data-action='remove']");
@@ -350,14 +384,24 @@ async function boot() {
   });
 
   const reload = async () => {
-    const fresh = ((await invoke("history_list", { limit: 500 }).catch(() => [])) || []).filter(
+    // Everything read so far is re-fetched, not just the first page: a visit recorded now
+    // goes to the front of the list, so a refresh that only read 500 rows would drop the
+    // ones the reader had paged in and put the list back to one screen.
+    const want = Math.max(PAGE, loaded);
+    const fresh = ((await invoke("history_list", { limit: want }).catch(() => [])) || []).filter(
       (visit) => !tombstones.has(keyOf(visit)),
     );
+    total = (await invoke("history_count").catch(() => fresh.length)) || fresh.length;
     const same =
       fresh.length === visits.length &&
       fresh.every((visit, index) => keyOf(visit) === keyOf(visits[index]));
-    if (same) return;
+    if (same) {
+      // The rows are the same; the count may not be, and the button follows the count.
+      more.hidden = !hasMore();
+      return;
+    }
     visits = fresh;
+    loaded = fresh.length;
     paintSuggestions();
     paintSites();
     paint();

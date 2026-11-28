@@ -12,6 +12,19 @@ pub struct Visit {
     /// Favicon url, filled in when the page reports one.
     #[serde(default)]
     pub icon: Option<String>,
+    /// How many times this url has been visited.
+    ///
+    /// The list holds one row per url, so counting rows cannot answer "which sites do I use
+    /// most": a site opened daily and a site opened once are both one row, and the new tab
+    /// page's tiles were ranked by that. This is what they rank by now. A file written before
+    /// the field existed comes back as 1, which is the count one recorded visit has.
+    #[serde(default = "default_visits")]
+    pub visits: u32,
+}
+
+/// The count a visit recorded before the field existed has.
+fn default_visits() -> u32 {
+    1
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -93,11 +106,20 @@ pub fn save_visits(path: &Path, visits: &[Visit]) -> std::io::Result<()> {
 
 /// Newest first, one entry per url, capped so the file stays small.
 pub fn push_visit(visits: &mut Vec<Visit>, url: &str, title: &str) {
+    // One row per url, so visiting a page again moves it to the front and adds to its count
+    // rather than adding a row. The count is what the new tab page ranks tiles by; without it
+    // a site opened fifty times and a site opened once looked identical.
+    let carried = visits
+        .iter()
+        .find(|visit| visit.url == url)
+        .map(|visit| visit.visits)
+        .unwrap_or(0);
     let entry = Visit {
         url: url.to_string(),
         title: title.to_string(),
         at: now(),
         icon: None,
+        visits: carried.saturating_add(1),
     };
     visits.retain(|visit| visit.url != entry.url);
     visits.insert(0, entry);
@@ -171,6 +193,38 @@ mod tests {
         assert_eq!(visits.len(), 2);
         assert_eq!(visits[0].url, "https://a.test");
         assert_eq!(visits[0].title, "A again");
+    }
+
+    #[test]
+    fn a_page_opened_again_counts_as_opened_again() {
+        // One row per url means the rows cannot say how often a site is used, which is what
+        // the new tab page ranks its tiles by. The count on the row carries it.
+        let mut visits = Vec::new();
+        push_visit(&mut visits, "https://a.test", "A");
+        push_visit(&mut visits, "https://b.test", "B");
+        push_visit(&mut visits, "https://a.test", "A");
+        push_visit(&mut visits, "https://a.test", "A");
+
+        assert_eq!(visits.len(), 2, "still one row per url");
+        let a = visits
+            .iter()
+            .find(|v| v.url == "https://a.test")
+            .expect("a");
+        assert_eq!(a.visits, 3, "opened three times");
+        let b = visits
+            .iter()
+            .find(|v| v.url == "https://b.test")
+            .expect("b");
+        assert_eq!(b.visits, 1);
+    }
+
+    #[test]
+    fn a_visit_written_before_the_field_existed_reads_as_one() {
+        // history.json from an older build has no "visits" key. Reading it as 0 would make
+        // every remembered site rank below every new one.
+        let old = r#"{"url":"https://a.test","title":"A","at":1}"#;
+        let visit: Visit = serde_json::from_str(old).expect("old shape");
+        assert_eq!(visit.visits, 1);
     }
 
     #[test]

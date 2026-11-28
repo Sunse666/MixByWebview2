@@ -90,6 +90,7 @@
     "allow-tab-pop-out",
     "allow-favicon-map",
     "allow-history-list",
+    "allow-history-count",
     "allow-clear-data",
     "allow-history-remove",
     "allow-history-clear",

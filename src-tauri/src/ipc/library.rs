@@ -175,12 +175,18 @@ pub async fn history_list(
     _window: tauri::Window,
     state: State<'_, AppState>,
     limit: Option<usize>,
+    offset: Option<usize>,
 ) -> Result<Vec<Visit>, AppError> {
     let library = state.library.read();
-    let take = limit.unwrap_or(500).min(library.history.len());
+    // A window into the list rather than its head. The file holds up to 5000 visits and the
+    // page used to ask for 500 with no way to ask for the rest: 4500 rows existed, could not
+    // be searched, and could not be deleted.
+    let start = offset.unwrap_or(0).min(library.history.len());
+    let take = limit.unwrap_or(500);
     Ok(library
         .history
         .iter()
+        .skip(start)
         .take(take)
         .map(|visit| {
             let mut copy = visit.clone();
@@ -191,6 +197,12 @@ pub async fn history_list(
             copy
         })
         .collect())
+}
+
+/// How many visits are recorded, so the page knows whether there is more to ask for.
+#[tauri::command]
+pub async fn history_count(state: State<'_, AppState>) -> Result<usize, AppError> {
+    Ok(state.library.read().history.len())
 }
 
 /// Removes the rows the history page has selected.

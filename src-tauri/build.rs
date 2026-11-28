@@ -118,6 +118,7 @@ fn main() {
         "tab_pop_out",
         "favicon_map",
         "history_list",
+        "history_count",
         "clear_data",
         "history_remove",
         "history_clear",

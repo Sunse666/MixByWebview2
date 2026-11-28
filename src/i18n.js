@@ -426,6 +426,7 @@ const DICT = {
     Copy: "复制",
     Paste: "粘贴",
     "Select all": "全选",
+    "Load more": "加载更多",
     Back: "后退",
     Forward: "前进",
     "Saving": "保存中",

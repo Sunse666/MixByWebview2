@@ -239,6 +239,7 @@ fn main() {
             ipc::tab_pop_out,
             ipc::favicon_map,
             ipc::history_list,
+            ipc::history_count,
             ipc::clear_data,
             ipc::history_remove,
             ipc::history_clear,
